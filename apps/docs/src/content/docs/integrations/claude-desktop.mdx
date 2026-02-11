@@ -1,0 +1,197 @@
+---
+title: Claude Desktop Integration
+description: Use mpak bundles with Claude Desktop
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Claude Desktop supports MCP servers natively. mpak makes it easy to add servers from the registry.
+
+## Configuration File Location
+
+<Tabs>
+  <TabItem label="macOS">
+    ```bash
+    ~/Library/Application Support/Claude/claude_desktop_config.json
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```bash
+    %APPDATA%\Claude\claude_desktop_config.json
+    ```
+  </TabItem>
+  <TabItem label="Linux">
+    ```bash
+    ~/.config/Claude/claude_desktop_config.json
+    ```
+  </TabItem>
+</Tabs>
+
+## Basic Setup
+
+Add an MCP server from mpak:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop to load the server.
+
+## Multiple Servers
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    },
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your-token"
+      }
+    },
+    "postgres": {
+      "command": "mpak",
+      "args": ["run", "@owner/postgres-mcp"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/mydb"
+      }
+    }
+  }
+}
+```
+
+## Passing Configuration
+
+For servers that require configuration (API keys, etc.), you have two options:
+
+### Option 1: Environment Variables in Config
+
+Pass environment variables directly in the config file:
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+### Option 2: mpak config (Recommended)
+
+Store secrets with mpak, keep your config file clean:
+
+```bash
+# Store config once
+mpak config set @nimblebraininc/ipinfo api_key=your-token
+```
+
+Then use a simple config:
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"]
+    }
+  }
+}
+```
+
+mpak resolves stored config automatically when running.
+
+Check the bundle's documentation for required configuration keys.
+
+## Pin to a Specific Version
+
+By default, `mpak run` uses the cached version (or downloads latest if not cached). To pin to a specific version:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo@1.0.0"]
+    }
+  }
+}
+```
+
+## Force Updates
+
+To update to the latest version on each launch (slower startup):
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo", "--update"]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+### Server Not Appearing
+
+1. Check your JSON is valid (no trailing commas)
+2. Restart Claude Desktop completely
+3. Check `mpak run @package/name` works in terminal
+
+### Command Not Found
+
+Ensure mpak is installed globally and in your PATH:
+
+```bash
+npm install -g @nimblebrain/mpak
+which mpak  # Should show the path
+```
+
+If using a version manager (nvm, volta), you may need to specify the full path:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "/Users/you/.nvm/versions/node/v20.0.0/bin/mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+### View Logs
+
+Check Claude Desktop logs for MCP server errors:
+
+<Tabs>
+  <TabItem label="macOS">
+    ```bash
+    tail -f ~/Library/Logs/Claude/mcp*.log
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```bash
+    # Check %APPDATA%\Claude\logs\
+    ```
+  </TabItem>
+</Tabs>

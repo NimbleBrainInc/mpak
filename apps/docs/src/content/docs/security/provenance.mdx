@@ -1,0 +1,120 @@
+---
+title: Provenance
+description: Cryptographic proof of bundle origin
+---
+
+When you publish via GitHub Actions, mpak records provenance information that cryptographically proves where your bundle came from.
+
+## What Is Provenance?
+
+Provenance is metadata that answers: "Where did this bundle come from, and can I trust it?"
+
+mpak uses [GitHub OIDC tokens](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect) to establish provenance. These tokens are:
+
+- **Signed by GitHub** - Can't be forged
+- **Tied to the repository** - Proves which repo ran the workflow
+- **Tied to the workflow** - Proves which workflow file was used
+- **Tied to the commit** - Proves which code was built
+
+## Viewing Provenance
+
+Use `mpak bundle show` to see provenance:
+
+```bash
+mpak bundle show @nimblebraininc/echo
+```
+
+```
+@nimblebraininc/echo (1.0.0)
+
+Provenance:
+  Repository:  NimbleBrainInc/mcp-echo
+  Workflow:    .github/workflows/release.yml
+  Commit:      abc1234def5678...
+  Verified:    ✓
+```
+
+## How It Works
+
+```
+┌─────────────────┐                      ┌─────────────────┐
+│                 │   1. Request token   │                 │
+│  GitHub Action  │─────────────────────►│  GitHub OIDC    │
+│                 │◄─────────────────────│   Provider      │
+│                 │   2. Signed JWT      │                 │
+└────────┬────────┘                      └─────────────────┘
+         │
+         │ 3. Announce with token
+         ▼
+┌─────────────────┐                      ┌─────────────────┐
+│                 │   4. Verify token    │                 │
+│  mpak Registry  │─────────────────────►│  GitHub JWKS    │
+│                 │◄─────────────────────│   Endpoint      │
+│                 │   5. Valid!          │                 │
+└─────────────────┘                      └─────────────────┘
+```
+
+1. Your GitHub Action requests an OIDC token
+2. GitHub signs and returns a JWT with claims about the repository, workflow, and commit
+3. The action sends this token to mpak when announcing
+4. mpak verifies the token against GitHub's public keys
+5. If valid, mpak records the provenance claims
+
+## Scope Enforcement
+
+The registry enforces that your package scope matches your GitHub owner:
+
+| GitHub Owner | Required Package Scope |
+|--------------|----------------------|
+| `NimbleBrainInc` (org) | `@nimblebraininc/...` |
+| `johndoe` (user) | `@johndoe/...` |
+
+You cannot publish to a scope you don't own.
+
+## Benefits
+
+### For Users
+
+- **Trust** - Know exactly where a bundle came from
+- **Audit** - Trace bundles back to source code
+- **Security** - Detect supply chain attacks
+
+### For Publishers
+
+- **No secrets** - No API keys to manage or rotate
+- **Automatic** - Just add the workflow
+- **Verifiable** - Users can independently verify your bundles
+
+## Required Permissions
+
+Your workflow must request the `id-token: write` permission:
+
+```yaml
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # Request OIDC token
+```
+
+## Troubleshooting
+
+### "Failed to get OIDC token"
+
+Ensure your workflow has the correct permissions:
+
+```yaml
+permissions:
+  id-token: write
+```
+
+### "Scope mismatch"
+
+Your manifest's package name must match your GitHub organization:
+
+```json
+// GitHub org: NimbleBrainInc
+// ✓ Correct
+{ "name": "@nimblebraininc/my-server" }
+
+// ✗ Wrong
+{ "name": "@someoneelse/my-server" }
+```

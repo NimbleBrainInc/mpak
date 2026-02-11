@@ -1,0 +1,209 @@
+---
+title: GitHub Action
+description: Automate skill building and publishing with skill-pack
+---
+
+The [skill-pack](https://github.com/NimbleBrainInc/skill-pack) GitHub Action automates the entire skill publishing workflow.
+
+## Basic Usage
+
+Add to `.github/workflows/release.yml`:
+
+```yaml
+name: Publish Skills
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # OIDC authentication with registry
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/skill-pack@v1
+```
+
+## When to Use skill-pack
+
+The skill-pack action is optimized for different scenarios:
+
+### Single-Skill Repositories (Recommended)
+
+If your repository contains **one skill**, skill-pack works perfectly out of the box. Tag a release, and skill-pack handles everything:
+
+```yaml
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/skill-pack@v1
+```
+
+### Multi-Skill Repositories (Shared Versioning)
+
+For repositories with **2-5 skills** that release together, skill-pack discovers and publishes all of them with the same release tag:
+
+```yaml
+- uses: NimbleBrainInc/skill-pack@v1
+```
+
+All skills share the same release and version.
+
+### Multi-Skill Repositories (Independent Versioning)
+
+For repositories with **many skills** that need independent versions (e.g., `blog-editor/v1.0.0`, `code-reviewer/v2.1.0`), use release-please instead of triggering skill-pack directly.
+
+See the [Monorepo Guide](/skills/monorepo-guide) for setting up:
+- Independent version tracking per skill
+- Per-skill tags and changelogs
+- Only releasing skills that changed
+
+## What It Does
+
+1. **Discovers** all `SKILL.md` files in your repository
+2. **Validates** frontmatter against the Agent Skills specification
+3. **Packages** each skill into a `.skill` bundle
+4. **Uploads** bundles to your GitHub release
+5. **Announces** to mpak.dev with OIDC authentication
+
+## Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `directory` | `.` | Directory to search for skills |
+| `pattern` | `**/SKILL.md` | Glob pattern to find skill files |
+| `build` | `true` | Whether to build `.skill` bundles |
+| `upload` | `true` | Whether to upload to GitHub release |
+| `announce` | `true` | Whether to register with mpak.dev |
+| `announce-url` | `https://registry.mpak.dev/v1/skills/announce` | Registry endpoint |
+| `fail-on-warning` | `false` | Fail if validation warnings found |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `skills-found` | Number of skills discovered |
+| `skills-packed` | Number of skills successfully packed |
+| `skills-announced` | Number of skills announced to registry |
+| `bundle-paths` | JSON array of bundle paths |
+
+## Examples
+
+### Multi-Skill Repository
+
+If your repo contains multiple skills:
+
+```
+my-skills/
+├── code-reviewer/
+│   └── SKILL.md
+├── test-writer/
+│   └── SKILL.md
+└── doc-generator/
+    └── SKILL.md
+```
+
+The action discovers and publishes all of them:
+
+```yaml
+- uses: NimbleBrainInc/skill-pack@v1
+```
+
+Each skill becomes a separate package:
+- `@yourorg/code-reviewer`
+- `@yourorg/test-writer`
+- `@yourorg/doc-generator`
+
+### Custom Directory
+
+If skills are in a subdirectory:
+
+```yaml
+- uses: NimbleBrainInc/skill-pack@v1
+  with:
+    directory: ./skills
+```
+
+### Validate Only (No Publish)
+
+For testing in CI:
+
+```yaml
+- uses: NimbleBrainInc/skill-pack@v1
+  with:
+    build: false
+    upload: false
+    announce: false
+```
+
+### Strict Validation
+
+Fail on any validation warnings:
+
+```yaml
+- uses: NimbleBrainInc/skill-pack@v1
+  with:
+    fail-on-warning: true
+```
+
+## OIDC Authentication
+
+Like mcpb-pack, skill-pack uses GitHub OIDC tokens. This means:
+
+- **No API keys** - Authentication is automatic
+- **Provenance** - Registry knows which repo published the skill
+- **Scope enforcement** - Package scope matches your GitHub owner
+
+### Package Naming
+
+The package scope is derived from your GitHub owner:
+
+| GitHub Owner | Package Name |
+|--------------|--------------|
+| `NimbleBrainInc` | `@nimblebraininc/skill-name` |
+| `johndoe` | `@johndoe/skill-name` |
+
+The skill name comes from the directory containing `SKILL.md`.
+
+### Required Permissions
+
+```yaml
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # Request OIDC token
+```
+
+## Troubleshooting
+
+### "Failed to get OIDC token"
+
+Ensure your workflow has the correct permissions:
+
+```yaml
+permissions:
+  id-token: write
+```
+
+### "Name mismatch"
+
+The `name` field in your SKILL.md must match the directory name:
+
+```
+my-skill/
+└── SKILL.md  # name: my-skill (must match directory)
+```
+
+### "Artifact not found in release"
+
+The action uploads to the current release. Make sure:
+1. You're running on a `release` event
+2. The release was created before the action runs

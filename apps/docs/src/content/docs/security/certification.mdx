@@ -1,0 +1,65 @@
+---
+title: Certification
+description: Understanding mpak's security certification for MCP bundles
+---
+
+import { CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+Every bundle published to mpak is automatically scanned against the [mpak Trust Framework (MTF)](https://mpaktrust.org), an open security standard for MCP server bundles. The results determine your bundle's **certification level** (L1-L4).
+
+<Aside type="tip">
+The full framework specification, including all 41 controls and their criteria, lives at [mpaktrust.org](https://mpaktrust.org). This guide focuses on what publishers need to know.
+</Aside>
+
+## Quick Reference
+
+| Level | Name | Controls | What It Means |
+|-------|------|----------|---------------|
+| **L1** | Basic | 7 | No secrets, no malware, valid manifest, SBOM |
+| **L2** | Standard | 26 | + Vuln scanning, pinned deps, author identity |
+| **L3** | Verified | 38 | + Signed bundles, build provenance, SLSA |
+| **L4** | Attested | 41 | + Behavioral sandbox, reproducible builds |
+
+Most well-structured servers achieve **L1** or **L2** automatically.
+
+## What Gets Checked
+
+Controls span nine security domains:
+
+| Domain | Code | Examples |
+|--------|------|----------|
+| Artifact Integrity | AI | Valid manifest, content hashes, signatures |
+| Supply Chain | SC | SBOM, vulnerability scan, dependency pinning |
+| Code Quality | CQ | No secrets, no malware, static analysis |
+| Capability Declaration | CD | Tool descriptions, permission scopes |
+| Provenance | PR | Source repo, author identity, build attestation |
+| Registry Operations | RG | Namespace governance, name pattern review |
+| Publisher Identity | PK | Identity verification, key rotation |
+| Installation | IN | Pre-install checks, user transparency |
+| Update Lifecycle | UP | Version policy, deprecation process |
+
+### MCP-Specific Threats
+
+Three controls target AI attack surfaces that traditional tools miss:
+
+- **CD-03: Tool description poisoning** - prompt injection in tool descriptions
+- **CD-04: Credential blast radius** - overly broad OAuth scopes
+- **CQ-06: Behavioral mismatch** - runtime behavior differs from declarations
+
+Slopsquatting (packages named after LLM hallucinations) is handled by RG-02 namespace governance.
+
+## Viewing Results
+
+Every package page on [mpak.dev](https://mpak.dev) shows:
+
+- Certification level badge
+- Risk score
+- Individual control results (pass/fail/skip)
+- Remediation guidance for failures
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Scan Your Bundle" description="Run the scanner locally before publishing" href="/security/scanning" />
+  <LinkCard title="mpak Trust Framework" description="Full specification and control reference" href="https://mpaktrust.org" />
+</CardGrid>

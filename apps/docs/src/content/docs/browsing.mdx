@@ -1,0 +1,92 @@
+---
+title: Browsing the Registry
+description: Find and evaluate packages on mpak.dev
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+The fastest way to find MCP bundles and skills is the web registry at [mpak.dev](https://mpak.dev).
+
+## Searching
+
+Search by name, description, or keyword:
+
+- Visit [mpak.dev](https://mpak.dev) and use the search bar
+- Or from the CLI: `mpak bundle search <query>`
+
+Both query the same [registry API](/registry/api), so results are identical.
+
+{/* TODO: Document specific search filters available on mpak.dev when UI is finalized (e.g., filter by type, runtime, certification level, sort by downloads/recency) */}
+
+<Aside>
+  Search matches against package names, descriptions, and keywords defined in the manifest. More specific queries return better results: try `postgres` rather than `database`.
+</Aside>
+
+## Package Pages
+
+Each package on mpak.dev has a detail page showing everything you need to evaluate it:
+
+| Field | What It Tells You |
+|-------|-------------------|
+| **Name** | Scoped package name (`@org/server`) |
+| **Version** | Latest published version |
+| **Description** | What the server does |
+| **Downloads** | Total download count (a rough trust signal) |
+| **Certification** | Security level (L1-L4) from the [mpak Trust Framework](https://mpaktrust.org) |
+| **Provenance** | Source repository, workflow, and commit hash |
+| **Platforms** | Available platforms (e.g., darwin-arm64, linux-x64) |
+| **Install command** | Copy-pasteable `mpak bundle run` command |
+| **README** | Full README rendered from the source repository |
+
+{/* TODO: Add screenshot of a package page when UI design is stable */}
+
+## Evaluating a Package
+
+Before running a bundle, look for these trust signals:
+
+### Certification Level
+
+The [mpak Trust Framework](/security/certification) assigns certification levels based on automated security scanning:
+
+| Level | Meaning |
+|-------|---------|
+| **L1 (Basic)** | Meets minimum requirements (valid manifest, no embedded secrets) |
+| **L2 (Standard)** | Pinned deps, vulnerability scanning, author identity |
+| **L3 (Verified)** | Signed bundles, build provenance, SLSA |
+| **L4 (Attested)** | Behavioral sandbox, reproducible builds |
+
+Higher levels mean more security controls were verified.
+
+### Provenance
+
+A verified provenance badge means the bundle was built in a GitHub Actions workflow and the registry verified the OIDC token. You can trace the bundle back to the exact commit that produced it. See [Provenance](/security/provenance).
+
+### Other Signals
+
+- **Download count**: Higher downloads suggest wider adoption (but not necessarily quality)
+- **Last updated**: Recent updates suggest active maintenance
+- **Publisher**: Check the org/user's other packages and GitHub profile
+
+## CLI Alternative
+
+Everything visible on mpak.dev is also accessible from the terminal:
+
+```bash
+# Search for packages (table with NAME, VERSION, TRUST, DESCRIPTION)
+mpak bundle search postgres
+
+# View package details (includes Trust section with certification level)
+mpak bundle show @nimblebraininc/postgres-mcp
+```
+
+The CLI search displays a table with a **TRUST** column showing the certification level (`L1`-`L4` or `-` if not scanned). The `show` command includes a full Trust section with the level name and controls passed.
+
+See [search](/cli/search) and [show](/cli/show) for full CLI documentation.
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="CLI search" description="Search from the command line" href="/cli/search" />
+  <LinkCard title="Certification" description="Understanding security levels" href="/security/certification" />
+  <LinkCard title="How the Registry Works" description="Architecture and data flow" href="/registry/how-it-works" />
+</CardGrid>

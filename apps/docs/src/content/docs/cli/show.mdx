@@ -1,0 +1,111 @@
+---
+title: mpak show
+description: Display detailed information about a bundle or skill
+---
+
+Get detailed information about a specific bundle or skill, including versions, platforms, and install instructions.
+
+## Bundle Details
+
+```bash
+mpak bundle show <package>
+```
+
+### Examples
+
+```bash
+mpak bundle show @nimblebraininc/echo
+mpak bundle show @nimblebraininc/echo --json
+```
+
+### Output
+
+```bash
+$ mpak bundle show @nimblebraininc/echo
+
+🔒 @nimblebraininc/echo v1.0.0
+
+A simple echo MCP server for testing
+
+Bundle Information:
+  Name: @nimblebraininc/echo
+  Author: NimbleBrain
+  Type: python
+  License: MIT
+  Homepage: https://github.com/NimbleBrainInc/mcp-echo
+
+Trust: L3 Verified
+  Controls: 92/100 passed
+
+Provenance:
+  Repository: NimbleBrainInc/mcp-echo
+  Commit: abc123def456
+  Provider: github_oidc
+
+Statistics:
+  Downloads: 1,250
+  Published: 1/15/2025
+
+Versions (2):
+  1.0.0 (latest) 🔒 - 1/15/2025 - 1,100 downloads [darwin-arm64, darwin-x64, linux-x64, linux-arm64]
+  0.9.0 🔒 - 12/1/2024 - 150 downloads [darwin-arm64, linux-x64]
+
+Available Platforms:
+  - darwin-arm64
+  - darwin-x64
+  - linux-x64
+  - linux-arm64
+
+Run:
+  mpak bundle run @nimblebraininc/echo
+
+Pull (download only):
+  mpak bundle pull @nimblebraininc/echo
+```
+
+## Skill Details
+
+```bash
+mpak skill show <name>
+```
+
+### Examples
+
+```bash
+mpak skill show @nimblebraininc/deploy
+mpak skill show @nimblebraininc/deploy --json
+```
+
+### Skill Output
+
+The output includes metadata, triggers, examples, version history, and an install command.
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+## Trust
+
+If the bundle has been security-scanned, the output includes a **Trust** section showing the certification level and how many controls passed:
+
+```
+Trust: L3 Verified
+  Controls: 92/100 passed
+```
+
+See [Certification](/security/certification) for details on trust levels.
+
+## Provenance
+
+If the bundle was published via GitHub Actions OIDC, the output includes provenance information:
+
+```
+Provenance:
+  Repository: NimbleBrainInc/mcp-echo
+  Commit: abc123def456
+  Provider: github_oidc
+```
+
+This cryptographically proves which repository the bundle came from.

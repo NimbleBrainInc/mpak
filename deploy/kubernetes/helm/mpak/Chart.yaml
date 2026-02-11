@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mpak
+description: Open source MCP bundle registry and package manager
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://mpak.dev
+sources:
+  - https://github.com/NimbleBrainInc/mpak
+maintainers:
+  - name: NimbleBrain
+    email: engineering@mpak.dev
+    url: https://nimblebrain.ai
+keywords:
+  - mcp
+  - registry
+  - package-manager
+  - ai
+  - mcpb

@@ -1,0 +1,111 @@
+---
+title: Versioning
+description: How mpak handles package versions
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+mpak uses [semantic versioning](https://semver.org) (semver) for all packages. Understanding how versions work helps you publish reliably and consume safely.
+
+## Semantic Versioning
+
+Every package version follows `MAJOR.MINOR.PATCH`:
+
+| Bump | When | Example |
+|------|------|---------|
+| **MAJOR** | Breaking changes (removed tools, changed behavior) | `1.0.0` -> `2.0.0` |
+| **MINOR** | New features (added tools, new capabilities) | `1.0.0` -> `1.1.0` |
+| **PATCH** | Bug fixes (no behavior change) | `1.0.0` -> `1.0.1` |
+
+For MCP servers, a "breaking change" means: tools were removed, tool schemas changed incompatibly, or required configuration changed.
+
+## Version Resolution
+
+When you run a package without specifying a version, mpak resolves to the latest published version:
+
+```bash
+# Gets the latest version
+mpak bundle run @org/server
+
+# Gets a specific version
+mpak bundle run @org/server@1.2.0
+```
+
+{/* TODO: Confirm exact resolution behavior: does `run` without version always check the registry for latest, or does it use the cached version if one exists? Document the --update flag behavior. */}
+
+<Aside>
+  If a version is already cached locally, `mpak bundle run` uses the cache. Use `mpak bundle run @org/server --update` to check for newer versions.
+</Aside>
+
+## Version Pinning
+
+Pin to a specific version in your MCP client configuration to ensure reproducible behavior:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "mpak",
+      "args": ["bundle", "run", "@nimblebraininc/postgres-mcp@1.2.0"]
+    }
+  }
+}
+```
+
+This guarantees the same version runs every time, regardless of newer releases.
+
+**When to pin:**
+- Production environments where stability matters
+- CI/CD pipelines where reproducibility is critical
+- When a specific version is known to work with your setup
+
+**When not to pin:**
+- Development environments where you want the latest features
+- When you're evaluating a package for the first time
+
+## Pre-release Versions
+
+{/* TODO: Confirm pre-release version support (e.g., 1.0.0-beta.1, 1.0.0-rc.1). Document whether pre-releases are returned by default search/resolution or require explicit opt-in. */}
+
+<Aside>
+  Pre-release version support is planned. Check the [CLI changelog](https://github.com/NimbleBrainInc/mpak/releases) for updates.
+</Aside>
+
+## Version Immutability
+
+Once a version is published, it cannot be overwritten. Publishing `@org/server@1.0.0` a second time will be rejected by the registry.
+
+This is critical for supply chain security: if you've verified that `@org/server@1.0.0` is safe, you can trust that it won't change.
+
+To fix a bug in a published version, publish a new version:
+
+```
+1.0.0  <- published, immutable
+1.0.1  <- bug fix
+```
+
+## Deprecation
+
+{/* TODO: Document deprecation mechanism when available. Expected behavior: `mpak deprecate @org/server@1.0.0 "Use 2.0.0 instead"` or a manifest-level flag. */}
+
+Deprecation marks a version or package as no longer recommended. Deprecated packages still work (they can be downloaded and run) but display a warning.
+
+<Aside>
+  The deprecation mechanism is being finalized. Currently, document deprecation in your package README and publish a new version with updated guidance.
+</Aside>
+
+## Unpublishing
+
+{/* TODO: Document unpublishing policy. Key questions: Can a version be removed? Is there a time window? What about name reuse? */}
+
+<Aside>
+  Unpublishing policy is being finalized. Since bundles are hosted on GitHub Releases, deleting the release asset effectively removes the download. The registry metadata may persist to prevent name reuse.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Publishing" description="How to publish your bundle" href="/bundles/publishing" />
+  <LinkCard title="How the Registry Works" description="Architecture and data flow" href="/registry/how-it-works" />
+  <LinkCard title="run" description="CLI command for running bundles" href="/cli/run" />
+</CardGrid>

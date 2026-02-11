@@ -1,0 +1,54 @@
+/*
+ * mpak Workshop theme for Starlight docs
+ *
+ * Gold accent to match mpak.dev design system.
+ * Space Grotesk + JetBrains Mono fonts.
+ */
+
+:root {
+  /* Gold accent for dark mode */
+  --sl-color-accent-low: hsl(38, 92%, 16%);
+  --sl-color-accent: hsl(38, 92%, 50%);
+  --sl-color-accent-high: hsl(38, 90%, 75%);
+}
+
+:root[data-theme='light'] {
+  /* Gold accent for light mode - darker for readability on white */
+  --sl-color-accent-high: hsl(38, 92%, 28%);
+  --sl-color-accent: hsl(38, 92%, 40%);
+  --sl-color-accent-low: hsl(38, 90%, 92%);
+}
+
+/* Fonts */
+:root {
+  --sl-font: 'Space Grotesk', var(--sl-font-system);
+  --sl-font-mono: 'JetBrains Mono', var(--sl-font-system-mono);
+}
+
+/* Browse Registry button */
+.browse-registry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--sl-color-accent);
+  color: var(--sl-color-bg);
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.browse-registry-btn:hover {
+  background-color: var(--sl-color-accent-high);
+}
+
+:root[data-theme='light'] .browse-registry-btn {
+  color: white;
+}
+
+:root[data-theme='light'] .browse-registry-btn:hover {
+  background-color: var(--sl-color-accent-high);
+  color: white;
+}

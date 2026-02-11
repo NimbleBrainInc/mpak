@@ -1,0 +1,253 @@
+---
+title: What are Skills?
+description: Understanding agent skills and how they make AI assistants smarter
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+MCP bundles give agents the ability to **do** things. Skills give agents the knowledge to **think** about things. They're two sides of the same coin.
+
+## The Difference: Tools vs. Knowledge
+
+Consider what makes a great code reviewer:
+
+| They Need | How They Get It |
+|-----------|-----------------|
+| Ability to read files | MCP server with `read_file` tool |
+| Ability to search code | MCP server with `grep` tool |
+| **Knowledge of what to look for** | **A skill** |
+| **Understanding of security patterns** | **A skill** |
+| **Judgment about code quality** | **A skill** |
+
+Tools let an agent take actions. Skills teach an agent how to think.
+
+## What a Skill Looks Like
+
+A skill is a markdown file with instructions:
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review with security and performance focus
+metadata:
+  triggers:
+    - "review this code"
+    - "check for bugs"
+---
+
+# Code Review Process
+
+When reviewing code, follow this process:
+
+## 1. Understand Context
+- What does this code do?
+- What problem is it solving?
+- Who wrote it and why?
+
+## 2. Check for Security Issues
+Look for these common vulnerabilities:
+
+### SQL Injection
+Bad:
+\`\`\`python
+query = f"SELECT * FROM users WHERE id = {user_id}"
+\`\`\`
+
+Good:
+\`\`\`python
+query = "SELECT * FROM users WHERE id = %s"
+cursor.execute(query, (user_id,))
+\`\`\`
+
+### XSS (Cross-Site Scripting)
+...
+
+## 3. Check for Performance
+- N+1 queries
+- Unnecessary allocations
+- Missing indexes
+...
+```
+
+When you ask Claude to "review this code," it applies this skill and follows the structured approach.
+
+## The Difference
+
+Without skills, AI assistants are generalists. They know a little about everything but aren't experts at anything.
+
+With skills:
+
+```
+You: "Review this authentication code"
+
+Claude (with code-reviewer skill):
+"I'll review this using a structured security-focused approach.
+
+1. **Authentication Flow Analysis**
+   - Login endpoint accepts username/password
+   - No rate limiting detected (SECURITY ISSUE)
+
+2. **Password Handling**
+   - Using bcrypt for hashing (good)
+   - But timing attack vulnerability in comparison (line 47)
+
+3. **Session Management**
+   - JWT tokens with 24h expiry
+   - No refresh token rotation (potential issue)
+
+4. **Specific Recommendations**
+   ..."
+```
+
+The skill turned a generic "looks fine" response into expert-level analysis.
+
+## Why Skills Matter
+
+### 1. Encode Expertise
+
+Your best engineer's code review checklist. Your security team's penetration testing methodology. Your legal team's contract review process. Skills capture this knowledge in a reusable form.
+
+### 2. Ensure Consistency
+
+Without a skill, each interaction starts from scratch. With a skill, the agent applies the same rigorous process every time.
+
+### 3. Share Knowledge
+
+A skill you write can help thousands of people. Your security review checklist doesn't just help your team, it helps everyone who installs your skill.
+
+## How Skills Work in Claude Code
+
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) loads skills from your project's `.claude/skills/` directory:
+
+```
+your-project/
+└── .claude/
+    └── skills/
+        ├── code-reviewer/
+        │   └── SKILL.md
+        └── api-designer/
+            └── SKILL.md
+```
+
+When you start Claude Code, it sees these skills and can apply them when relevant.
+
+### Triggers
+
+Skills define trigger phrases that tell Claude when to use them:
+
+```yaml
+metadata:
+  triggers:
+    - "review this code"
+    - "check for bugs"
+    - "security review"
+```
+
+When you say something matching a trigger, Claude activates the skill.
+
+### Allowed Tools
+
+Skills can specify which tools they need:
+
+```yaml
+allowed-tools: Read Grep Bash
+```
+
+This tells Claude what capabilities the skill expects to have available.
+
+## Skills vs. System Prompts
+
+You might think: "Can't I just put this in a system prompt?"
+
+| System Prompts | Skills |
+|----------------|--------|
+| One big blob of instructions | Modular, composable units |
+| Always active | Activated when relevant |
+| Hard to share | Packageable and distributable |
+| No versioning | Versioned and updatable |
+| Clutters context | Only loaded when needed |
+
+Skills are system prompts that got organized.
+
+## The Skill Ecosystem
+
+mpak hosts skills just like it hosts MCP bundles:
+
+```bash
+# Search for skills
+mpak skill search "code review"
+
+# See skill details
+mpak skill show @nimblebraininc/code-reviewer
+```
+
+Anyone can publish skills. The best practices of experts become accessible to everyone.
+
+## Types of Skills
+
+### Development Skills
+- Code review
+- Test writing
+- Documentation generation
+- API design
+- Refactoring patterns
+
+### Domain Skills
+- Legal contract review
+- Medical literature analysis
+- Financial modeling
+- Scientific paper critique
+
+### Process Skills
+- Project planning
+- Technical writing
+- Interview preparation
+- Incident response
+
+If there's a domain where expertise matters, there's a skill for it (or there should be).
+
+## Building Your First Skill
+
+A skill starts with what you already know:
+
+1. **Pick a task you do well** - What do people ask you for help with?
+2. **Write down your process** - What steps do you follow?
+3. **Add examples** - What does good output look like?
+4. **Package it** - Put it in a `SKILL.md` file
+
+That's it. Your expertise, made reusable.
+
+## Try It
+
+Install a skill in your project:
+
+```bash
+mkdir -p .claude/skills/code-reviewer
+```
+
+Create `.claude/skills/code-reviewer/SKILL.md`:
+
+```markdown
+---
+name: code-reviewer
+description: Thorough code review focusing on bugs and security
+---
+
+# Code Review
+
+When asked to review code:
+
+1. Read the code completely first
+2. Check for common bugs (off-by-one, null checks, error handling)
+3. Look for security issues (injection, XSS, auth problems)
+4. Suggest improvements with specific line references
+```
+
+Now ask Claude Code to "review this code" and watch it follow your process.
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="SKILL.md Reference" description="Full documentation of the skill format" href="/skills/skill-md" />
+  <LinkCard title="Publish a Skill" description="Share your skills with the world" href="/skills/overview" />
+</CardGrid>

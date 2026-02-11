@@ -1,0 +1,22 @@
+{
+  "name": "@test/has-vulnerabilities",
+  "version": "1.0.0",
+  "description": "TEST FIXTURE: Bundle with known vulnerable dependencies for SC-02 validation",
+  "author": {
+    "name": "Test Author"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "server"]
+    }
+  },
+  "tools": [
+    {
+      "name": "process",
+      "description": "Process data using vulnerable dependencies"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+# mpak.dev robots.txt
+
+# Default: allow all crawlers
+User-agent: *
+Allow: /
+Crawl-delay: 1
+Disallow: /login
+Disallow: /my-packages
+
+# Google Search
+User-agent: Googlebot
+Allow: /
+Disallow: /login
+Disallow: /my-packages
+
+# Google AI (Gemini training)
+User-agent: Google-Extended
+Allow: /
+
+# OpenAI
+User-agent: GPTBot
+Allow: /
+
+# ChatGPT browsing
+User-agent: ChatGPT-User
+Allow: /
+
+# Anthropic
+User-agent: Claude-Web
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+
+# Amazon
+User-agent: Amazonbot
+Allow: /
+
+# Common Crawl (used by many AI training sets)
+User-agent: CCBot
+Allow: /
+
+# Microsoft / Bing
+User-agent: Bingbot
+Allow: /
+
+# Apple
+User-agent: Applebot
+Allow: /
+Applebot-Extended: Allow: /
+
+# Cohere
+User-agent: cohere-ai
+Allow: /
+
+# Meta
+User-agent: FacebookBot
+Allow: /
+
+# Sitemap, feed, and LLM-friendly content
+Sitemap: https://www.mpak.dev/sitemap.xml
+Feed: https://www.mpak.dev/feed.xml

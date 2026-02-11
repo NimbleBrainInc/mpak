@@ -1,0 +1,80 @@
+---
+title: Why a Registry?
+description: Why registries matter for MCP server distribution
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+You can share an MCP server by putting it on GitHub. People do this every day. So why does mpak exist?
+
+## What GitHub Gives You
+
+GitHub is great for source code. If you put your MCP server on GitHub, people can:
+
+| Capability | How |
+|-----------|-----|
+| Read the source | Browse the repo |
+| Track versions | Git tags and releases |
+| Report issues | GitHub Issues |
+| Contribute | Pull requests |
+| Download | `git clone` |
+
+For developers comfortable with git, this works. But "works" and "works well for distribution" are very different things.
+
+## What GitHub Doesn't Give You
+
+| Need | GitHub | A Registry |
+|------|--------|-----------|
+| **Bundled dependencies** | User installs them manually | Vendored in the package |
+| **Standardized execution** | User figures out how to run it | `mpak bundle run` and done |
+| **Cross-repo discovery** | Search GitHub, hope for the best | `mpak bundle search postgres` |
+| **Trust signals** | Star count (gameable) | Provenance, certification, security scanning |
+| **Download stats** | Approximate clone counts | Exact download numbers |
+| **Version resolution** | Manual tag browsing | `@org/server@1.2.0` or latest |
+| **Platform detection** | User picks the right artifact | Automatic platform matching |
+
+The gap between "source available on GitHub" and "users can actually install and run this" is enormous. Every manual step in that gap is a user who gives up.
+
+## The Registry Gap
+
+This pattern has played out before:
+
+- **Before npm**, Node.js libraries were GitHub repos you cloned and wired up manually. npm made `require('express')` just work.
+- **Before PyPI**, Python packages were tarballs on personal websites. pip made `pip install requests` just work.
+- **Before crates.io**, Rust libraries were scattered across GitHub. Cargo made `cargo add serde` just work.
+
+In every case, a registry solved the same problems: discovery, trust, versioning, and frictionless installation. The ecosystem exploded once sharing became easy.
+
+MCP servers are at the "GitHub repos you clone" stage right now. mpak is the registry that closes the gap.
+
+## Why Not Docker Hub?
+
+Docker solves isolation, not distribution. For MCP servers, it's the wrong tool:
+
+| Concern | Docker | mpak |
+|---------|--------|------|
+| **Size** | 100MB+ images (base OS, runtime, deps) | 1-10MB bundles (just code + deps) |
+| **Runtime requirement** | Docker Engine must be installed | Just Python or Node.js |
+| **Startup time** | Seconds (container init) | Milliseconds (direct process) |
+| **Complexity** | Dockerfile, compose, networking | One `manifest.json` |
+| **MCP compatibility** | Requires stdio proxy configuration | Native stdio support |
+
+MCP servers are CLI tools that speak JSON-RPC over stdio. They don't need container isolation, virtual networking, or a separate operating system. Bundling dependencies is enough.
+
+## What mpak Provides
+
+| Capability | How |
+|-----------|-----|
+| **Discovery** | Search and browse [mpak.dev](https://mpak.dev), or `mpak bundle search` from the CLI |
+| **Trust** | [Provenance](/security/provenance) proves where bundles came from. [Certification](/security/certification) grades security posture (L1-L4). |
+| **Versioning** | Semantic versioning with [pinning support](/registry/versioning). Immutable once published. |
+| **Bundling** | Dependencies vendored into a single `.mcpb` file. No installation steps. |
+| **Ecosystem** | Download counts, badges, README rendering, cross-linking between packages |
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="How the Registry Works" description="Architecture and data flow" href="/registry/how-it-works" />
+  <LinkCard title="Quickstart" description="Run your first MCP server in 2 minutes" href="/quickstart" />
+  <LinkCard title="Migrate Your MCP Server" description="Publish an existing server to mpak" href="/bundles/migrating" />
+</CardGrid>

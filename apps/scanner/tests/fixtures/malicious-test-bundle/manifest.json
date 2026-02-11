@@ -1,0 +1,17 @@
+{
+  "manifest_version": "0.3",
+  "name": "@test/malicious-demo",
+  "version": "0.0.1",
+  "description": "TEST BUNDLE - Demonstrates malicious patterns for scanner validation",
+  "author": {
+    "name": "Security Test"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "malicious_server.server",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "malicious_server.server"]
+    }
+  }
+}

@@ -1,0 +1,203 @@
+# MTF Unsafe Execution Patterns (CQ-05)
+# These patterns detect unsafe code execution that could enable
+# injection attacks. Used for static analysis validation.
+
+version: "1.0"
+description: "Unsafe execution patterns for MTF CQ-05 control"
+
+# Python unsafe patterns
+python:
+  - id: shell-true
+    name: Subprocess Shell Injection
+    pattern: 'subprocess\.(run|call|Popen|check_output|check_call)\s*\([^)]*shell\s*=\s*True'
+    severity: high
+    description: Using shell=True enables command injection
+    remediation: |
+      Use shell=False (default) and pass arguments as a list:
+      # Unsafe
+      subprocess.run(f"ls {user_dir}", shell=True)
+      # Safe
+      subprocess.run(["ls", user_dir])
+
+  - id: os-system
+    name: os.system Command Injection
+    pattern: 'os\.system\s*\('
+    severity: high
+    description: os.system always uses shell, enabling injection
+    remediation: |
+      Replace with subprocess.run() with shell=False:
+      # Unsafe
+      os.system(f"rm {filename}")
+      # Safe
+      subprocess.run(["rm", filename], check=True)
+
+  - id: os-popen
+    name: os.popen Command Injection
+    pattern: 'os\.popen\s*\('
+    severity: high
+    description: os.popen uses shell, enabling injection
+    remediation: |
+      Replace with subprocess.run():
+      # Unsafe
+      os.popen(f"cat {filename}").read()
+      # Safe
+      subprocess.run(["cat", filename], capture_output=True).stdout
+
+  - id: eval-user-input
+    name: Eval with User Input
+    pattern: 'eval\s*\([^)]*\b(request|input|args|params|data)\b'
+    severity: critical
+    description: Evaluating user-controlled input enables code execution
+    remediation: |
+      Never use eval() with user input. Use ast.literal_eval() for
+      safe literal evaluation, or structured parsing (JSON, etc.)
+
+  - id: exec-user-input
+    name: Exec with User Input
+    pattern: 'exec\s*\([^)]*\b(request|input|args|params|data)\b'
+    severity: critical
+    description: Executing user-controlled code
+    remediation: |
+      Never use exec() with user input. Restructure to avoid
+      dynamic code execution.
+
+  - id: pickle-untrusted
+    name: Pickle Deserialization
+    pattern: 'pickle\.(load|loads)\s*\('
+    severity: high
+    description: Pickle deserialization can execute arbitrary code
+    remediation: |
+      Never unpickle data from untrusted sources. Use JSON or
+      other safe serialization formats.
+
+  - id: yaml-unsafe-load
+    name: Unsafe YAML Load
+    pattern: 'yaml\.load\s*\([^)]*(?!Loader\s*=\s*(Safe|Base)Loader)'
+    severity: high
+    description: yaml.load without SafeLoader can execute code
+    remediation: |
+      Always use SafeLoader:
+      # Unsafe
+      yaml.load(data)
+      # Safe
+      yaml.safe_load(data)
+      # Or explicitly
+      yaml.load(data, Loader=yaml.SafeLoader)
+
+  - id: sql-string-format
+    name: SQL String Formatting
+    pattern: '(execute|executemany)\s*\([^)]*(%s|%d|\{|\+|\.format|f[''"])'
+    severity: high
+    description: SQL query with string formatting enables injection
+    remediation: |
+      Use parameterized queries:
+      # Unsafe
+      cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
+      # Safe
+      cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+
+  - id: jinja-autoescape-off
+    name: Jinja2 Autoescape Disabled
+    pattern: 'Environment\s*\([^)]*autoescape\s*=\s*False'
+    severity: medium
+    description: Disabled autoescape enables XSS
+    remediation: |
+      Enable autoescape for HTML output:
+      env = Environment(autoescape=True)
+
+# JavaScript/Node.js unsafe patterns
+javascript:
+  - id: child-process-exec
+    name: child_process.exec Injection
+    pattern: 'child_process\.exec\s*\('
+    severity: high
+    description: exec() runs commands through shell, enabling injection
+    remediation: |
+      Use execFile() or spawn() with array arguments:
+      // Unsafe
+      exec(`ls ${userDir}`)
+      // Safe
+      execFile('ls', [userDir])
+
+  - id: eval-js
+    name: JavaScript eval()
+    pattern: '\beval\s*\('
+    severity: high
+    description: eval() executes arbitrary JavaScript
+    remediation: |
+      Avoid eval(). Use JSON.parse() for data, or
+      Function() constructor with careful validation.
+
+  - id: new-function
+    name: new Function() Constructor
+    pattern: 'new\s+Function\s*\('
+    severity: medium
+    description: Function constructor can execute arbitrary code
+    remediation: |
+      Avoid dynamic function creation. If necessary,
+      validate input strictly.
+
+  - id: settimeout-string
+    name: setTimeout with String
+    pattern: 'setTimeout\s*\(\s*[''"`]'
+    severity: medium
+    description: setTimeout with string argument uses eval
+    remediation: |
+      Pass a function reference instead:
+      // Unsafe
+      setTimeout("doSomething()", 1000)
+      // Safe
+      setTimeout(doSomething, 1000)
+
+  - id: innerhtml-assignment
+    name: innerHTML Assignment
+    pattern: '\.innerHTML\s*='
+    severity: medium
+    description: innerHTML can execute scripts in input
+    remediation: |
+      Use textContent for plain text, or sanitize HTML:
+      // Unsafe
+      el.innerHTML = userInput
+      // Safe
+      el.textContent = userInput
+      // Or sanitize
+      el.innerHTML = DOMPurify.sanitize(userInput)
+
+  - id: sql-template-literal
+    name: SQL Template Literal
+    pattern: '(query|execute)\s*\(\s*`[^`]*\$\{'
+    severity: high
+    description: SQL query with template literal enables injection
+    remediation: |
+      Use parameterized queries:
+      // Unsafe
+      db.query(`SELECT * FROM users WHERE id = ${userId}`)
+      // Safe
+      db.query('SELECT * FROM users WHERE id = $1', [userId])
+
+# Shell patterns (in any language)
+shell:
+  - id: command-substitution
+    name: Command Substitution
+    pattern: '\$\([^)]*\$\{?[A-Za-z_]'
+    severity: high
+    description: Command substitution with variables
+    remediation: Quote variables properly or avoid shell
+
+  - id: backtick-execution
+    name: Backtick Command Execution
+    pattern: '`[^`]*\$'
+    severity: high
+    description: Backtick execution with variable interpolation
+    remediation: Use proper quoting or avoid shell
+
+# Exclusions
+exclusions:
+  - pattern: 'test[_/]|spec[_/]|mock|__test__|\.test\.'
+    description: Test files
+
+  - pattern: '#\s*nosec|//\s*nosec|/\*\s*nosec'
+    description: Security ignore annotations
+
+  - pattern: "# Safe:.*shell=True"
+    description: Documented safe usage

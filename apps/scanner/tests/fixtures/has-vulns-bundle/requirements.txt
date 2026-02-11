@@ -1,0 +1,14 @@
+# TEST FIXTURE: Known vulnerable package versions
+# These versions have documented CVEs and should trigger SC-02 (Vulnerability Scan)
+
+# CVE-2021-33503 - urllib3 ReDoS vulnerability
+urllib3==1.26.4
+
+# CVE-2022-42969 - py library ReDoS
+py==1.10.0
+
+# CVE-2021-23727 - celery command injection
+celery==5.0.0
+
+# CVE-2022-40899 - future ReDoS
+future==0.18.2

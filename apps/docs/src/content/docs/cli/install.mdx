@@ -1,0 +1,68 @@
+---
+title: Installation
+description: Install the mpak CLI
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Install globally
+
+```bash
+npm install -g @nimblebrain/mpak
+```
+
+Verify the installation:
+
+```bash
+mpak --version
+```
+
+## Requirements
+
+- **Node.js 22+** - The CLI is built on Node.js
+- **Python 3.10+** - Required to run Python-based MCP servers
+- **Platform** - macOS, Linux, or Windows
+
+## Alternative: Use without installing
+
+Run commands directly with `npx`:
+
+```bash
+npx @nimblebrain/mpak bundle search echo
+npx @nimblebrain/mpak bundle run @nimblebraininc/echo
+```
+
+This downloads the CLI on first use and caches it locally.
+
+## Configuration
+
+The CLI stores configuration in `~/.mpak/config.json`:
+
+```json
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-01T00:00:00.000Z",
+  "registryUrl": "https://registry.mpak.dev"
+}
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MPAK_REGISTRY_URL` | Override the registry API URL | `https://registry.mpak.dev` |
+
+## Cache Location
+
+Downloaded bundles are cached in `~/.mpak/cache/`. To clear the cache:
+
+```bash
+rm -rf ~/.mpak/cache
+```
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Search" description="Find bundles in the registry" href="/cli/search" />
+  <LinkCard title="Run" description="Run MCP servers directly" href="/cli/run" />
+</CardGrid>

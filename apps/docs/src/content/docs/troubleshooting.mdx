@@ -1,0 +1,253 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for mpak
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Solutions for common issues with the mpak CLI, bundle execution, and integration setup.
+
+## CLI Issues
+
+### `mpak: command not found`
+
+The CLI isn't installed globally or isn't in your PATH.
+
+```bash
+# Install globally
+npm install -g @nimblebrain/mpak
+
+# Or use without installing
+npx @nimblebrain/mpak bundle search echo
+```
+
+If installed but still not found, check that your npm global bin directory is in your PATH:
+
+```bash
+npm config get prefix
+# Add <prefix>/bin to your PATH
+```
+
+### `npm ERR! EACCES permission denied`
+
+Don't use `sudo npm install -g`. Instead, fix npm permissions or use a version manager:
+
+```bash
+# Option 1: Use nvm (recommended)
+nvm install --lts
+npm install -g @nimblebrain/mpak
+
+# Option 2: Change npm prefix
+npm config set prefix ~/.npm-global
+export PATH=~/.npm-global/bin:$PATH
+npm install -g @nimblebrain/mpak
+```
+
+## Bundle Download Issues
+
+### `No bundle found for platform`
+
+The bundle doesn't have a build for your platform. Check available platforms:
+
+```bash
+mpak bundle show @org/server
+```
+
+Pure Python and Node.js bundles are platform-independent and should work everywhere. Platform-specific bundles (with native dependencies) may only be available for certain platforms.
+
+### Network errors / timeouts
+
+Bundles are downloaded from GitHub Releases. Check:
+
+1. **Internet connectivity**: `curl -I https://github.com`
+2. **GitHub status**: [githubstatus.com](https://www.githubstatus.com)
+3. **Proxy settings**: If behind a corporate proxy, configure `HTTPS_PROXY`:
+   ```bash
+   export HTTPS_PROXY=http://proxy.company.com:8080
+   mpak bundle run @org/server
+   ```
+
+### SHA256 / integrity mismatch
+
+The downloaded bundle doesn't match the expected checksum. This usually means a corrupted download.
+
+```bash
+# Clear the cached bundle and re-download
+rm -rf ~/.mpak/cache/@org/server
+mpak bundle run @org/server
+```
+
+## Bundle Execution Issues
+
+### `python3: not found` or `python: not found`
+
+Python bundles require Python 3.10+ installed on your system:
+
+<Tabs>
+  <TabItem label="macOS">
+    ```bash
+    brew install python@3.12
+    ```
+  </TabItem>
+  <TabItem label="Ubuntu/Debian">
+    ```bash
+    sudo apt install python3
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```bash
+    winget install Python.Python.3.12
+    ```
+  </TabItem>
+</Tabs>
+
+### `node: not found`
+
+Node.js bundles require Node.js 18+:
+
+```bash
+# Using nvm (recommended)
+nvm install 18
+```
+
+### `ModuleNotFoundError` or import errors
+
+This usually means the bundle's vendored dependencies aren't being found. Try:
+
+```bash
+# Force re-download
+rm -rf ~/.mpak/cache/@org/server
+mpak bundle run @org/server
+```
+
+If the error persists, it's likely a bug in the bundle itself. Check if the publisher's `manifest.json` sets `PYTHONPATH` correctly:
+
+```json
+{
+  "server": {
+    "mcp_config": {
+      "env": {
+        "PYTHONPATH": "${__dirname}/deps"
+      }
+    }
+  }
+}
+```
+
+### Server exits immediately
+
+If the server starts and immediately exits with no output:
+
+1. **Run directly** to see stderr output:
+   ```bash
+   mpak bundle run @org/server 2>/tmp/mcp-stderr.log
+   cat /tmp/mcp-stderr.log
+   ```
+
+2. **Missing configuration**: The server may require API keys or other config. Check:
+   ```bash
+   mpak bundle show @org/server
+   ```
+   Look for `user_config` fields. See [User Configuration](/bundles/user-config).
+
+3. **Stdout pollution**: MCP requires clean JSON-RPC on stdout. If the server prints banners, logs, or debug output to stdout, the MCP connection breaks. This is a publisher bug.
+
+## Publishing Issues
+
+### `Failed to get OIDC token`
+
+Your GitHub Actions workflow is missing the `id-token: write` permission:
+
+```yaml
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # Request OIDC token for mpak
+```
+
+See [Provenance](/security/provenance) for the full setup.
+
+### `Scope mismatch`
+
+Your manifest's package name doesn't match your GitHub organization or username:
+
+```json
+// GitHub org: NimbleBrainInc
+// ✓ Correct
+{ "name": "@nimblebraininc/my-server" }
+
+// ✗ Wrong
+{ "name": "@someoneelse/my-server" }
+```
+
+See [Naming Conventions](/registry/naming) for scope rules.
+
+### `Announce failed`
+
+The registry rejected the announcement. Common causes:
+
+- **Version already exists**: You can't overwrite a published version. Bump the version in `manifest.json`.
+- **Invalid manifest**: Check your `manifest.json` against the [Manifest Reference](/bundles/manifest).
+- **GitHub Actions environment**: Ensure the action is running on `ubuntu-latest` with the correct checkout step.
+
+## Integration Issues
+
+### Server not appearing in Claude Desktop / Cursor / VS Code
+
+1. **Validate the JSON config**: A missing comma or bracket breaks the entire config file. Use a JSON validator.
+
+2. **Use the full path to mpak**: If the MCP client can't find `mpak`, use the absolute path:
+   ```bash
+   which mpak
+   # e.g., /usr/local/bin/mpak
+   ```
+   Then in your config:
+   ```json
+   {
+     "mcpServers": {
+       "echo": {
+         "command": "/usr/local/bin/mpak",
+         "args": ["bundle", "run", "@nimblebraininc/echo"]
+       }
+     }
+   }
+   ```
+
+3. **Restart the application**: Claude Desktop, Cursor, and VS Code all require a restart to pick up MCP config changes.
+
+### API key / configuration issues
+
+If a bundle requires user configuration (API keys, database URLs), see [User Configuration](/bundles/user-config) and [CLI config](/cli/config).
+
+## Cache Issues
+
+### Stale bundles
+
+If you're running an outdated version:
+
+```bash
+# Force re-download of a specific package
+rm -rf ~/.mpak/cache/@org/server
+mpak bundle run @org/server
+```
+
+### Disk space
+
+Check cache size and clear it:
+
+```bash
+# Check cache size
+du -sh ~/.mpak/cache
+
+# Clear entire cache
+rm -rf ~/.mpak/cache
+
+# Clear a specific package
+rm -rf ~/.mpak/cache/@org/server
+```
+
+See [Cache Management](/cli/cache) for details.
+
+## Getting Help
+
+- **GitHub Issues**: [github.com/NimbleBrainInc/mpak/issues](https://github.com/NimbleBrainInc/mpak/issues)
+- **Discord**: [nimblebrain.ai/discord](https://nimblebrain.ai/discord)

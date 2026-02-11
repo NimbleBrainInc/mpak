@@ -1,0 +1,86 @@
+---
+title: Access Model
+description: Authentication, authorization, and access control
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+mpak is a public registry. Understanding what's public, what's authenticated, and how scope enforcement works helps you publish and consume with confidence.
+
+## Public by Default
+
+All bundles and skills published to mpak are **public**. Anyone can search, view, download, and run them without creating an account or authenticating.
+
+This is by design. The goal is zero-friction distribution: if someone finds your package, they should be able to use it immediately.
+
+## Reading (No Auth Required)
+
+All read operations are unauthenticated:
+
+| Operation | Auth Required | Example |
+|-----------|--------------|---------|
+| Search packages | No | `mpak bundle search postgres` |
+| View package details | No | `mpak bundle show @org/server` |
+| Download bundles | No | `mpak bundle pull @org/server` |
+| Run bundles | No | `mpak bundle run @org/server` |
+| Browse mpak.dev | No | Visit [mpak.dev](https://mpak.dev) |
+| Query the API | No | `GET registry.mpak.dev/v1/bundles/search` |
+
+No API keys, no tokens, no accounts needed for consuming packages.
+
+## Publishing (OIDC Only)
+
+Publishing is authenticated via **GitHub Actions OIDC tokens**. There are no user accounts, no API keys, and no manual enrollment.
+
+When you publish:
+
+1. Your GitHub Action requests an OIDC token from GitHub
+2. The token contains cryptographic claims about: which repository, which workflow, which commit
+3. The `mcpb-pack` action sends this token to mpak when announcing
+4. mpak verifies the token against GitHub's public JWKS endpoint
+5. If valid, the package is registered under the scope matching the GitHub owner
+
+This means:
+- **No secrets to manage**: No API keys to rotate or leak
+- **No registration**: Your GitHub identity is your mpak identity
+- **No impersonation**: Only code running in your GitHub Actions can publish to your scope
+- **Full auditability**: Every publish is tied to a specific repo, workflow, and commit
+
+See [Provenance](/security/provenance) for details on the cryptographic verification chain.
+
+## Scope Enforcement
+
+The registry enforces that your package scope matches your GitHub owner:
+
+| GitHub Owner | Can Publish To | Cannot Publish To |
+|--------------|---------------|------------------|
+| `NimbleBrainInc` | `@nimblebraininc/*` | `@someoneelse/*` |
+| `johndoe` | `@johndoe/*` | `@nimblebraininc/*` |
+
+This is verified at the OIDC token level. The claim `repository_owner` in the GitHub OIDC token must match the package scope. There is no override, no admin bypass, no exception.
+
+See [Naming Conventions](/registry/naming) for scope format rules.
+
+## Rate Limits
+
+{/* TODO: Document rate limits for API and downloads if/when implemented. Currently there are no enforced rate limits. */}
+
+<Aside>
+  Rate limiting is not currently enforced. As the registry grows, rate limits may be introduced for API endpoints. Bundle downloads are served from GitHub Releases and subject to GitHub's own rate limits.
+</Aside>
+
+## Future: Private Packages
+
+{/* TODO: Private packages are not yet supported. Document when available. */}
+
+<Aside>
+  Private packages are not currently supported. All packages published to mpak are public. If you need private distribution, keep your bundles as GitHub Release assets without announcing to the registry.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Provenance" description="Cryptographic proof of bundle origin" href="/security/provenance" />
+  <LinkCard title="Naming Conventions" description="Package naming rules and scope format" href="/registry/naming" />
+  <LinkCard title="How It Works" description="Registry architecture overview" href="/registry/how-it-works" />
+</CardGrid>

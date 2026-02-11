@@ -1,0 +1,75 @@
+---
+title: Ecosystem
+description: Featured packages and what's available on mpak
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+mpak hosts MCP bundles and skills published by the community. Here's what's available and how to explore it.
+
+## By Category
+
+{/* TODO: Populate with actual package names and counts once the registry has sufficient content */}
+
+| Category | What's Available | Examples |
+|----------|-----------------|----------|
+| **Databases** | Query and manage databases | PostgreSQL, SQLite, ClickHouse |
+| **APIs & SaaS** | Connect to external services | Slack, GitHub, HubSpot, Stripe |
+| **Developer Tools** | Code analysis, testing, deployment | Linting, git operations, CI/CD |
+| **AI / ML** | Model inference, embeddings, search | Vector search, RAG pipelines |
+| **Data & Analytics** | Data processing and visualization | CSV parsing, charting, reporting |
+| **Infrastructure** | Cloud and system management | AWS, Kubernetes, monitoring |
+
+<Aside>
+  This list reflects planned categories. Browse [mpak.dev](https://mpak.dev) for the current live catalog.
+</Aside>
+
+## Featured Bundles
+
+{/* TODO: Replace with actual featured packages and real download counts */}
+
+Bundles give agents the ability to **do things**: query databases, call APIs, interact with external systems.
+
+| Bundle | Description | Runtime |
+|--------|-------------|---------|
+| `@nimblebraininc/echo` | Echo server for testing MCP integrations | Python |
+| `@nimblebraininc/ipinfo` | IP address geolocation and network info | Python |
+
+Browse all bundles at [mpak.dev](https://mpak.dev) or search from the CLI:
+
+```bash
+mpak bundle search <query>
+```
+
+## Featured Skills
+
+{/* TODO: Replace with actual featured skills once the ecosystem grows */}
+
+Skills give agents **domain knowledge**: how to review code, analyze contracts, follow sales methodology.
+
+| Skill | Description |
+|-------|-------------|
+| Coming soon | Skills are a new package type. [Publish the first one.](/skills/overview) |
+
+## Publishing Your Own
+
+Have an MCP server on GitHub? You can publish it to mpak in 10 minutes:
+
+1. Add a `manifest.json` to your repo
+2. Add a GitHub Actions workflow (3 lines of YAML)
+3. Create a release
+
+That's it. No account creation, no API keys, no approval process.
+
+```bash
+# After publishing, verify it's live
+mpak bundle search your-server-name
+```
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Browsing the Registry" description="Search and evaluate packages on mpak.dev" href="/browsing" />
+  <LinkCard title="Migrate Your MCP Server" description="Publish an existing server to mpak" href="/bundles/migrating" />
+  <LinkCard title="CLI search" description="Find packages from the command line" href="/cli/search" />
+</CardGrid>

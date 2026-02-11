@@ -1,0 +1,176 @@
+---
+title: User Configuration
+description: Handle API keys and other user-provided configuration
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Many MCP servers need configuration like API keys. The `user_config` field in your manifest lets you declare what users need to provide.
+
+## Declaring Configuration
+
+In your `manifest.json`:
+
+```json
+{
+  "name": "@yourorg/my-api-server",
+  "version": "1.0.0",
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key from example.com/dashboard",
+      "sensitive": true,
+      "required": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "API Base URL",
+      "description": "Override the default API endpoint",
+      "default": "https://api.example.com"
+    }
+  },
+  "server": {
+    "type": "python",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "my_server"],
+      "env": {
+        "API_KEY": "${user_config.api_key}",
+        "API_BASE_URL": "${user_config.base_url}"
+      }
+    }
+  }
+}
+```
+
+## Configuration Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | `string`, `number`, `boolean` |
+| `title` | string | Human-readable label |
+| `description` | string | Help text for users |
+| `sensitive` | boolean | Mask in output (default: false) |
+| `required` | boolean | Must be provided (default: false) |
+| `default` | any | Default value if not provided |
+
+## How Values Are Resolved
+
+When `mpak bundle run` executes, it resolves `${user_config.*}` placeholders in this order:
+
+1. **Process environment** - Already set by parent (e.g., Claude Desktop)
+2. **Stored config** - Set via `mpak config set`
+3. **Default value** - From manifest
+4. **Interactive prompt** - If TTY and required
+
+## User Workflow
+
+### Option 1: mpak config (CLI use)
+
+```bash
+# Store configuration
+mpak config set @yourorg/my-api-server api_key=sk-xxx
+
+# Run uses stored config automatically
+mpak bundle run @yourorg/my-api-server
+```
+
+### Option 2: Claude Desktop (environment variables)
+
+```json
+{
+  "mcpServers": {
+    "my-api": {
+      "command": "mpak",
+      "args": ["bundle", "run", "@yourorg/my-api-server"],
+      "env": {
+        "API_KEY": "sk-xxx"
+      }
+    }
+  }
+}
+```
+
+<Aside type="caution">
+  The environment variable name (e.g., `API_KEY`) comes from your `mcp_config.env` mapping, not from the `user_config` key name.
+</Aside>
+
+## Key Name Mapping
+
+The flow from user config to environment variable:
+
+```
+manifest.user_config.api_key  →  mpak config set ... api_key=xxx  →  env API_KEY
+                     ^^^^^^^                        ^^^^^^^            ^^^^^^^
+                     user_config key                config key         env var
+```
+
+Users provide the `user_config` key name. Your manifest maps it to an environment variable.
+
+## Best Practices
+
+### Document Required Config
+
+In your README, list what users need to configure:
+
+```markdown
+## Configuration
+
+This server requires an API key from [example.com](https://example.com/dashboard).
+
+### Claude Desktop
+\`\`\`json
+{
+  "mcpServers": {
+    "my-api": {
+      "command": "mpak",
+      "args": ["bundle", "run", "@yourorg/my-api-server"],
+      "env": {
+        "API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+\`\`\`
+
+### CLI
+\`\`\`bash
+mpak config set @yourorg/my-api-server api_key=your-api-key
+mpak bundle run @yourorg/my-api-server
+\`\`\`
+```
+
+### Mark Sensitive Values
+
+Always set `sensitive: true` for API keys, passwords, and tokens:
+
+```json
+{
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "sensitive": true
+    }
+  }
+}
+```
+
+This masks the value in `mpak config get` output.
+
+### Provide Sensible Defaults
+
+For optional configuration, provide defaults:
+
+```json
+{
+  "user_config": {
+    "timeout": {
+      "type": "number",
+      "title": "Request Timeout",
+      "description": "Timeout in seconds",
+      "default": 30
+    }
+  }
+}
+```

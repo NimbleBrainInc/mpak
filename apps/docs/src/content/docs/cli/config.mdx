@@ -1,0 +1,107 @@
+---
+title: mpak config
+description: Manage configuration for bundles
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Store configuration values (like API keys) for bundles that require them.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `mpak config set <pkg> <key=value...>` | Store configuration values |
+| `mpak config get <pkg>` | Show stored configuration (values masked) |
+| `mpak config list` | List packages with stored configuration |
+| `mpak config clear <pkg> [key]` | Clear stored configuration |
+
+## Setting Configuration
+
+```bash
+# Store an API key
+mpak config set @nimblebraininc/ipinfo api_key=your_token_here
+
+# Store multiple values
+mpak config set @org/server api_key=xxx base_url=https://api.example.com
+```
+
+<Aside type="caution">
+  Configuration keys must match the field names in the bundle's `user_config`, not the environment variable names. Check the bundle's documentation for the correct key names.
+</Aside>
+
+## Viewing Configuration
+
+```bash
+$ mpak config get @nimblebraininc/ipinfo
+
+@nimblebraininc/ipinfo:
+  api_key: ******* (set)
+```
+
+Values are masked for security. Use `mpak config list` to see all configured packages.
+
+## Clearing Configuration
+
+```bash
+# Clear a specific key
+mpak config clear @nimblebraininc/ipinfo api_key
+
+# Clear all config for a package
+mpak config clear @nimblebraininc/ipinfo
+```
+
+## How Configuration Works
+
+Bundles can declare required configuration in their `manifest.json`:
+
+```json
+{
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Token",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
+```
+
+When you run a bundle with `mpak bundle run`, the CLI:
+
+1. Looks up stored configuration in `~/.mpak/config.json`
+2. Falls back to default values from the manifest if specified
+3. Prompts interactively if required and running in a TTY
+4. Environment variables set in the parent process (e.g. Claude Desktop) override all of the above
+
+## Two Ways to Configure
+
+### Option 1: mpak config (CLI use)
+
+```bash
+mpak config set @nimblebraininc/ipinfo api_key=your_token
+mpak bundle run @nimblebraininc/ipinfo
+```
+
+### Option 2: Environment variables (Claude Desktop)
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["bundle", "run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your_token"
+      }
+    }
+  }
+}
+```
+
+Environment variables set in Claude Desktop take priority over `mpak config` values.
+
+## Storage
+
+Configuration is stored in `~/.mpak/config.json`. Sensitive values are stored in plain text, so protect this file appropriately.

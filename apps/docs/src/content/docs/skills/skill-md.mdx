@@ -1,0 +1,205 @@
+---
+title: SKILL.md Reference
+description: Complete SKILL.md frontmatter documentation
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every skill needs a `SKILL.md` file with YAML frontmatter describing the skill and markdown content containing the instructions.
+
+## Minimal Example
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review with security and performance focus
+---
+
+# Code Review Guidelines
+
+When reviewing code, analyze for:
+
+1. **Security vulnerabilities** - Check for injection, XSS, auth issues
+2. **Performance** - Look for N+1 queries, unnecessary allocations
+3. **Maintainability** - Ensure code is readable and well-structured
+```
+
+## Full Schema
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review with security and performance focus
+
+# Optional fields
+license: MIT
+compatibility: Claude Code only
+allowed-tools: Read Grep Bash
+
+# Discovery metadata (recommended)
+metadata:
+  version: 1.0.0
+  category: development
+  tags:
+    - code-review
+    - security
+    - best-practices
+  triggers:
+    - "review this code"
+    - "check for bugs"
+    - "code review"
+  surfaces:
+    - claude-code
+  author:
+    name: Your Name
+    url: https://github.com/yourname
+---
+
+# Code Review Guidelines
+
+...skill instructions...
+```
+
+## Fields from Agent Skills Spec
+
+These fields are defined by the [Agent Skills Specification](https://agentskills.io/specification):
+
+### Required
+
+| Field | Description |
+|-------|-------------|
+| `name` | Skill identifier. Max 64 chars, lowercase letters, numbers, hyphens. Must match directory name. |
+| `description` | What the skill does and when to use it. Max 1024 chars. |
+
+### Optional
+
+| Field | Description |
+|-------|-------------|
+| `license` | SPDX license identifier (e.g., `MIT`, `Apache-2.0`) |
+| `compatibility` | Environment requirements (intended product, system packages, network access) |
+| `allowed-tools` | Space-separated list of tools the skill can use (experimental) |
+| `metadata` | Key-value mapping for additional properties |
+
+## mpak Registry Fields
+
+These fields are used by mpak for discovery and publishing. They go inside the `metadata` section:
+
+| Field | Description | Required for mpak? |
+|-------|-------------|-------------------|
+| `metadata.version` | Semantic version (e.g., `1.0.0`) | **Yes** |
+| `metadata.category` | Category for filtering: `development`, `writing`, `research`, etc. | Recommended |
+| `metadata.tags` | Array of tags for discovery | Recommended |
+| `metadata.triggers` | Phrases that activate this skill | Recommended |
+| `metadata.surfaces` | Where the skill runs: `claude-code`, `chat`, etc. | Optional |
+| `metadata.author.name` | Author name | Optional |
+| `metadata.author.url` | Author URL (GitHub, website) | Optional |
+
+<Aside>
+The `metadata` field is part of the Agent Skills spec as a generic key-value store. mpak uses specific keys within it for registry features.
+</Aside>
+
+## The Markdown Content
+
+After the frontmatter, write the skill instructions in markdown:
+
+```markdown
+---
+name: code-reviewer
+description: ...
+---
+
+# Code Review Guidelines
+
+## When to Use This Skill
+
+Use this skill when the user asks you to review code, check for bugs,
+or analyze code quality.
+
+## Review Process
+
+1. **Read the code** - Understand what it does
+2. **Check for security issues** - SQL injection, XSS, etc.
+3. **Check for performance** - N+1 queries, memory leaks
+4. **Check for maintainability** - Naming, structure, complexity
+
+## Common Issues to Flag
+
+### Security
+- Unsanitized user input
+- Hardcoded credentials
+- Missing authentication checks
+
+### Performance
+- Unnecessary database queries
+- Large memory allocations
+- Blocking operations in async code
+```
+
+## Best Practices
+
+### Write Clear Instructions
+
+Be specific about what the skill should do:
+
+```markdown
+✓ Good:
+"When reviewing code, always check for SQL injection by looking for
+string concatenation in database queries."
+
+✗ Vague:
+"Check for security issues."
+```
+
+### Include Examples
+
+Show the agent what good output looks like:
+
+```markdown
+## Example Review
+
+For this code:
+\`\`\`python
+query = f"SELECT * FROM users WHERE id = {user_id}"
+\`\`\`
+
+Flag as: **Security Issue - SQL Injection**
+Suggest: Use parameterized queries instead.
+```
+
+### Define Scope
+
+Tell the agent when to use (and not use) the skill:
+
+```markdown
+## When to Use
+
+- User asks to "review this code"
+- User asks to "check for bugs"
+- User asks about code quality
+
+## When NOT to Use
+
+- Writing new code (use a different skill)
+- Explaining existing code (just explain normally)
+```
+
+### Use Allowed Tools
+
+If your skill needs specific tools, declare them:
+
+```yaml
+allowed-tools: Read Grep Bash
+```
+
+This tells the agent which tools are available when using this skill.
+
+## Validation
+
+The skill-pack action validates your SKILL.md:
+
+- Required fields present
+- Name matches directory
+- Valid YAML syntax
+- Version format (if specified)
+
+Run with `fail-on-warning: true` to catch issues early.

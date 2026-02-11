@@ -1,0 +1,73 @@
+{
+  "name": "@nimblebrain/mpak-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for mpak registry - MCPB bundles and Agent Skills",
+  "author": "NimbleBrain Inc <engineering@mpak.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NimbleBrainInc/mpak.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://mpak.dev",
+  "bugs": {
+    "url": "https://github.com/NimbleBrainInc/mpak/issues"
+  },
+  "keywords": [
+    "mpak",
+    "mcp",
+    "sdk",
+    "mcpb",
+    "model-context-protocol",
+    "agent-skills"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist coverage",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@nimblebrain/mpak-schemas": "workspace:*",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

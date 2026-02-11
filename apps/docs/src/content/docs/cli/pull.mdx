@@ -1,0 +1,74 @@
+---
+title: mpak bundle pull
+description: Download a bundle from the registry
+---
+
+Download a bundle to your local machine.
+
+## Usage
+
+```bash
+mpak bundle pull <package>
+```
+
+## Examples
+
+```bash
+# Download latest version for your platform
+mpak bundle pull @nimblebraininc/echo
+
+# Download specific version
+mpak bundle pull @nimblebraininc/echo@1.0.0
+
+# Download for a different platform
+mpak bundle pull @nimblebraininc/echo --os linux --arch arm64
+
+# Custom output path
+mpak bundle pull @nimblebraininc/echo -o ./bundles/echo.mcpb
+```
+
+## Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-o, --output <path>` | Output file path | `./<name>-<version>.mcpb` |
+| `--os <os>` | Target OS: `darwin`, `linux`, `win32` | Current OS |
+| `--arch <arch>` | Target architecture: `x64`, `arm64` | Current arch |
+| `--json` | Output download metadata as JSON (skips file download) | Download |
+
+## Platform Selection
+
+The registry selects the best matching bundle for your platform:
+
+1. **Exact match** - Your OS + architecture
+2. **OS match** - Your OS with `any` architecture
+3. **Architecture match** - `any` OS with your architecture
+4. **Universal** - `any` OS + `any` architecture
+
+If no matching bundle exists, the command fails with an error.
+
+## Output
+
+```bash
+$ mpak bundle pull @nimblebraininc/echo
+
+=> Fetching @nimblebraininc/echo (latest)...
+   Platform: darwin-arm64
+   Version: 1.0.0
+   Artifact: darwin-arm64
+   Size: 0.00 MB
+
+=> Downloading to /path/to/nimblebraininc-echo-1.0.0-darwin-arm64.mcpb...
+
+=> Bundle downloaded successfully!
+   File: /path/to/nimblebraininc-echo-1.0.0-darwin-arm64.mcpb
+   SHA256: abc123def456...
+```
+
+## When to Use
+
+- **Distribution** - Share bundles with others offline
+- **CI/CD** - Download bundles as part of a build process
+- **Cross-platform** - Download bundles for platforms you don't have
+
+For most use cases, prefer `mpak bundle run` which handles caching automatically.

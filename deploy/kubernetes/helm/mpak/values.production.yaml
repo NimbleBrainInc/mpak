@@ -1,0 +1,106 @@
+# Production overrides for mpak Helm chart.
+# Usage: helm install mpak ./deploy/kubernetes/helm/mpak -f ./deploy/kubernetes/helm/mpak/values.production.yaml
+
+# -- Registry ------------------------------------------------------------------
+registry:
+  replicaCount: 3
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75
+
+  env:
+    NODE_ENV: production
+    PORT: "3200"
+    HOST: "0.0.0.0"
+    STORAGE_TYPE: s3
+    MAX_BUNDLE_SIZE_MB: "100"
+    SCANNER_ENABLED: "true"
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3200"
+    prometheus.io/path: "/metrics"
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values: [registry]
+            topologyKey: kubernetes.io/hostname
+
+# -- Web -----------------------------------------------------------------------
+web:
+  replicaCount: 3
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values: [web]
+            topologyKey: kubernetes.io/hostname
+
+# -- Ingress -------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+    nginx.ingress.kubernetes.io/rate-limit-rps: "50"
+
+  registry:
+    host: registry.mpak.dev
+    tls:
+      enabled: true
+      secretName: mpak-registry-tls
+
+  web:
+    host: mpak.dev
+    tls:
+      enabled: true
+      secretName: mpak-web-tls
+
+# -- Config --------------------------------------------------------------------
+config:
+  corsOrigins: "https://mpak.dev"
+  s3Region: us-east-1
+
+# -- Secrets -------------------------------------------------------------------
+secrets:
+  # In production, use an externally managed secret
+  existingSecret: mpak-secrets
+
+# -- Persistence (disabled in production; use S3) ------------------------------
+persistence:
+  enabled: false

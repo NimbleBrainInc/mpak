@@ -1,0 +1,139 @@
+---
+title: API Reference
+description: The mpak registry API
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+The mpak registry API provides programmatic access to package metadata, search, and download URLs. The full OpenAPI specification is available at [registry.mpak.dev/docs](https://registry.mpak.dev/docs).
+
+## Base URL
+
+```
+https://registry.mpak.dev
+```
+
+Interactive API documentation (Swagger UI) is available at:
+
+```
+https://registry.mpak.dev/docs
+```
+
+## Authentication
+
+| Operation | Auth Required |
+|-----------|--------------|
+| Search, show, download | No |
+| Announce (publish) | GitHub OIDC token |
+
+Read operations require no authentication. Publishing uses GitHub OIDC tokens automatically via the `mcpb-pack` GitHub Action. See [Access Model](/registry/access-model) for details.
+
+## Bundle Endpoints
+
+### Search bundles
+
+```
+GET /v1/bundles/search?q=<query>
+```
+
+{/* TODO: Verify exact query parameter names and response schema against OpenAPI spec */}
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Search query (matches name, description, keywords) |
+| `limit` | number | Results per page (default: 20) |
+| `offset` | number | Pagination offset |
+
+Example:
+
+```bash
+curl "https://registry.mpak.dev/v1/bundles/search?q=postgres"
+```
+
+```json
+{
+  "results": [
+    {
+      "name": "@nimblebraininc/postgres-mcp",
+      "version": "1.0.0",
+      "description": "Query PostgreSQL databases",
+      "downloads": 1250,
+      "certification": "L2"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Get bundle metadata
+
+```
+GET /v1/bundles/<scope>/<name>
+```
+
+{/* TODO: Verify exact response schema and URL format (e.g., @scope/name vs scope/name encoding) */}
+
+Returns full package metadata including all versions, platforms, provenance, and certification status.
+
+### Get specific version
+
+```
+GET /v1/bundles/<scope>/<name>/<version>
+```
+
+Returns metadata for a specific version, including the download URL for the `.mcpb` file.
+
+### Announce a bundle
+
+```
+POST /v1/bundles/announce
+```
+
+Used by the `mcpb-pack` GitHub Action to register a new bundle version. Requires a GitHub OIDC token in the `Authorization` header. **Not intended for direct use.** See [Publishing](/bundles/publishing).
+
+## Skill Endpoints
+
+{/* TODO: Document skill-specific endpoints once finalized. Expected to mirror bundle endpoints: /v1/skills/search, /v1/skills/<scope>/<name>, /v1/skills/announce */}
+
+Skills follow the same pattern as bundles:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/skills/search?q=<query>` | Search skills |
+| `GET /v1/skills/<scope>/<name>` | Get skill metadata |
+| `POST /v1/skills/announce` | Announce a skill (via GitHub Action) |
+
+## Badge Endpoints
+
+Generate SVG badges for your README:
+
+```
+GET /v1/bundles/<scope>/<name>/badge.svg
+```
+
+| Parameter | Values | Shows |
+|-----------|--------|-------|
+| `type` | `version` (default) | Latest version |
+| `type` | `certification` | Security level (L1-L4) |
+| `type` | `downloads` | Total downloads |
+| `type` | `runtime` | Server runtime (python/node) |
+
+Example:
+
+```markdown
+[![mpak](https://registry.mpak.dev/v1/bundles/@yourorg/server/badge.svg)](https://mpak.dev/packages/@yourorg/server)
+```
+
+## Rate Limits
+
+<Aside>
+  Rate limits are not currently enforced on the API. As the registry scales, rate limits may be introduced. Bundle downloads are served from GitHub Releases and are subject to GitHub's own rate limits.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="How the Registry Works" description="Architecture and data flow" href="/registry/how-it-works" />
+  <LinkCard title="Browsing the Registry" description="Using the web UI at mpak.dev" href="/browsing" />
+  <LinkCard title="CLI search" description="Search from the command line" href="/cli/search" />
+</CardGrid>

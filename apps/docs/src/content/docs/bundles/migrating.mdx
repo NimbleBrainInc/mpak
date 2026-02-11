@@ -1,0 +1,263 @@
+---
+title: Migrate Your MCP Server
+description: Step-by-step guide to publishing an existing MCP server on mpak
+---
+
+import { Steps, Tabs, TabItem, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+You have an MCP server on GitHub. Users clone it, install dependencies, and configure paths manually. Let's fix that in 10 minutes.
+
+## Before You Start
+
+You need:
+
+- A working MCP server in a **GitHub repository**
+- The server must run via **Python**, **Node.js**, or a **compiled binary**
+- Admin access to the repo (to add a workflow and create releases)
+
+No mpak account is needed. Your GitHub identity is your mpak identity.
+
+## Step 1: Add manifest.json
+
+Create a `manifest.json` at the root of your repository:
+
+<Tabs>
+  <TabItem label="Python">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "python",
+        "entry_point": "your_package.server",
+        "mcp_config": {
+          "command": "python",
+          "args": ["-m", "your_package.server"]
+        }
+      }
+    }
+    ```
+
+    **Key requirements for Python:**
+    - Use module execution (`-m`) to handle relative imports correctly
+    - Your server must have a `if __name__ == "__main__"` block:
+      ```python
+      if __name__ == "__main__":
+          mcp.run()
+      ```
+  </TabItem>
+  <TabItem label="Node.js">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "node",
+        "entry_point": "dist/index.js",
+        "mcp_config": {
+          "command": "node",
+          "args": ["${__dirname}/dist/index.js"]
+        }
+      }
+    }
+    ```
+
+    **Key requirements for Node.js:**
+    - Reference the compiled JavaScript output, not TypeScript source
+    - Use `${__dirname}` to reference the bundle extraction directory
+  </TabItem>
+  <TabItem label="Binary (Go/Rust)">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "binary",
+        "entry_point": "bin/server",
+        "mcp_config": {
+          "command": "${__dirname}/bin/server",
+          "args": []
+        }
+      }
+    }
+    ```
+
+    <Aside type="caution">
+      Binary servers require [multi-platform builds](/bundles/multi-platform). You must build for each target platform separately.
+    </Aside>
+  </TabItem>
+</Tabs>
+
+Replace `@yourorg` with your GitHub org or username (lowercased). See [Naming Conventions](/registry/naming).
+
+## Step 2: Add the GitHub Action
+
+Create `.github/workflows/release.yml`:
+
+```yaml
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+```
+
+That's it. The action handles:
+- Installing dependencies
+- Vendoring them into the bundle
+- Building the `.mcpb` file
+- Uploading it to your GitHub Release
+- Announcing it to the mpak registry (with OIDC provenance)
+
+## Step 3: Test Locally
+
+{/* TODO: Document local build/test command when available (e.g., `npx mcpb-pack build` or `mpak bundle build`) */}
+
+Before publishing, verify your server works correctly:
+
+```bash
+# Make sure your server starts and responds to MCP messages
+# For Python:
+python -m your_package.server
+
+# For Node.js:
+node dist/index.js
+```
+
+<Aside>
+  Your server must write only valid JSON-RPC to stdout. Any print statements, banners, or logging on stdout will break the MCP connection. Send all logs to stderr.
+</Aside>
+
+## Step 4: Create Your First Release
+
+```bash
+# Tag the release
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Then go to your GitHub repository and create a release from the `v1.0.0` tag. The GitHub Action will trigger automatically.
+
+Watch the Actions tab to see the build progress. When it completes:
+- The `.mcpb` file appears as a release asset
+- The bundle is registered on mpak.dev
+
+## Step 5: Verify
+
+```bash
+# Search for your package
+mpak bundle search your-server
+
+# View full details
+mpak bundle show @yourorg/your-server
+
+# Run it
+mpak bundle run @yourorg/your-server
+```
+
+Your server is now installable with a single command by anyone, anywhere.
+
+## What Changed in Your Repo
+
+You added 2 files:
+
+| File | Purpose |
+|------|---------|
+| `manifest.json` | Describes your server and how to run it |
+| `.github/workflows/release.yml` | Builds and publishes on each release |
+
+No changes to your server code. No new runtime dependencies. No configuration files beyond what you already had.
+
+## Common Migration Issues
+
+### Python import errors
+
+If you see `ModuleNotFoundError` when running the bundle, the issue is usually module execution vs script execution:
+
+```json
+// ✗ Wrong: script execution doesn't handle relative imports
+{ "args": ["src/server.py"] }
+
+// ✓ Correct: module execution handles imports properly
+{ "args": ["-m", "your_package.server"] }
+```
+
+### Stdout pollution
+
+MCP uses JSON-RPC over stdio. **Any non-JSON-RPC output on stdout breaks the connection.** Common culprits:
+
+- `print()` statements (Python)
+- `console.log()` (Node.js)
+- Library banners or startup messages
+- Logging frameworks defaulting to stdout
+
+Fix: redirect all logging to stderr:
+
+```python
+import logging
+logging.basicConfig(stream=sys.stderr)
+```
+
+### Missing `if __name__ == "__main__"` block
+
+Python servers must include this guard:
+
+```python
+if __name__ == "__main__":
+    mcp.run()
+```
+
+Without it, mpak can't start your server as a module.
+
+## Optional: Security Scanning
+
+Every bundle published to mpak is automatically scanned. Run the scanner locally to catch issues before publishing:
+
+```bash
+pip install mpak-scanner
+mpak-scanner scan .
+```
+
+See [Scanning Your Bundle](/security/scanning) for details.
+
+## Optional: User Configuration
+
+If your server requires API keys or other user-provided values, add `user_config` to your manifest:
+
+```json
+{
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key from example.com",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
+```
+
+See [User Configuration](/bundles/user-config) for the full guide.
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Publishing" description="Full publishing reference" href="/bundles/publishing" />
+  <LinkCard title="Manifest Reference" description="All manifest.json fields" href="/bundles/manifest" />
+  <LinkCard title="Scanning" description="Security scanning before publishing" href="/security/scanning" />
+  <LinkCard title="User Configuration" description="Handle API keys and secrets" href="/bundles/user-config" />
+</CardGrid>

@@ -1,0 +1,38 @@
+{
+  "name": "@test/node-server",
+  "version": "1.0.0",
+  "description": "A clean Node.js MCP server for testing",
+  "author": {
+    "name": "Test Author"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "src/server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["src/server.js"]
+    }
+  },
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Echoes back the input message"
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/test/node-server"
+  },
+  "_meta": {
+    "org.mpaktrust": {
+      "permissions": {
+        "filesystem": "none",
+        "network": "none",
+        "environment": "none",
+        "subprocess": "restricted",
+        "native": "none"
+      }
+    }
+  }
+}

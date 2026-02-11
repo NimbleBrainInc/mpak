@@ -1,0 +1,156 @@
+---
+title: Multi-Platform Builds
+description: Build bundles for multiple operating systems and architectures
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+If your MCP server has native dependencies (C extensions, Rust bindings, etc.), you need to build separately for each target platform.
+
+## When You Need Multi-Platform
+
+- **Python with C extensions** - numpy, pandas, cryptography, etc.
+- **Node.js with native modules** - better-sqlite3, sharp, etc.
+- **Binary servers** - Go, Rust, C++ always need platform-specific builds
+
+## Matrix Build
+
+Use a GitHub Actions matrix to build on each platform:
+
+```yaml
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+          - os: darwin
+            arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+        with:
+          output: "{name}-{version}-${{ matrix.os }}-${{ matrix.arch }}.mcpb"
+```
+
+Each job:
+1. Runs on the target platform
+2. Builds with native dependencies for that platform
+3. Uploads a platform-specific `.mcpb` file
+4. Announces to the registry
+
+The registry automatically merges all platform artifacts for the same version.
+
+## Available Runners
+
+### Free Runners
+
+| Platform | Runner Label | Architecture |
+|----------|--------------|--------------|
+| Linux x64 | `ubuntu-latest` | x64 |
+| Linux ARM | `ubuntu-24.04-arm` | arm64 |
+| macOS ARM | `macos-latest` | arm64 (M1) |
+| macOS Intel | `macos-15-intel` | x64 |
+
+### Paid Runners (Team/Enterprise)
+
+| Platform | Runner Label | Architecture |
+|----------|--------------|--------------|
+| macOS Intel | `macos-15-large` | x64 (12 vCPU) |
+| macOS ARM | `macos-15-xlarge` | arm64 (M2) |
+
+<Aside>
+  `macos-13` is [retiring December 2025](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/). Use `macos-15-intel` for Intel macOS builds.
+</Aside>
+
+## Binary Servers
+
+For compiled languages, build your binary before running mcpb-pack:
+
+```yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x64
+            runner: ubuntu-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build binary
+        run: |
+          mkdir -p bin
+          go build -o bin/server ./cmd/server
+
+      - uses: NimbleBrainInc/mcpb-pack@v2
+        with:
+          output: "{name}-{version}-${{ matrix.os }}-${{ matrix.arch }}.mcpb"
+```
+
+## Pure Python/Node (No Native Dependencies)
+
+If your server has no native dependencies, you only need a single build:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+```
+
+The bundle will work on any platform with the appropriate runtime installed.
+
+## How Platform Selection Works
+
+When a user runs `mpak bundle pull` or `mpak bundle run`, the registry selects the best matching bundle:
+
+1. **Exact match** - User's OS + architecture
+2. **OS match** - User's OS with `any` architecture
+3. **Architecture match** - `any` OS with user's architecture
+4. **Universal** - `any` OS + `any` architecture
+
+For pure Python/Node builds from Ubuntu, the platform is detected as universal (`any`).
+
+## Verifying Platforms
+
+Check available platforms for a bundle:
+
+```bash
+mpak bundle show @yourorg/your-server
+```
+
+```
+Versions:
+  1.0.0  darwin-arm64, darwin-x64, linux-x64, linux-arm64
+```

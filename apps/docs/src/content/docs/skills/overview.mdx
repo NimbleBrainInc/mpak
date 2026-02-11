@@ -1,0 +1,141 @@
+---
+title: Publishing Skills
+description: Package and distribute agent skills on mpak
+---
+
+import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Skills are markdown files that give AI agents domain-specific knowledge and behaviors. Unlike MCP bundles which provide tools, skills provide expertise.
+
+## What Is a Skill?
+
+A skill is a `SKILL.md` file that teaches an agent how to approach a specific domain:
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review with security and performance focus
+metadata:
+  category: development
+  triggers:
+    - "review this code"
+    - "check for bugs"
+---
+
+# Code Review Guidelines
+
+When reviewing code, focus on:
+
+1. **Security vulnerabilities**
+   - SQL injection
+   - XSS attacks
+   ...
+```
+
+Skills are used by [Claude Code](https://docs.anthropic.com/claude-code) and other AI development tools.
+
+## Quick Overview
+
+<Steps>
+
+1. **Create SKILL.md**
+
+   Write your skill with YAML frontmatter
+
+2. **Add GitHub Action**
+
+   Use the skill-pack action to build and publish
+
+3. **Create a Release**
+
+   Tag and release on GitHub
+
+4. **Done**
+
+   Your skill is live on mpak.dev
+
+</Steps>
+
+## Example Repository
+
+```
+my-skills/
+├── code-reviewer/
+│   └── SKILL.md
+├── test-writer/
+│   └── SKILL.md
+└── doc-generator/
+    └── SKILL.md
+```
+
+Each directory with a `SKILL.md` file becomes a separate skill package.
+
+## The Workflow
+
+Add to `.github/workflows/release.yml`:
+
+```yaml
+name: Publish Skills
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/skill-pack@v1
+```
+
+When you publish a release, this will:
+1. Find all `SKILL.md` files in your repository
+2. Validate the frontmatter
+3. Package each skill into a `.skill` bundle
+4. Upload to your GitHub release
+5. Announce to mpak.dev
+
+## Package Naming
+
+Skills are automatically scoped to your GitHub owner:
+
+| GitHub Owner | Skill Name |
+|--------------|------------|
+| `NimbleBrainInc` | `@nimblebraininc/code-reviewer` |
+| `johndoe` | `@johndoe/code-reviewer` |
+
+The directory name (e.g., `code-reviewer`) becomes the package name.
+
+## README Badges
+
+Once published, add a badge to your README:
+
+```markdown
+[![mpak](https://registry.mpak.dev/v1/skills/@yourorg/your-skill/badge.svg)](https://mpak.dev/skills/@yourorg/your-skill)
+```
+
+**Available badge types:**
+
+| Type | URL | Shows |
+|------|-----|-------|
+| Version (default) | `.../badge.svg` | Latest version |
+| Downloads | `.../badge.svg?type=downloads` | Total downloads |
+
+You can also copy badge markdown directly from your skill page on [mpak.dev](https://mpak.dev).
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="SKILL.md Reference" description="Full frontmatter documentation" href="/skills/skill-md" />
+  <LinkCard title="GitHub Action" description="Complete action configuration" href="/skills/github-action" />
+</CardGrid>
+
+## Resources
+
+- [Agent Skills Specification](https://agentskills.io/specification) - Full specification
+- [Claude Code Skills](https://docs.anthropic.com/claude-code/skills) - Using skills in Claude Code
+- [skill-pack Action](https://github.com/NimbleBrainInc/skill-pack) - GitHub Action source

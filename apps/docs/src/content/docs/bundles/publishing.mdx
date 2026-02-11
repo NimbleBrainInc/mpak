@@ -1,0 +1,167 @@
+---
+title: Publishing MCP Bundles
+description: Package and distribute your MCP servers on mpak
+---
+
+import { CardGrid, LinkCard, Steps, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+This guide walks you through publishing an MCP server to the mpak registry.
+
+## What You'll Need
+
+1. An MCP server (Python, Node.js, or compiled binary)
+2. A GitHub repository
+3. A `manifest.json` describing your server
+
+## Quick Overview
+
+<Steps>
+
+1. **Add manifest.json**
+
+   Create a manifest describing your server
+
+2. **Add GitHub Action**
+
+   Use the mcpb-pack action to build and publish
+
+3. **Create a Release**
+
+   Tag and release on GitHub
+
+4. **Done**
+
+   Your bundle is live on mpak.dev
+
+</Steps>
+
+## Example Repository Structure
+
+<Tabs>
+  <TabItem label="Python Server">
+    ```bash
+    my-mcp-server/
+    ├── manifest.json          # Required: bundle metadata
+    ├── pyproject.toml         # Python dependencies
+    └── src/
+        └── my_server/
+            ├── __init__.py
+            └── server.py      # MCP server with if __name__ == "__main__"
+    ```
+  </TabItem>
+  <TabItem label="Node.js Server">
+    ```bash
+    my-mcp-server/
+    ├── manifest.json          # Required: bundle metadata
+    ├── package.json           # Node dependencies
+    ├── tsconfig.json
+    └── src/
+        └── index.ts           # MCP server entry point
+    ```
+  </TabItem>
+  <TabItem label="Binary Server (Go/Rust)">
+    ```bash
+    my-mcp-server/
+    ├── manifest.json          # Required: bundle metadata
+    ├── go.mod
+    └── cmd/
+        └── server/
+            └── main.go        # Binary entry point
+    ```
+  </TabItem>
+</Tabs>
+
+## The Minimal Workflow
+
+Add this to `.github/workflows/release.yml`:
+
+```yaml
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+```
+
+When you publish a GitHub release, this will:
+1. Vendor all dependencies into the bundle
+2. Build a `.mcpb` file
+3. Upload it to your release
+4. Register it with mpak.dev
+
+## Security Scanning
+
+Every bundle published to mpak is automatically scanned against the [mpak Trust Framework](https://mpaktrust.org). Your bundle receives a **certification level** (L1-L4) based on which controls pass.
+
+<Aside type="tip">
+Run the scanner locally before publishing to catch issues early:
+```bash
+pip install mpak-scanner
+mpak-scanner scan .
+```
+</Aside>
+
+Most well-structured servers achieve **L1 (Basic)** or **L2 (Standard)** automatically. Common issues that block certification:
+
+| Issue | Fix |
+|-------|-----|
+| Embedded secrets | Move to environment variables |
+| Floating dependency versions | Add a lock file |
+| Missing tool descriptions | Add descriptions to all tools |
+
+See [Scanning Your Bundle](/security/scanning) for detailed remediation guidance.
+
+## Package Naming
+
+Package names must be scoped to your GitHub organization or username:
+
+| GitHub Owner | Package Name |
+|--------------|--------------|
+| `NimbleBrainInc` | `@nimblebraininc/your-server` |
+| `johndoe` | `@johndoe/your-server` |
+
+The registry verifies this via OIDC, so you can only publish to scopes you own.
+
+## README Badges
+
+Once published, you can add badges to your README to show your package is on mpak:
+
+```markdown
+[![mpak](https://registry.mpak.dev/v1/bundles/@yourorg/your-server/badge.svg)](https://mpak.dev/packages/@yourorg/your-server)
+```
+
+**Available badge types:**
+
+| Type | URL | Shows |
+|------|-----|-------|
+| Version (default) | `.../badge.svg` | Latest version |
+| Certification | `.../badge.svg?type=certification` | Security level (L1-L4) |
+| Downloads | `.../badge.svg?type=downloads` | Total downloads |
+| Runtime | `.../badge.svg?type=runtime` | Server runtime (python/node) |
+
+You can also copy badge markdown directly from your package page on [mpak.dev](https://mpak.dev).
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Certification" description="Understand security levels and controls" href="/security/certification" />
+  <LinkCard title="Manifest Reference" description="Full manifest.json documentation" href="/bundles/manifest" />
+  <LinkCard title="GitHub Action" description="Complete action configuration" href="/bundles/github-action" />
+  <LinkCard title="User Configuration" description="Handle API keys and secrets" href="/bundles/user-config" />
+</CardGrid>
+
+## Resources
+
+- [MCPB Specification](https://github.com/modelcontextprotocol/mcpb) - Bundle format specification
+- [MCP Protocol](https://modelcontextprotocol.io) - Model Context Protocol docs
+- [mcpb-pack Action](https://github.com/NimbleBrainInc/mcpb-pack) - GitHub Action source

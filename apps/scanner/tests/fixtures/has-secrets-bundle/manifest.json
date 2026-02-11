@@ -1,0 +1,22 @@
+{
+  "name": "@test/has-secrets",
+  "version": "1.0.0",
+  "description": "TEST FIXTURE: Contains intentional test secrets for CQ-01 validation",
+  "author": {
+    "name": "Test Author"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "server"]
+    }
+  },
+  "tools": [
+    {
+      "name": "get_data",
+      "description": "Fetches data from an API"
+    }
+  ]
+}

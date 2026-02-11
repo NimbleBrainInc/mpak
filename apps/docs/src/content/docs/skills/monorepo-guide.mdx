@@ -1,0 +1,329 @@
+---
+title: Monorepo Guide
+description: Independent versioning for multi-skill repositories
+---
+
+import { Steps, Aside, FileTree } from '@astrojs/starlight/components';
+
+When you have many skills in one repository, you may want each skill to have its own version and release independently. This guide shows how to set up [release-please](https://github.com/googleapis/release-please) for independent versioning.
+
+## When to Use This Approach
+
+Use independent versioning when:
+
+- You have **5+ skills** in one repository
+- Skills evolve at different paces
+- You want to avoid announcing unchanged skills
+- You need semantic versioning per skill
+
+<Aside type="tip">
+For small repositories (1-5 skills) that release together, the [standard skill-pack approach](/skills/github-action) is simpler.
+</Aside>
+
+## Repository Structure
+
+<FileTree>
+- my-skills/
+  - blog-editor/
+    - SKILL.md
+    - CHANGELOG.md (auto-generated)
+    - version.txt
+  - code-reviewer/
+    - SKILL.md
+    - CHANGELOG.md
+    - version.txt
+  - .github/
+    - workflows/
+      - release.yml
+      - validate.yml
+  - release-please-config.json
+  - .release-please-manifest.json
+</FileTree>
+
+## Setup
+
+<Steps>
+
+1. **Create release-please-config.json**
+
+   Configure each skill as a separate package:
+
+   ```json
+   {
+     "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+     "separate-pull-requests": true,
+     "include-component-in-tag": true,
+     "include-v-in-tag": true,
+     "tag-separator": "/",
+     "packages": {
+       "blog-editor": {
+         "release-type": "simple",
+         "component": "blog-editor"
+       },
+       "code-reviewer": {
+         "release-type": "simple",
+         "component": "code-reviewer"
+       }
+     }
+   }
+   ```
+
+   Key settings:
+   - `tag-separator: "/"` produces tags like `blog-editor/v1.0.0`
+   - `separate-pull-requests: true` creates one PR per skill
+   - `release-type: "simple"` manages `version.txt` and `CHANGELOG.md`
+
+2. **Create .release-please-manifest.json**
+
+   Track current versions:
+
+   ```json
+   {
+     "blog-editor": "1.0.0",
+     "code-reviewer": "1.0.0"
+   }
+   ```
+
+3. **Add version.txt to each skill**
+
+   The "simple" release type requires a `version.txt` file in each skill directory:
+
+   ```
+   1.0.0
+   ```
+
+4. **Create release.yml workflow**
+
+   This single workflow handles both release-please and publishing. We combine them because releases created with `GITHUB_TOKEN` don't trigger separate workflows.
+
+   ```yaml
+   name: Release
+
+   on:
+     push:
+       branches: [main]
+
+   permissions:
+     contents: write
+     pull-requests: write
+     id-token: write
+
+   jobs:
+     release-please:
+       runs-on: ubuntu-latest
+       outputs:
+         releases_created: ${{ steps.release.outputs.releases_created }}
+         paths_released: ${{ steps.release.outputs.paths_released }}
+       steps:
+         - uses: googleapis/release-please-action@v4
+           id: release
+           with:
+             config-file: release-please-config.json
+             manifest-file: .release-please-manifest.json
+
+     publish:
+       needs: release-please
+       if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+       runs-on: ubuntu-latest
+       strategy:
+         matrix:
+           path: ${{ fromJSON(needs.release-please.outputs.paths_released) }}
+       steps:
+         - uses: actions/checkout@v4
+
+         - name: Get release info
+           id: info
+           run: |
+             SKILL="${{ matrix.path }}"
+             VERSION=$(jq -r '.["${{ matrix.path }}"]' .release-please-manifest.json)
+             TAG="${SKILL}/v${VERSION}"
+             echo "skill=$SKILL" >> $GITHUB_OUTPUT
+             echo "version=$VERSION" >> $GITHUB_OUTPUT
+             echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+         - name: Sync version to SKILL.md
+           run: |
+             sed -i "s/version: .*/version: ${{ steps.info.outputs.version }}/" \
+               "${{ steps.info.outputs.skill }}/SKILL.md"
+
+         - name: Pack skill
+           run: |
+             SKILL="${{ steps.info.outputs.skill }}"
+             VERSION="${{ steps.info.outputs.version }}"
+             zip -r "${SKILL}-${VERSION}.skill" "$SKILL" \
+               -x "*.git*" -x "*node_modules*"
+
+         - name: Upload to release
+           env:
+             GH_TOKEN: ${{ github.token }}
+           run: |
+             gh release upload "${{ steps.info.outputs.tag }}" *.skill --clobber
+
+         - name: Get OIDC token
+           id: oidc
+           run: |
+             TOKEN=$(curl -sS \
+               -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+               "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://www.mpak.dev" \
+               | jq -r '.value')
+             echo "::add-mask::$TOKEN"
+             echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+         - name: Announce to registry
+           run: |
+             SKILL="${{ steps.info.outputs.skill }}"
+             VERSION="${{ steps.info.outputs.version }}"
+             BUNDLE="${SKILL}-${VERSION}.skill"
+
+             OWNER=$(echo "${{ github.repository }}" | cut -d'/' -f1 | tr '[:upper:]' '[:lower:]')
+             SCOPED_NAME="@${OWNER}/${SKILL}"
+
+             SKILL_JSON=$(awk '/^---$/{if(f)exit;f=1;next}f' "$SKILL/SKILL.md" | yq -o=json '.')
+             SHA256=$(sha256sum "$BUNDLE" | cut -d' ' -f1)
+             SIZE=$(stat -c%s "$BUNDLE")
+
+             PAYLOAD=$(jq -n \
+               --arg name "$SCOPED_NAME" \
+               --arg version "$VERSION" \
+               --argjson skill "$SKILL_JSON" \
+               --arg release_tag "${{ steps.info.outputs.tag }}" \
+               --arg filename "$BUNDLE" \
+               --arg sha256 "$SHA256" \
+               --argjson size "$SIZE" \
+               '{
+                 name: $name,
+                 version: $version,
+                 skill: $skill,
+                 release_tag: $release_tag,
+                 prerelease: false,
+                 artifact: { filename: $filename, sha256: $sha256, size: $size }
+               }')
+
+             curl -X POST "https://registry.mpak.dev/v1/skills/announce" \
+               -H "Content-Type: application/json" \
+               -H "Authorization: Bearer ${{ steps.oidc.outputs.token }}" \
+               -d "$PAYLOAD"
+   ```
+
+</Steps>
+
+<Aside type="note">
+We inline the pack and announce steps instead of using skill-pack because skill-pack expects a directory *containing* skills, not a directory that *is* a skill.
+</Aside>
+
+## How It Works
+
+### Commit to Release Flow
+
+1. Make changes to `blog-editor/SKILL.md`
+2. Commit with conventional commit: `feat(blog-editor): add tone detection`
+3. Push to main
+4. Release-please creates PR: "chore(blog-editor): release 1.1.0"
+5. Merge the PR
+6. Release-please creates GitHub release with tag `blog-editor/v1.1.0`
+7. Publish job packs, uploads bundle, and announces to mpak.dev
+
+### Conventional Commits
+
+Use conventional commits with scope matching skill names:
+
+| Commit | Version Bump |
+|--------|--------------|
+| `fix(blog-editor): typo in prompt` | 1.0.0 to 1.0.1 |
+| `feat(blog-editor): add tone analysis` | 1.0.0 to 1.1.0 |
+| `feat(blog-editor)!: new output format` | 1.0.0 to 2.0.0 |
+
+<Aside>
+The `!` after the type indicates a breaking change and triggers a major version bump.
+</Aside>
+
+Without scope, the commit applies to all changed files:
+
+```
+feat: improve validation across skills
+```
+
+## Tag Format
+
+Tags follow the pattern: `{skill-name}/v{version}`
+
+Examples:
+- `blog-editor/v1.0.0`
+- `code-reviewer/v2.1.3`
+- `skill-author/v1.5.0`
+
+## Migrating from Shared Versioning
+
+If you currently use shared versioning (one tag like `v1.0.0` for all skills):
+
+<Steps>
+
+1. **Note current version** of all skills (e.g., `1.0.7`)
+
+2. **Create config files** with current versions in the manifest
+
+3. **Add version.txt** to each skill directory with current version
+
+4. **Create the release.yml workflow** as shown above
+
+5. **First release** after migration uses existing versions
+
+6. **Subsequent changes** bump versions independently
+
+</Steps>
+
+<Aside type="caution">
+After migration, old-style tags (`v1.0.0`) will no longer trigger publishing. Only skill-prefixed tags (`blog-editor/v1.0.0`) will work.
+</Aside>
+
+## Keeping validate.yml
+
+You can keep a separate validation workflow that runs on PRs:
+
+```yaml
+name: Validate Skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/skill-pack@v1
+        with:
+          build: false
+          upload: false
+          announce: false
+```
+
+This validates all skills on every PR without publishing.
+
+## Troubleshooting
+
+### Release PR not created
+
+- Ensure commits use conventional commit format
+- Check that the commit touches files in a skill directory
+- Verify `release-please-config.json` lists the skill
+
+### Wrong skill released
+
+- The tag determines which skill is published
+- Verify the tag format matches `skill-name/vX.Y.Z`
+
+### Version mismatch
+
+- `version.txt` is the source of truth for release-please
+- `SKILL.md` metadata.version is synced at publish time
+- If they drift, the publish workflow corrects it
+
+### Publish job not running
+
+- The `releases_created` output must be `true`
+- Check workflow logs to see which skills were detected
+- Verify the skill is in `paths_released` output

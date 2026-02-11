@@ -1,0 +1,23 @@
+{
+  "name": "@test/missing-tool-info",
+  "version": "1.0.0",
+  "description": "TEST FIXTURE: Tools declared without required descriptions",
+  "mcp_config": {
+    "command": "python",
+    "args": ["-m", "server"]
+  },
+  "tools": [
+    {
+      "name": "do_something"
+    },
+    {
+      "name": "run",
+      "description": "Generic name that should trigger warning"
+    },
+    {
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ]
+}

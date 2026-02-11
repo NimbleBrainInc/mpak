@@ -1,0 +1,22 @@
+{
+  "name": "mpak-docs",
+  "type": "module",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "author": "NimbleBrain Inc <engineering@mpak.dev>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NimbleBrainInc/mpak.git",
+    "directory": "apps/docs"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.37.2",
+    "astro": "^5.6.1",
+    "sharp": "^0.34.2"
+  }
+}

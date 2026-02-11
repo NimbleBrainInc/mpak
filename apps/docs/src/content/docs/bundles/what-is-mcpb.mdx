@@ -1,0 +1,174 @@
+---
+title: What is an MCP Bundle?
+description: Understanding MCPB and why it matters for distributing MCP servers
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+If you've tried to share an MCP server with someone, you know the pain: clone the repo, install the right Python or Node version, run dependency installation, configure paths, hope nothing breaks. MCPB solves this.
+
+## The Problem with MCP Servers Today
+
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io) is powerful. It lets AI assistants like Claude interact with external tools and data. But distributing MCP servers is a mess:
+
+```bash
+# The typical "installation" experience
+git clone https://github.com/someone/cool-mcp-server
+cd cool-mcp-server
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# Now figure out how to configure Claude Desktop...
+# Hope the Python version is compatible...
+# Debug why it's not working...
+```
+
+This friction kills adoption. Great tools sit unused because installation is too hard.
+
+## What MCPB Does
+
+**MCPB (MCP Bundle)** is a packaging format that bundles an MCP server with everything it needs to run:
+
+```
+my-server.mcpb (a zip file)
+├── manifest.json     # Metadata + how to run it
+├── src/              # Your server code
+└── deps/             # ALL dependencies, vendored
+```
+
+One file. Everything included. No installation steps.
+
+## One Command
+
+With MCPB + mpak:
+
+```bash
+# That's it. That's the whole installation.
+mpak bundle run @nimblebraininc/postgres-mcp
+```
+
+The CLI:
+1. Downloads the `.mcpb` file from the registry
+2. Extracts it locally
+3. Runs the server with the bundled dependencies
+
+No Python version conflicts. No missing dependencies. No path configuration. It just works.
+
+## How It Works
+
+### 1. Dependencies Are Vendored
+
+When you build a bundle, all dependencies are copied into the bundle itself:
+
+| Server Type | Dependencies Location |
+|-------------|----------------------|
+| Python | `deps/` directory (via `pip install --target`) |
+| Node.js | `node_modules/` (via `npm install`) |
+| Binary | The compiled executable itself |
+
+The server runs using these bundled dependencies, not whatever's installed on the user's system.
+
+### 2. The Manifest Describes Everything
+
+The `manifest.json` tells mpak how to run the server:
+
+```json
+{
+  "name": "@yourorg/postgres-mcp",
+  "version": "1.0.0",
+  "description": "Query PostgreSQL databases",
+  "server": {
+    "type": "python",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "postgres_mcp.server"],
+      "env": {
+        "PYTHONPATH": "${__dirname}/deps"
+      }
+    }
+  }
+}
+```
+
+The `${__dirname}` variable resolves to wherever the bundle is extracted, so paths always work.
+
+### 3. Platform-Specific When Needed
+
+Pure Python and Node.js bundles work everywhere. But if your server has native dependencies (C extensions, Rust bindings), you can build platform-specific bundles:
+
+```
+@yourorg/postgres-mcp@1.0.0
+├── darwin-arm64.mcpb   # macOS Apple Silicon
+├── darwin-x64.mcpb     # macOS Intel
+├── linux-x64.mcpb      # Linux x64
+└── linux-arm64.mcpb    # Linux ARM
+```
+
+mpak automatically downloads the right one for the user's system.
+
+## Why This Matters
+
+### For Users
+
+- **Zero friction** - `mpak bundle run @org/server` and you're done
+- **Reproducible** - Same bundle, same behavior, every time
+- **No conflicts** - Bundled dependencies don't interfere with your system
+
+### For Authors
+
+- **Ship once, run everywhere** - Build it, publish it, forget about "works on my machine"
+- **No support burden** - Users don't file issues about installation problems
+- **Version control** - Users can pin to specific versions
+
+### For the Ecosystem
+
+- **Discoverability** - Search [mpak.dev](https://mpak.dev) to find servers
+- **Trust** - Provenance tracking shows exactly where bundles came from
+- **Standards** - One format means tools can build on top of it
+
+## MCPB vs. Other Approaches
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Git clone + install** | Familiar | Dependency hell, version conflicts |
+| **Docker** | Isolated | Heavy, requires Docker, overkill for CLI tools |
+| **System packages** | Native | Platform-specific, complex publishing |
+| **MCPB** | Lightweight, portable, bundled deps | Requires mpak CLI |
+
+MCPB hits the sweet spot: lightweight like a script, reliable like a container.
+
+## The Specification
+
+MCPB is an open specification maintained at [github.com/modelcontextprotocol/mcpb](https://github.com/modelcontextprotocol/mcpb).
+
+Key points:
+- `.mcpb` files are zip archives
+- `manifest.json` is required at the root
+- Dependencies are vendored (not referenced)
+- Platform metadata enables multi-platform distribution
+
+mpak is one implementation of the MCPB spec. Others can build compatible tools.
+
+## Try It
+
+See MCPB in action:
+
+```bash
+# Install the CLI
+npm install -g @nimblebrain/mpak
+
+# Search for a server
+mpak bundle search echo
+
+# Run it instantly
+mpak bundle run @nimblebraininc/echo
+```
+
+No setup. No configuration. Just works.
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Quickstart" description="Run your first MCP server in 2 minutes" href="/quickstart" />
+  <LinkCard title="Migrate Your MCP Server" description="Publish an existing MCP server to mpak" href="/bundles/migrating" />
+</CardGrid>

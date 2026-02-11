@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mpak.fullname" . }}-registry
+  namespace: {{ include "mpak.namespace" . }}
+  labels:
+    {{- include "mpak.registry.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.registry.service.type }}
+  ports:
+    - port: {{ .Values.registry.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "mpak.registry.selectorLabels" . | nindent 4 }}

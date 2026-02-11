@@ -1,0 +1,165 @@
+---
+title: mpak search
+description: Search for bundles and skills in the registry
+---
+
+Find MCP bundles and skills in the mpak registry.
+
+## Unified Search
+
+Search across both bundles and skills at once:
+
+```bash
+mpak search <query>
+```
+
+### Examples
+
+```bash
+# Search everything
+mpak search postgres
+
+# Filter to bundles only
+mpak search --type bundle echo
+
+# Filter to skills only
+mpak search --type skill deploy
+
+# Sort and limit results
+mpak search --sort downloads --limit 10 mcp
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--type <type>` | Filter by type: `bundle`, `skill` | All types |
+| `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
+| `--limit <n>` | Maximum results to return | `20` |
+| `--offset <n>` | Pagination offset | `0` |
+| `--json` | Output as JSON | Human-readable |
+
+## Bundle Search
+
+Search only bundles with additional filtering:
+
+```bash
+mpak bundle search <query>
+```
+
+### Examples
+
+```bash
+# Search for bundles
+mpak bundle search postgres
+mpak bundle search "file system"
+
+# Filter by server type
+mpak bundle search --type python echo
+mpak bundle search --type node database
+
+# Sort and limit results
+mpak bundle search --sort downloads --limit 10 mcp
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--type <type>` | Filter by server type: `node`, `python`, `binary` | All types |
+| `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
+| `--limit <n>` | Maximum results to return | `20` |
+| `--offset <n>` | Pagination offset | `0` |
+| `--json` | Output as JSON | Human-readable |
+
+## Skill Search
+
+Search only skills with skill-specific filtering:
+
+```bash
+mpak skill search <query>
+```
+
+### Examples
+
+```bash
+# Search skills
+mpak skill search deploy
+
+# Filter by tags or category
+mpak skill search --tags "ci,deploy" build
+mpak skill search --category development test
+
+# Filter by surface
+mpak skill search --surface claude-code lint
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--tags <tags>` | Filter by tags (comma-separated) | All tags |
+| `--category <category>` | Filter by category | All categories |
+| `--surface <surface>` | Filter by surface: `claude-code`, `claude-api`, `claude-ai` | All surfaces |
+| `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
+| `--limit <n>` | Maximum results to return | `20` |
+| `--offset <n>` | Pagination offset | `0` |
+| `--json` | Output as JSON | Human-readable |
+
+## Output
+
+```bash
+$ mpak bundle search echo
+
+Found 2 bundle(s) for "echo":
+
+NAME                        VERSION    TRUST  DESCRIPTION
+@nimblebraininc/echo        v1.0.0     L3     A simple echo MCP server for testing
+@example/echo-advanced      v2.1.0     -      Echo server with logging and metrics
+
+Use "mpak bundle show <bundle>" for more details
+```
+
+The **TRUST** column shows the bundle's certification level:
+
+| Value | Meaning |
+|-------|---------|
+| `-` | Not yet scanned |
+| `L1` | Basic: valid manifest, no embedded secrets |
+| `L2` | Standard: pinned deps, vulnerability scanning, author identity |
+| `L3` | Verified: signed bundles, build provenance, SLSA |
+| `L4` | Attested: behavioral sandbox, reproducible builds |
+
+### JSON Output
+
+```bash
+$ mpak bundle search echo --json
+```
+
+```json
+{
+  "bundles": [
+    {
+      "name": "@nimblebraininc/echo",
+      "description": "A simple echo MCP server for testing",
+      "latest_version": "1.0.0",
+      "server_type": "python",
+      "downloads": 1250,
+      "certification_level": 3
+    }
+  ],
+  "total": 2,
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "has_more": false
+  }
+}
+```
+
+## Tips
+
+- Search is case-insensitive
+- Multiple words search across name and description
+- Use `--type` to filter when you know what runtime you need
+- Browse [mpak.dev](https://mpak.dev) for a visual search experience

@@ -1,0 +1,201 @@
+---
+title: mpak skill
+description: Manage Agent Skills from the CLI
+---
+
+Validate, pack, search, download, and install Agent Skills using the mpak CLI.
+
+## validate
+
+Validate a skill directory against the Agent Skills spec.
+
+```bash
+mpak skill validate <path>
+```
+
+Checks that:
+- The directory contains a `SKILL.md` file
+- The YAML frontmatter is valid (name, description, etc.)
+- The skill name matches the directory name
+- Warns about missing optional metadata (tags, category, version)
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output validation result as JSON |
+
+### Example
+
+```bash
+$ mpak skill validate ./my-skill
+
+Validating ./my-skill...
+
+✓ Valid: my-skill
+
+✓ SKILL.md found
+✓ Required fields
+  ├─ name: my-skill
+  └─ description: A helpful skill (42 chars)
+
+✓ Optional fields
+  └─ license: MIT
+
+Warnings:
+  ⚠ No tags in metadata - consider adding for better discovery
+```
+
+Exit code is `1` if validation fails, `0` if valid.
+
+## pack
+
+Create a `.skill` bundle from a validated skill directory.
+
+```bash
+mpak skill pack <path>
+```
+
+Validates the directory first, then creates a ZIP archive as a `.skill` file. The output includes the bundle path, size, and SHA256 hash.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <path>` | Output file path (default: `./<name>-<version>.skill`) |
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ mpak skill pack ./my-skill
+
+Validating ./my-skill...
+✓ Valid: my-skill
+
+Creating bundle...
+✓ Created: my-skill-1.0.0.skill (2.4 KB)
+  SHA256: abc123def456...
+```
+
+## search
+
+Search for skills in the registry.
+
+```bash
+mpak skill search <query>
+```
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--tags <tags>` | Filter by tags (comma-separated) | All tags |
+| `--category <category>` | Filter by category | All categories |
+| `--surface <surface>` | Filter by surface: `claude-code`, `claude-api`, `claude-ai` | All surfaces |
+| `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
+| `--limit <n>` | Maximum results | `20` |
+| `--offset <n>` | Pagination offset | `0` |
+| `--json` | Output as JSON | Human-readable |
+
+## show
+
+Show detailed information about a skill.
+
+```bash
+mpak skill show <name>
+```
+
+Displays metadata (license, category, tags, author, downloads), triggers, examples, and version history.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+## pull
+
+Download a `.skill` bundle from the registry to your local filesystem.
+
+```bash
+mpak skill pull <name>
+```
+
+Downloads the `.skill` file and verifies its SHA256 hash.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <path>` | Output file path |
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ mpak skill pull @nimblebraininc/deploy
+
+Pulling @nimblebraininc/deploy@1.0.0...
+Downloaded deploy-1.0.0.skill (3.2 KB)
+  SHA256: abc123def456...
+  Path: /path/to/deploy-1.0.0.skill
+```
+
+## install
+
+Download and install a skill to `~/.claude/skills/` for use in Claude Code.
+
+```bash
+mpak skill install <name>
+```
+
+Downloads the `.skill` bundle, verifies its SHA256 hash, and extracts it to `~/.claude/skills/<skill-name>/`.
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Overwrite existing installation |
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ mpak skill install @nimblebraininc/deploy
+
+Pulling @nimblebraininc/deploy@1.0.0...
+Downloaded deploy-1.0.0.skill (3.2 KB)
+Extracting to /Users/you/.claude/skills/deploy/
+✓ Installed: deploy
+
+Skill available in Claude Code. Restart to activate.
+```
+
+## list
+
+List skills installed in `~/.claude/skills/`.
+
+```bash
+mpak skill list
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Output as JSON |
+
+### Example
+
+```bash
+$ mpak skill list
+
+Installed skills:
+
+NAME                  VERSION   DESCRIPTION
+deploy                1.0.0     Deploy to production with checks
+lint                  0.2.0     Run project linters
+
+2 skill(s) installed in /Users/you/.claude/skills
+```

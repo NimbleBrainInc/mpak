@@ -1,0 +1,123 @@
+---
+title: Claude Code Integration
+description: Use mpak bundles with Claude Code
+---
+
+Claude Code supports MCP servers via the `claude mcp add` command. This is the fastest way to add mpak bundles.
+
+## Quick Setup
+
+Add any mpak bundle with a single command:
+
+```bash
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo
+```
+
+That's it. The server is now available in Claude Code.
+
+## How It Works
+
+1. `claude mcp add` registers the MCP server with Claude Code
+2. `--transport stdio` tells Claude Code this is a local process
+3. `mpak run` downloads, caches, and executes the bundle
+
+## Servers Requiring Configuration
+
+For bundles that need API keys or other configuration:
+
+```bash
+claude mcp add --transport stdio ipinfo \
+  --env IPINFO_API_TOKEN=your-token-here \
+  -- mpak run @nimblebraininc/ipinfo
+```
+
+You can pass multiple `--env` flags:
+
+```bash
+claude mcp add --transport stdio myserver \
+  --env API_KEY=xxx \
+  --env DEBUG=true \
+  -- mpak run @owner/myserver
+```
+
+## Configuration Scopes
+
+Claude Code supports different scopes for MCP server configuration:
+
+```bash
+# Local (default) - stored in ~/.claude.json, not shared
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo
+
+# Project - stored in .mcp.json, checked into git
+claude mcp add --transport stdio --scope project echo -- mpak run @nimblebraininc/echo
+
+# User - stored in ~/.claude.json globally
+claude mcp add --transport stdio --scope user echo -- mpak run @nimblebraininc/echo
+```
+
+## Pin to a Specific Version
+
+```bash
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo@1.0.0
+```
+
+## Managing Servers
+
+```bash
+# List all configured servers
+claude mcp list
+
+# Get details for a server
+claude mcp get echo
+
+# Remove a server
+claude mcp remove echo
+
+# Check server status (within Claude Code)
+/mcp
+```
+
+## Alternative: Use mpak config
+
+Instead of passing `--env` flags, you can store configuration with mpak:
+
+```bash
+# Store config once
+mpak config set @nimblebraininc/ipinfo api_key=your-token
+
+# Then add without env flags
+claude mcp add --transport stdio ipinfo -- mpak run @nimblebraininc/ipinfo
+```
+
+mpak resolves stored config automatically when running.
+
+## Troubleshooting
+
+### Server Not Starting
+
+1. Test the bundle runs directly:
+   ```bash
+   mpak run @nimblebraininc/echo
+   ```
+
+2. Check Claude Code's MCP status:
+   ```
+   /mcp
+   ```
+
+### Command Not Found
+
+Ensure mpak is installed globally:
+
+```bash
+npm install -g @nimblebrain/mpak
+which mpak  # Should show the path
+```
+
+### View Server Output
+
+Run the bundle directly to see any error output:
+
+```bash
+mpak run @nimblebraininc/echo
+```

@@ -1,0 +1,31 @@
+{
+  "name": "@test/clean-server",
+  "version": "1.0.0",
+  "description": "A clean MCP server for testing - passes all Level 1 controls",
+  "author": {
+    "name": "Test Author"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "server"]
+    }
+  },
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Echoes back the input message"
+    },
+    {
+      "name": "add",
+      "description": "Adds two numbers together"
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/test/clean-server"
+  }
+}

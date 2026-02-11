@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mpak.fullname" . }}-registry
+  namespace: {{ include "mpak.namespace" . }}
+  labels:
+    {{- include "mpak.registry.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.registry.autoscaling.enabled }}
+  replicas: {{ .Values.registry.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mpak.registry.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.registry.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mpak.registry.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "mpak.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml .Values.registry.podSecurityContext | nindent 8 }}
+      containers:
+        - name: registry
+          image: {{ include "mpak.registry.image" . }}
+          imagePullPolicy: {{ .Values.registry.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.registry.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.registry.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "mpak.fullname" . }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: database-url
+            - name: CLERK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: clerk-secret-key
+            - name: CLERK_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: clerk-publishable-key
+            - name: S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: s3-bucket
+                  optional: true
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: s3-access-key-id
+                  optional: true
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: s3-secret-access-key
+                  optional: true
+            - name: CLOUDFRONT_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: cloudfront-domain
+                  optional: true
+            - name: CLOUDFRONT_KEY_PAIR_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: cloudfront-key-pair-id
+                  optional: true
+            - name: CLOUDFRONT_PRIVATE_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: cloudfront-private-key-base64
+                  optional: true
+            - name: SCANNER_CALLBACK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: scanner-callback-secret
+                  optional: true
+            {{- range $key, $value := .Values.registry.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- with .Values.registry.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.registry.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.registry.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: storage
+              mountPath: /data/storage
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "mpak.fullname" . }}-storage
+      {{- end }}
+      {{- with .Values.registry.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.registry.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.registry.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

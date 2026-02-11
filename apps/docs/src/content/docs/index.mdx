@@ -1,0 +1,62 @@
+---
+title: What is mpak?
+description: The package registry for agent capabilities
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+mpak is a package registry for distributing capabilities that make AI agents smarter. Think **npm for AI agents**.
+
+mpak distributes [MCP (Model Context Protocol)](https://modelcontextprotocol.io) servers and Agent Skills. MCP is an open standard that lets AI agents connect to external tools and data sources through a unified interface.
+
+```bash
+# Search for MCP bundles
+mpak bundle search postgres
+
+# Run an MCP server instantly
+mpak bundle run @nimblebraininc/echo
+```
+
+No manual dependency installation. No configuration. Just works.
+
+## The Problem
+
+AI agents are generalists. They become powerful when you give them specialized tools and knowledge. But distributing these capabilities is a mess:
+
+- **MCP servers** require manual dependency management and complex setup
+- **Skills** are copy-pasted between projects with no versioning
+- **Discovery** means searching GitHub and hoping you find something that works
+
+Registries solved this problem for every other ecosystem: npm for JavaScript, PyPI for Python, crates.io for Rust. mpak does the same for AI agent capabilities. [Learn why a registry matters.](/why-a-registry)
+
+## Two Types of Capabilities
+
+mpak distributes two types of agent capabilities:
+
+<CardGrid>
+  <LinkCard title="MCP Bundles" description="Tools and integrations that give agents the ability to do things, like query databases, call APIs, or interact with external systems." href="/bundles/what-is-mcpb" />
+  <LinkCard title="Skills" description="Knowledge and behaviors that make agents smarter at specific domains, like code review, legal analysis, or sales methodology." href="/skills/what-are-skills" />
+</CardGrid>
+
+## The mpak Ecosystem
+
+| Component | URL | Purpose |
+|-----------|-----|---------|
+| Registry UI | [mpak.dev](https://mpak.dev) | Browse and search capabilities |
+| Registry API | [registry.mpak.dev/docs](https://registry.mpak.dev/docs) | Programmatic access ([OpenAPI](/registry/api)) |
+| CLI | [@nimblebrain/mpak](https://npmjs.com/package/@nimblebrain/mpak) | Search, pull, run |
+
+## Get Started
+
+<CardGrid>
+  <LinkCard title="Quickstart" description="Install the CLI and run your first MCP server in 2 minutes" href="/quickstart" />
+  <LinkCard title="Migrate Your MCP Server" description="Publish an existing server to mpak in 10 minutes" href="/bundles/migrating" />
+  <LinkCard title="Why a Registry?" description="Why registries matter for MCP distribution" href="/why-a-registry" />
+  <LinkCard title="Browse the Registry" description="Explore what's available on mpak.dev" href="/browsing" />
+</CardGrid>
+
+## External Resources
+
+- [MCP Protocol](https://modelcontextprotocol.io) - Model Context Protocol specification
+- [MCPB Specification](https://github.com/modelcontextprotocol/mcpb) - Bundle format spec
+- [Agent Skills Specification](https://agentskills.io) - Skills spec

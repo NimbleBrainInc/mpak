@@ -1,0 +1,145 @@
+# mpak production stack
+# Usage: docker compose -f deploy/docker/docker-compose.prod.yml up -d
+#
+# Requires a .env file or environment variables for secrets.
+# See .env.example in this directory.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-mpak}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    shm_size: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  registry:
+    build:
+      context: ../../
+      dockerfile: apps/registry/Dockerfile
+    restart: unless-stopped
+    ports: ["3200:3200"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mpak}
+      NODE_ENV: production
+      PORT: 3200
+      HOST: 0.0.0.0
+      STORAGE_TYPE: ${STORAGE_TYPE:-s3}
+      STORAGE_PATH: ${STORAGE_PATH:-/data/storage}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      CLOUDFRONT_DOMAIN: ${CLOUDFRONT_DOMAIN:-}
+      CLOUDFRONT_KEY_PAIR_ID: ${CLOUDFRONT_KEY_PAIR_ID:-}
+      CLOUDFRONT_PRIVATE_KEY_BASE64: ${CLOUDFRONT_PRIVATE_KEY_BASE64:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      SCANNER_ENABLED: ${SCANNER_ENABLED:-true}
+      SCANNER_IMAGE: ${SCANNER_IMAGE:-}
+      SCANNER_IMAGE_TAG: ${SCANNER_IMAGE_TAG:-latest}
+      SCANNER_CALLBACK_SECRET: ${SCANNER_CALLBACK_SECRET:-}
+      MAX_BUNDLE_SIZE_MB: ${MAX_BUNDLE_SIZE_MB:-50}
+    volumes:
+      - registry_storage:/data/storage
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3200/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+        VITE_ENABLE_DEBUG_AUTH: "false"
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    depends_on: [registry]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  scanner:
+    build:
+      context: ../../apps/scanner
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on: [registry]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  postgres_data:
+  registry_storage:

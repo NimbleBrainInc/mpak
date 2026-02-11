@@ -1,0 +1,187 @@
+# MTF Malicious Pattern Detection (CQ-02)
+# These patterns detect code associated with malware, data exfiltration,
+# and supply chain attacks. Primary tooling: GuardDog
+
+version: "1.0"
+description: "Malicious code patterns for MTF CQ-02 control"
+
+# Critical patterns - confirmed malicious behavior
+critical:
+  - id: data-exfiltration-http
+    name: HTTP Data Exfiltration
+    pattern: 'requests\.(post|put|patch)\s*\([^)]*os\.environ'
+    severity: critical
+    description: Sending environment variables to external HTTP endpoint
+    category: exfiltration
+
+  - id: data-exfiltration-socket
+    name: Socket Data Exfiltration
+    pattern: 'socket\.(socket|connect).*\.(send|sendall)\s*\([^)]*os\.environ'
+    severity: critical
+    description: Sending environment variables over raw socket
+    category: exfiltration
+
+  - id: credential-theft-ssh
+    name: SSH Key Access
+    pattern: 'open\s*\([^)]*\.ssh/(id_rsa|id_ed25519|known_hosts)'
+    severity: critical
+    description: Accessing SSH private keys
+    category: credential_theft
+
+  - id: credential-theft-aws
+    name: AWS Credential Access
+    pattern: 'open\s*\([^)]*\.aws/(credentials|config)'
+    severity: critical
+    description: Accessing AWS credential files
+    category: credential_theft
+
+  - id: reverse-shell-python
+    name: Python Reverse Shell
+    pattern: 'socket\.socket.*connect.*subprocess\.(call|run|Popen)'
+    severity: critical
+    description: Reverse shell pattern in Python
+    category: backdoor
+
+  - id: reverse-shell-bash
+    name: Bash Reverse Shell
+    pattern: '/dev/tcp/|bash\s+-i|nc\s+-e'
+    severity: critical
+    description: Bash reverse shell command
+    category: backdoor
+
+  - id: crypto-miner-stratum
+    name: Crypto Mining Stratum
+    pattern: 'stratum\+tcp://|xmrig|minerd|cryptonight'
+    severity: critical
+    description: Cryptocurrency mining indicators
+    category: cryptomining
+
+  - id: install-hook-malicious
+    name: Malicious Install Hook
+    pattern: '(setup\.py|postinstall).*exec\s*\(.*base64\.b64decode'
+    severity: critical
+    description: Encoded execution in install hooks
+    category: supply_chain
+
+  - id: obfuscated-exec
+    name: Obfuscated Code Execution
+    pattern: 'exec\s*\(\s*(base64\.b64decode|codecs\.decode|zlib\.decompress)'
+    severity: critical
+    description: Executing obfuscated/encoded code
+    category: obfuscation
+
+# High severity - suspicious patterns requiring review
+high:
+  - id: typosquat-import
+    name: Typosquatting Import
+    patterns:
+      - 'import\s+reqeusts' # requests typo
+      - 'import\s+requets' # requests typo
+      - 'import\s+request\b' # singular instead of requests
+      - 'import\s+urlib' # urllib typo
+      - 'import\s+crytpo' # crypto typo
+    severity: high
+    description: Import of commonly typosquatted package name
+    category: typosquatting
+
+  - id: dynamic-import-url
+    name: Dynamic Import from URL
+    pattern: '__import__\s*\([^)]*http'
+    severity: high
+    description: Dynamically importing code from URL
+    category: remote_code
+
+  - id: env-dump
+    name: Environment Variable Dump
+    pattern: '(dict|list|json\.dumps?)\s*\(\s*os\.environ\s*\)'
+    severity: high
+    description: Serializing entire environment
+    category: reconnaissance
+
+  - id: home-dir-scan
+    name: Home Directory Scanning
+    pattern: 'os\.(walk|listdir)\s*\([^)]*expanduser\s*\([^)]*~'
+    severity: high
+    description: Scanning user home directory
+    category: reconnaissance
+
+  - id: browser-data-access
+    name: Browser Data Access
+    pattern: '\.(chrome|firefox|safari).*/(Cookies|Login Data|History)'
+    severity: high
+    description: Accessing browser credential/history files
+    category: credential_theft
+
+  - id: keylogger-pattern
+    name: Keylogger Indicators
+    pattern: '(pynput|keyboard)\.(Listener|hook|on_press)'
+    severity: high
+    description: Keyboard input capture patterns
+    category: surveillance
+
+# Medium severity - potentially suspicious
+medium:
+  - id: base64-decode-exec
+    name: Base64 Decode and Execute
+    pattern: 'base64\.b64decode.*\.(decode|read)'
+    severity: medium
+    description: Base64 decoding (may be legitimate)
+    category: obfuscation
+
+  - id: subprocess-shell-true
+    name: Subprocess with Shell
+    pattern: 'subprocess\.(run|call|Popen)\s*\([^)]*shell\s*=\s*True'
+    severity: medium
+    description: Subprocess with shell=True (see CQ-05)
+    category: execution
+
+  - id: eval-usage
+    name: Eval Usage
+    pattern: '\beval\s*\('
+    severity: medium
+    description: Use of eval() function
+    category: execution
+
+  - id: compile-exec
+    name: Dynamic Code Compilation
+    pattern: 'compile\s*\([^)]+\)\s*.*exec'
+    severity: medium
+    description: Dynamic code compilation and execution
+    category: execution
+
+# MCP-specific malicious patterns (CD-03)
+mcp_specific:
+  - id: tool-description-exfil
+    name: Tool Description Exfiltration
+    pattern: '(read|send|include|output).*(\.ssh|\.aws|\.env|credential|secret|key)'
+    severity: critical
+    description: Tool description instructing credential access
+    category: tool_poisoning
+    scope: tool_descriptions
+
+  - id: tool-description-injection
+    name: Tool Description Prompt Injection
+    pattern: "(ignore|disregard|forget).*(previous|above|prior|instruction)"
+    severity: critical
+    description: Prompt injection in tool description
+    category: tool_poisoning
+    scope: tool_descriptions
+
+  - id: tool-description-hidden-url
+    name: Hidden URL in Tool Description
+    pattern: 'http[s]?://(?!api\.|docs\.|www\.)'
+    severity: high
+    description: Undeclared URL in tool description
+    category: tool_poisoning
+    scope: tool_descriptions
+
+# Exclusions - legitimate patterns that match suspicious rules
+exclusions:
+  - pattern: "test[_/]|spec[_/]|mock|fixture|example"
+    description: Test files and fixtures
+
+  - pattern: '#\s*nosec|#\s*noqa|type:\s*ignore'
+    description: Security/lint ignore comments
+
+  - pattern: "documentation|README|CHANGELOG"
+    description: Documentation files

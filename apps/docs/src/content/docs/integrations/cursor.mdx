@@ -1,0 +1,162 @@
+---
+title: Cursor Integration
+description: Use mpak bundles with Cursor
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+[Cursor](https://cursor.com) supports MCP servers natively. mpak bundles work seamlessly with Cursor's Agent mode.
+
+## Configuration File Location
+
+<Tabs>
+  <TabItem label="Workspace">
+    ```
+    .cursor/mcp.json
+    ```
+    Share with your team or add to `.gitignore` for private config.
+  </TabItem>
+  <TabItem label="Global">
+    Open Command Palette → "Cursor Settings" → "MCP"
+  </TabItem>
+</Tabs>
+
+## Quick Setup
+
+1. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+2. Search "MCP" → Select "View: Open MCP Settings"
+3. Click "New MCP Server" or edit `mcp.json` directly
+
+Add an mpak bundle:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+## Multiple Servers
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    },
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+## Using MCP Servers in Cursor
+
+Once configured, Cursor automatically uses MCP tools in Agent mode:
+
+1. Open the AI chat panel
+2. Select **Agent** mode (not Ask or Edit)
+3. Prompt Cursor - it will use relevant MCP tools automatically
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="tip">
+You can reference tools by name: "Use the echo tool to test the connection"
+</Aside>
+
+## Configuration with Secrets
+
+### Option 1: Environment Variables
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+### Option 2: mpak config (Recommended)
+
+Keep secrets out of config files:
+
+```bash
+mpak config set @nimblebraininc/ipinfo api_key=your-token
+```
+
+Then use a clean config:
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"]
+    }
+  }
+}
+```
+
+## Pin to a Specific Version
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo@1.0.0"]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+### Server Not Appearing
+
+1. Ensure you're in **Agent** mode (not Ask or Edit)
+2. Check the MCP server status in settings
+3. Test the bundle directly: `mpak run @package/name`
+
+### Command Not Found
+
+Ensure mpak is installed globally:
+
+```bash
+npm install -g @nimblebrain/mpak
+which mpak
+```
+
+If using a version manager (nvm, volta), specify the full path:
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "/Users/you/.nvm/versions/node/v20.0.0/bin/mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+## Resources
+
+- [Cursor MCP Documentation](https://cursor.com/docs/context/mcp)
+- [cursor.directory](https://cursor.directory/mcp) - Browse MCP servers

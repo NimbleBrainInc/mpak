@@ -1,0 +1,49 @@
+{
+  "name": "mpak - The Package Manager for AI",
+  "short_name": "mpak",
+  "description": "Install bundles and skills for your AI agent. The package registry for MCP servers and Agent Skills.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0a0f",
+  "theme_color": "#0c0a0f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "developer tools",
+    "productivity",
+    "utilities"
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Browse Bundles",
+      "short_name": "Bundles",
+      "description": "Browse available bundles and skills",
+      "url": "/bundles"
+    },
+    {
+      "name": "Publish Package",
+      "short_name": "Publish",
+      "description": "Publish a new bundle or skill",
+      "url": "/publish"
+    }
+  ]
+}

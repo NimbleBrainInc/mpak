@@ -1,0 +1,35 @@
+{
+  "name": "@test/unsafe-node-server",
+  "version": "1.0.0",
+  "description": "Node.js MCP server with unsafe execution patterns for CQ-05 testing",
+  "mcp_config": {
+    "command": "node",
+    "args": ["src/server.js"]
+  },
+  "tools": [
+    {
+      "name": "run_command",
+      "description": "Runs a shell command (UNSAFE)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cmd": {
+            "type": "string",
+            "description": "The command to run"
+          }
+        },
+        "required": ["cmd"]
+      }
+    }
+  ],
+  "permissions": {
+    "filesystem": "none",
+    "network": "none",
+    "environment": "none",
+    "subprocess": "full",
+    "native": "none"
+  },
+  "author": "Test Author",
+  "license": "MIT",
+  "repository": "https://github.com/test/unsafe-node-server"
+}

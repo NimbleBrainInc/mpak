@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mpak-scanner"
+version = "0.2.3"
+description = "Security scanner for MCP bundles. Powers mpak Certified verification."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.13"
+authors = [
+    { name = "NimbleBrain", email = "security@mpak.dev" }
+]
+keywords = ["mcp", "security", "scanner", "mcpb", "bundle"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "click>=8.1.0",
+    "jsonschema>=4.26.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.9.0",
+    "ty>=0.0.1a1",
+]
+job = ["boto3>=1.35.0"]
+
+[project.scripts]
+mpak-scanner = "mpak_scanner.cli:main"
+
+[project.urls]
+Homepage = "https://mpak.dev"
+Documentation = "https://mpak.dev/certified"
+Repository = "https://github.com/NimbleBrainInc/mpak"
+Issues = "https://github.com/NimbleBrainInc/mpak/issues"
+Changelog = "https://github.com/NimbleBrainInc/mpak/blob/main/CHANGELOG.md"
+"Trust Framework" = "https://mpaktrust.org"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mpak_scanner"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120  # Security patterns are inherently verbose
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "S"]
+ignore = [
+    "S101",  # Allow assert
+    "S603",  # subprocess without shell check
+    "S607",  # partial path for subprocess
+    "S112",  # try-except-continue
+    "UP042", # StrEnum suggestion (Python 3.11+)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures intentionally contain security issues for scanner validation
+"tests/fixtures/**/server.py" = ["S105", "S602", "S310", "S110"]
+"tests/fixtures/**/setup_hook.py" = ["S310"]
+# False positive: PASS is a status enum, not a password
+"src/mpak_scanner/models.py" = ["S105"]
+# Complex regex patterns exceed line length, S110 for base64 decode attempt
+"src/mpak_scanner/controls/capability_declaration/cd03_tool_description_safety.py" = ["E501", "S110"]
+# URL patterns are long
+"src/mpak_scanner/controls/code_quality/cq03_static_analysis.py" = ["E501"]
+# Dependency parsing patterns are complex
+"src/mpak_scanner/controls/supply_chain/sc03_dependency_pinning.py" = ["E501"]
+# Slopsquatting patterns have long descriptions
+"src/mpak_scanner/controls/code_quality/cq06_behavioral_analysis.py" = ["E501"]
+# Safe execution patterns: intentional fallback to embedded patterns, long pattern descriptions
+"src/mpak_scanner/controls/code_quality/cq05_safe_execution.py" = ["E501"]
+"src/mpak_scanner/schemas.py" = ["S310"]
+"src/mpak_scanner/job.py" = ["S310"]
+# Repository check has complex conditions
+"src/mpak_scanner/controls/provenance/pr01_source_repository.py" = ["E501"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "guarddog>=2.7.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.9.0",
+    "ty>=0.0.1a1",
+]

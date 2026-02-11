@@ -1,0 +1,134 @@
+---
+title: How the Registry Works
+description: Architecture and flow of publishing, discovery, and downloads
+---
+
+import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+mpak's registry connects publishers (who build MCP servers and skills) with consumers (who run them). Here's how the pieces fit together.
+
+## Architecture Overview
+
+```
+Publishing:
+
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  Your Repo   │────►│  GitHub Actions   │────►│  GitHub Release  │
+│  + manifest  │     │  (mcpb-pack)      │     │  (.mcpb asset)   │
+└──────────────┘     └────────┬─────────┘     └──────────────────┘
+                              │
+                              │ OIDC token + metadata
+                              ▼
+                     ┌──────────────────┐
+                     │  mpak Registry   │
+                     │  (metadata only) │
+                     └──────────────────┘
+
+Consuming:
+
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  mpak CLI    │────►│  mpak Registry   │────►│  GitHub Release  │
+│  search/run  │     │  (resolve pkg)   │     │  (download .mcpb)│
+└──────────────┘     └──────────────────┘     └──────────────────┘
+       │
+       ▼
+┌──────────────┐
+│  ~/.mpak/    │
+│  cache/      │
+│  (extract    │
+│   + run)     │
+└──────────────┘
+```
+
+## The Publishing Flow
+
+<Steps>
+
+1. **Add a manifest to your repo**
+
+   Create `manifest.json` describing your MCP server (name, version, how to run it).
+
+2. **Add the GitHub Action**
+
+   Add the `mcpb-pack` action to `.github/workflows/release.yml` with `id-token: write` permission.
+
+3. **Create a GitHub Release**
+
+   Tag your code and publish a release on GitHub.
+
+4. **The action builds the bundle**
+
+   `mcpb-pack` vendors all dependencies into a `.mcpb` file (a zip archive).
+
+5. **The action uploads to your release**
+
+   The `.mcpb` file is attached as a GitHub Release asset. You retain full control of the artifact.
+
+6. **The action announces to mpak**
+
+   Using a GitHub OIDC token, the action tells the registry: "this package exists, here's the metadata, here's where to download it."
+
+7. **The registry verifies and records**
+
+   mpak verifies the OIDC token against GitHub's public keys, confirms the scope matches the GitHub owner, and stores the metadata.
+
+</Steps>
+
+The registry never stores your bundle. It stores metadata: name, version, description, download URL, provenance claims, and certification results.
+
+## The Download Flow
+
+<Steps>
+
+1. **User searches or runs**
+
+   `mpak bundle search postgres` queries the registry API. `mpak bundle run @org/server` triggers a resolve-and-run.
+
+2. **CLI queries the registry**
+
+   The CLI calls the registry API to resolve the package name to metadata, including the download URL pointing to a GitHub Release asset.
+
+3. **CLI downloads the bundle**
+
+   The `.mcpb` file is downloaded directly from GitHub Releases (not from mpak's servers).
+
+4. **CLI extracts and caches**
+
+   The bundle is extracted to `~/.mpak/cache/<scope>/<name>/<version>/`. Subsequent runs use the cache.
+
+5. **CLI runs the server**
+
+   The server starts using the vendored dependencies inside the bundle. No system-level installation needed.
+
+</Steps>
+
+## Where Bundles Are Stored
+
+Bundles are stored as **GitHub Release assets**, not on mpak's servers. The registry stores metadata only. This means:
+
+| Concern | How It's Handled |
+|---------|-----------------|
+| CDN / bandwidth | GitHub handles distribution globally |
+| Availability | Bundles are as available as GitHub |
+| Control | Publishers retain full control of their artifacts |
+| Cost | No storage costs on mpak's side |
+| Deletion | Deleting a GitHub Release removes the bundle |
+
+## Security Model
+
+Every layer of the registry is designed around trust and verification:
+
+- **Authentication**: Publishing uses [GitHub OIDC](/security/provenance), not API keys. No secrets to leak.
+- **Scope enforcement**: Your GitHub org/username determines your package scope. Cryptographically enforced. See [Naming Conventions](/registry/naming).
+- **Provenance**: Every bundle has a verifiable chain from source code to published artifact. See [Provenance](/security/provenance).
+- **Certification**: Bundles are automatically scanned against the [mpak Trust Framework](https://mpaktrust.org). See [Certification](/security/certification).
+- **Access**: The registry is public. See [Access Model](/registry/access-model).
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="API Reference" description="Programmatic access to the registry" href="/registry/api" />
+  <LinkCard title="Access Model" description="Authentication, authorization, and scope enforcement" href="/registry/access-model" />
+  <LinkCard title="Publishing" description="Step-by-step publishing guide" href="/bundles/publishing" />
+  <LinkCard title="Provenance" description="Cryptographic proof of bundle origin" href="/security/provenance" />
+</CardGrid>

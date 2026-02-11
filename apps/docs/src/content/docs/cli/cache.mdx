@@ -1,0 +1,100 @@
+---
+title: mpak cache
+description: Manage the local bundle cache
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When you run `mpak bundle run`, bundles are downloaded and cached locally. The cache makes subsequent runs instant.
+
+## Cache Location
+
+Bundles are cached in your home directory:
+
+```
+~/.mpak/cache/
+└── scope-name/
+    ├── .mpak-meta.json
+    ├── manifest.json
+    ├── src/
+    └── deps/
+```
+
+Package names are flattened: `@scope/name` becomes `scope-name`. Only one version is cached per package. Running a newer version replaces the previous cached version.
+
+## How Caching Works
+
+| Scenario | What Happens |
+|----------|-------------|
+| First `run` | Downloads `.mcpb` from the registry, extracts to cache, runs |
+| Subsequent `run` | Uses cached extraction, runs immediately |
+| `run` with `--update` | Re-downloads from registry and replaces cache |
+| `run` with `@version` | Uses cache if version matches, otherwise downloads and replaces |
+| `pull` | Downloads `.mcpb` file to the current directory (does not populate the cache) |
+
+The cache is a simple directory structure. No database, no lock files, no background processes.
+
+## Cache Commands
+
+{/* TODO: Document exact cache management CLI commands when implemented (e.g., mpak cache list, mpak cache clean, mpak cache info). */}
+
+<Aside>
+  Dedicated cache management commands are planned. Currently, manage the cache using the manual methods below.
+</Aside>
+
+## Manual Cache Management
+
+### Clear entire cache
+
+```bash
+rm -rf ~/.mpak/cache
+```
+
+The next `mpak bundle run` will re-download as needed.
+
+### Clear a specific package
+
+```bash
+rm -rf ~/.mpak/cache/org-server
+```
+
+This removes the cached version of that package. The directory name is the package name with `@` removed and `/` replaced by `-` (e.g. `@org/server` becomes `org-server`).
+
+## Disk Usage
+
+Check how much space the cache is using:
+
+```bash
+du -sh ~/.mpak/cache
+```
+
+Check individual packages:
+
+```bash
+du -sh ~/.mpak/cache/*
+```
+
+Typical bundle sizes range from 1-10MB. A cache with 50 packages might use 100-500MB.
+
+## Offline Usage
+
+Cached bundles work offline. If a bundle has been downloaded and extracted, `mpak bundle run` does not need network access to run it.
+
+This means you can:
+- Run a bundle once while online, then run offline anytime
+- Use mpak in air-gapped environments (with pre-populated cache)
+- Run without worrying about registry availability
+
+```bash
+# Run once to populate cache
+mpak bundle run @org/server
+
+# Later, even without internet
+mpak bundle run @org/server
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MPAK_REGISTRY_URL` | `https://registry.mpak.dev` | Override the registry API URL |

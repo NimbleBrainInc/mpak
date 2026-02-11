@@ -1,0 +1,242 @@
+---
+title: Manifest Reference
+description: Complete manifest.json documentation
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+The `manifest.json` file describes your MCP server and how to run it.
+
+## Minimal Example
+
+<Tabs>
+  <TabItem label="Python">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "python",
+        "entry_point": "your_package.server",
+        "mcp_config": {
+          "command": "python",
+          "args": ["-m", "your_package.server"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Node.js">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "node",
+        "entry_point": "dist/index.js",
+        "mcp_config": {
+          "command": "node",
+          "args": ["${__dirname}/dist/index.js"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Binary">
+    ```json
+    {
+      "name": "@yourorg/your-server",
+      "version": "1.0.0",
+      "description": "What your server does",
+      "server": {
+        "type": "binary",
+        "entry_point": "bin/server",
+        "mcp_config": {
+          "command": "${__dirname}/bin/server",
+          "args": []
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Package name in `@scope/name` format |
+| `version` | string | Semantic version (e.g., `1.0.0`) |
+| `description` | string | Short description of what your server does |
+| `server.type` | string | Runtime type: `python`, `node`, or `binary` |
+| `server.mcp_config` | object | How to run the server |
+
+## Full Schema
+
+```json
+{
+  "$schema": "https://cdn.mpak.dev/schemas/2025-10-19/mpak.json",
+  "name": "@yourorg/your-server",
+  "version": "1.0.0",
+  "description": "What your server does",
+  "display_name": "Your Server",
+  "author": {
+    "name": "Your Name",
+    "email": "you@example.com",
+    "url": "https://example.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/yourorg/your-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourorg/your-server"
+  },
+  "keywords": ["mcp", "example", "demo"],
+  "server": {
+    "type": "python",
+    "entry_point": "your_package.server",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "your_package.server"],
+      "env": {
+        "PYTHONPATH": "${__dirname}/deps"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key from example.com",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
+```
+
+## server.mcp_config
+
+The `mcp_config` object defines how the CLI runs your server:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `command` | string | Executable to run |
+| `args` | string[] | Arguments to pass |
+| `env` | object | Environment variables |
+
+### Path Variables
+
+Use `${__dirname}` to reference the bundle's extraction directory:
+
+```json
+{
+  "mcp_config": {
+    "command": "node",
+    "args": ["${__dirname}/dist/index.js"]
+  }
+}
+```
+
+## user_config
+
+Define configuration that users need to provide (API keys, etc.):
+
+```json
+{
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key from example.com",
+      "sensitive": true,
+      "required": true,
+      "default": ""
+    }
+  },
+  "server": {
+    "mcp_config": {
+      "env": {
+        "API_KEY": "${user_config.api_key}"
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | `string`, `number`, `boolean` |
+| `title` | string | Human-readable label |
+| `description` | string | Help text |
+| `sensitive` | boolean | Mask in output (default: false) |
+| `required` | boolean | Must be provided (default: false) |
+| `default` | any | Default value if not provided |
+
+See [User Configuration](/bundles/user-config) for more details.
+
+## Runtime-Specific Notes
+
+### Python
+
+For Python servers, use module execution to handle imports correctly:
+
+```json
+{
+  "server": {
+    "type": "python",
+    "entry_point": "your_package.server",
+    "mcp_config": {
+      "command": "python",
+      "args": ["-m", "your_package.server"]
+    }
+  }
+}
+```
+
+Your server must have a `if __name__ == "__main__"` block:
+
+```python
+if __name__ == "__main__":
+    mcp.run()  # Required for mpak bundle run
+```
+
+### Node.js
+
+For Node.js servers, reference the compiled JavaScript:
+
+```json
+{
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"]
+    }
+  }
+}
+```
+
+### Binary
+
+For compiled binaries, the command points directly to the executable:
+
+```json
+{
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/server",
+    "mcp_config": {
+      "command": "${__dirname}/bin/server",
+      "args": []
+    }
+  }
+}
+```
+
+<Aside type="caution">
+  Binary servers require multi-platform builds. You must build separately for each target platform.
+</Aside>

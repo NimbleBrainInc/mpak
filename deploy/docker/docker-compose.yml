@@ -1,0 +1,68 @@
+# mpak local development stack
+# Usage: docker compose -f deploy/docker/docker-compose.yml up
+#
+# This compose file is designed to be run from the repo root:
+#   docker compose -f deploy/docker/docker-compose.yml up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: mpak
+      POSTGRES_PASSWORD: mpak
+      POSTGRES_DB: mpak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mpak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  registry:
+    build:
+      context: ../../
+      dockerfile: apps/registry/Dockerfile
+    ports: ["3200:3200"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mpak:mpak@postgres:5432/mpak
+      NODE_ENV: development
+      PORT: 3200
+      HOST: 0.0.0.0
+      STORAGE_TYPE: local
+      STORAGE_PATH: /data/storage
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      SCANNER_ENABLED: "false"
+    volumes:
+      - registry_storage:/data/storage
+
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3200
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+        VITE_ENABLE_DEBUG_AUTH: "true"
+    ports: ["8080:8080"]
+    depends_on: [registry]
+
+  scanner:
+    build:
+      context: ../../apps/scanner
+      dockerfile: Dockerfile
+    depends_on: [registry]
+    # Scanner is a CLI tool; override entrypoint for development
+    entrypoint: ["sleep", "infinity"]
+    volumes:
+      - registry_storage:/data/storage:ro
+
+volumes:
+  postgres_data:
+  registry_storage:

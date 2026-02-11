@@ -1,0 +1,151 @@
+---
+title: GitHub Action
+description: Automate bundle building and publishing with mcpb-pack
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+The [mcpb-pack](https://github.com/NimbleBrainInc/mcpb-pack) GitHub Action automates the entire publishing workflow.
+
+## Basic Usage
+
+Add to `.github/workflows/release.yml`:
+
+```yaml
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # OIDC authentication with registry
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+```
+
+## What It Does
+
+When triggered by a GitHub release:
+
+1. **Detects** your server type from `manifest.json`
+2. **Vendors** all dependencies (pip/npm)
+3. **Packages** everything into a `.mcpb` file
+4. **Uploads** the bundle to your GitHub release
+5. **Announces** to mpak.dev with OIDC authentication
+
+## Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `directory` | `.` | Directory containing manifest.json |
+| `output` | `{name}-{version}.mcpb` | Output filename |
+| `python-version` | `3.13` | Python version for vendoring |
+| `build` | `true` | Whether to build the bundle |
+| `upload` | `true` | Whether to upload to GitHub release |
+| `announce` | `true` | Whether to register with mpak.dev |
+| `announce-url` | `https://registry.mpak.dev/v1/bundles/announce` | Registry endpoint |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `bundle-path` | Path to the generated `.mcpb` file |
+| `bundle-size` | Size in bytes |
+| `bundle-sha256` | SHA256 hash |
+| `announced` | Whether registration succeeded |
+
+## Examples
+
+### Build Only (No Publish)
+
+For testing or private servers:
+
+```yaml
+- uses: NimbleBrainInc/mcpb-pack@v2
+  with:
+    upload: false
+    announce: false
+```
+
+### Custom Output Path
+
+```yaml
+- uses: NimbleBrainInc/mcpb-pack@v2
+  with:
+    output: "my-server-{version}.mcpb"
+```
+
+### Subdirectory
+
+If your manifest.json is in a subdirectory:
+
+```yaml
+- uses: NimbleBrainInc/mcpb-pack@v2
+  with:
+    directory: ./packages/my-server
+```
+
+### Manual Re-announce
+
+To re-announce after a failed registration:
+
+```yaml
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Build bundle'
+        type: boolean
+        default: true
+      announce:
+        description: 'Announce to registry'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: NimbleBrainInc/mcpb-pack@v2
+        with:
+          build: ${{ inputs.build }}
+          announce: ${{ inputs.announce }}
+```
+
+## OIDC Authentication
+
+The action uses [GitHub OIDC tokens](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect) to authenticate with the registry.
+
+This means:
+- **No API keys** - Authentication is automatic
+- **Provenance** - The registry knows exactly which repo published the bundle
+- **Scope enforcement** - Your package scope must match your GitHub org/username
+
+### Required Permissions
+
+```yaml
+permissions:
+  contents: write   # Upload to releases
+  id-token: write   # OIDC token for registry
+```
+
+## Supported Runtimes
+
+| Runtime | Detection | Dependency Vendoring |
+|---------|-----------|---------------------|
+| Python | `server.type: "python"` | `uv pip install --target deps/` |
+| Node.js | `server.type: "node"` | `npm install --omit=dev` |
+| Binary | `server.type: "binary"` | None (you build the binary) |
+
+## Next Steps
+
+<LinkCard title="Multi-Platform Builds" description="Build for macOS, Linux, ARM, and x64" href="/bundles/multi-platform" />

@@ -1,0 +1,261 @@
+// Prisma schema for mpak Registry
+// Simplified model: users publish packages, no namespace hierarchy
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Users table - stores information from Clerk
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid // Internal UUID
+  clerkId        String    @unique @map("clerk_id") @db.VarChar(255) // External Clerk user ID
+  email          String    @unique @db.VarChar(255)
+  username       String?   @unique @db.VarChar(255) // GitHub username if available
+  name           String?   @db.VarChar(255)
+  avatarUrl      String?   @map("avatar_url") @db.VarChar(512)
+  githubUsername String?   @map("github_username") @db.VarChar(255) // Extracted from Clerk OAuth
+  githubUserId   String?   @map("github_user_id") @db.VarChar(255) // GitHub user ID
+  emailVerified  Boolean?  @default(false) @map("email_verified")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  lastLoginAt    DateTime? @map("last_login_at") @db.Timestamp(6)
+
+  @@index([clerkId], map: "idx_users_clerk_id")
+  @@index([email], map: "idx_users_email")
+  @@index([username], map: "idx_users_username")
+  @@index([githubUsername], map: "idx_users_github_username")
+  @@map("users")
+}
+
+// Package metadata
+model Package {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String           @unique @db.VarChar(255) // Can be scoped (@scope/pkg) or unscoped (pkg)
+  displayName    String?          @map("display_name") @db.VarChar(255)
+  description    String?
+  authorName     String?          @map("author_name") @db.VarChar(255)
+  authorEmail    String?          @map("author_email") @db.VarChar(255)
+  authorUrl      String?          @map("author_url") @db.VarChar(512)
+  homepage       String?          @db.VarChar(512)
+  license        String?          @db.VarChar(100)
+  iconUrl        String?          @map("icon_url") @db.VarChar(512)
+  serverType     String           @map("server_type") @db.VarChar(50)
+  verified       Boolean?         @default(false)
+  latestVersion  String           @map("latest_version") @db.VarChar(50)
+  totalDownloads BigInt?          @default(0) @map("total_downloads")
+
+  // Ownership and claiming
+  createdBy      String?          @map("created_by") @db.Uuid // Internal User ID who created this package (nullable for unclaimed packages)
+  githubRepo     String?          @map("github_repo") @db.VarChar(512) // GitHub repo URL for verification (e.g., "owner/repo")
+  claimedBy      String?          @map("claimed_by") @db.Uuid // Internal User ID who claimed this package (null = claimable)
+  claimedAt      DateTime?        @map("claimed_at") @db.Timestamp(6) // When the package was claimed
+
+  // GitHub stats (cached)
+  githubStars      Int?           @map("github_stars")
+  githubForks      Int?           @map("github_forks")
+  githubWatchers   Int?           @map("github_watchers")
+  githubUpdatedAt  DateTime?      @map("github_updated_at") @db.Timestamp(6) // When GitHub stats were last fetched
+
+  createdAt      DateTime?        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime?        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  versions       PackageVersion[]
+
+  @@index([name], map: "idx_packages_name")
+  @@index([createdBy], map: "idx_packages_created_by")
+  @@index([claimedBy], map: "idx_packages_claimed_by")
+  @@index([serverType], map: "idx_packages_server_type")
+  @@index([verified], map: "idx_packages_verified")
+  @@index([totalDownloads(sort: Desc)], map: "idx_packages_downloads")
+  @@index([createdAt(sort: Desc)], map: "idx_packages_created_at")
+  @@map("packages")
+}
+
+// Package versions
+model PackageVersion {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  packageId        String    @map("package_id") @db.Uuid
+  version          String    @db.VarChar(50)
+  manifest         Json
+  prerelease       Boolean   @default(false) // true for alpha, beta, rc versions
+  downloadCount    BigInt?   @default(0) @map("download_count")
+  publishedBy      String?   @map("published_by") @db.Uuid // Internal User ID (null for OIDC publishes)
+  publishedByEmail String?   @map("published_by_email") @db.VarChar(255) // Null for OIDC publishes
+  publishedAt      DateTime? @default(now()) @map("published_at") @db.Timestamp(6)
+
+  // Release source (for OIDC publishes from GitHub)
+  releaseTag       String?   @map("release_tag") @db.VarChar(100) // e.g., "v0.1.0"
+  releaseUrl       String?   @map("release_url") @db.VarChar(512) // Full GitHub release URL
+
+  // Publisher-provided index.json (if any, otherwise we generate)
+  sourceIndex      Json?     @map("source_index")
+
+  // README content at this version (fetched from repo at release tag)
+  readme           String?   @db.Text
+
+  // MCP Registry server.json (discovery metadata for this version)
+  serverJson       Json?     @map("server_json")
+
+  // Provenance - hybrid approach: indexed columns + extensible JSON
+  publishMethod         String?   @map("publish_method") @db.VarChar(20) // 'oidc' | 'upload' | 'cli'
+  provenanceRepository  String?   @map("provenance_repository") @db.VarChar(255) // Indexed: find packages from repo
+  provenanceSha         String?   @map("provenance_sha") @db.VarChar(64) // Indexed: lookup by commit
+  provenance            Json?     // Full provenance data with schema version
+
+  // Relations
+  package          Package   @relation(fields: [packageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  artifacts        Artifact[]
+  securityScans    SecurityScan[]
+
+  @@unique([packageId, version])
+  @@index([packageId], map: "idx_package_versions_package_id")
+  @@index([packageId, prerelease], map: "idx_package_versions_prerelease")
+  @@index([publishMethod], map: "idx_package_versions_publish_method")
+  @@index([provenanceRepository], map: "idx_package_versions_provenance_repo")
+  @@index([provenanceSha], map: "idx_package_versions_provenance_sha")
+  @@map("package_versions")
+}
+
+// Skills - Agent Skills for Claude Code
+model Skill {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String           @unique @db.VarChar(255) // Scoped name (@scope/skill-name)
+  description    String?
+  license        String?          @db.VarChar(100)
+  compatibility  String?          @db.VarChar(500)
+  allowedTools   String?          @map("allowed_tools") // Space-delimited tools
+
+  // Discovery metadata (from metadata: field)
+  category       String?          @db.VarChar(50) // development, writing, research, etc.
+  tags           String[]         @default([]) // Array of tags
+  triggers       String[]         @default([]) // Activation phrases
+  keywords       String[]         @default([]) // Search keywords (not shown)
+
+  // Author info
+  authorName     String?          @map("author_name") @db.VarChar(255)
+  authorEmail    String?          @map("author_email") @db.VarChar(255)
+  authorUrl      String?          @map("author_url") @db.VarChar(512)
+
+  // Ownership
+  githubRepo     String?          @map("github_repo") @db.VarChar(512)
+  latestVersion  String           @map("latest_version") @db.VarChar(50)
+  totalDownloads BigInt?          @default(0) @map("total_downloads")
+
+  createdAt      DateTime?        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime?        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  versions       SkillVersion[]
+
+  @@index([name], map: "idx_skills_name")
+  @@index([category], map: "idx_skills_category")
+  @@index([totalDownloads(sort: Desc)], map: "idx_skills_downloads")
+  @@index([createdAt(sort: Desc)], map: "idx_skills_created_at")
+  @@map("skills")
+}
+
+// Skill versions
+model SkillVersion {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  skillId          String    @map("skill_id") @db.Uuid
+  version          String    @db.VarChar(50)
+  frontmatter      Json      // Full SKILL.md frontmatter
+  content          String?   @db.Text // Body content from SKILL.md (after frontmatter)
+  prerelease       Boolean   @default(false)
+  downloadCount    BigInt?   @default(0) @map("download_count")
+  publishedAt      DateTime? @default(now()) @map("published_at") @db.Timestamp(6)
+
+  // Release source (for OIDC publishes from GitHub)
+  releaseTag       String?   @map("release_tag") @db.VarChar(100)
+  releaseUrl       String?   @map("release_url") @db.VarChar(512)
+
+  // Bundle storage
+  storagePath      String    @map("storage_path") @db.VarChar(512) // S3 key
+  sourceUrl        String?   @map("source_url") @db.VarChar(512)   // GitHub release URL
+  digest           String    @db.VarChar(71) // sha256:xxxx format
+  sizeBytes        BigInt    @map("size_bytes")
+
+  // Provenance
+  publishMethod         String?   @map("publish_method") @db.VarChar(20)
+  provenanceRepository  String?   @map("provenance_repository") @db.VarChar(255)
+  provenanceSha         String?   @map("provenance_sha") @db.VarChar(64)
+  provenance            Json?
+
+  // Relations
+  skill            Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([skillId, version])
+  @@index([skillId], map: "idx_skill_versions_skill_id")
+  @@index([publishMethod], map: "idx_skill_versions_publish_method")
+  @@index([provenanceRepository], map: "idx_skill_versions_provenance_repo")
+  @@map("skill_versions")
+}
+
+// Platform-specific artifacts for a package version
+model Artifact {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+
+  // Platform (matches MCPB index spec)
+  os              String    @db.VarChar(20) // darwin, win32, linux, any
+  arch            String    @db.VarChar(20) // x64, arm64, any
+
+  // Bundle info
+  mimeType        String    @map("mime_type") @db.VarChar(100) @default("application/vnd.mcp.bundle.v0.3+gzip")
+  digest          String    @db.VarChar(71) // sha256:xxxx format (7 + 64 chars)
+  sizeBytes       BigInt    @map("size_bytes")
+
+  // URLs
+  storagePath     String    @map("storage_path") @db.VarChar(512) // Our S3 key
+  sourceUrl       String    @map("source_url") @db.VarChar(512)   // Original GitHub URL
+
+  // Download tracking (per-artifact)
+  downloadCount   BigInt    @default(0) @map("download_count")
+
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+
+  // Relations
+  version         PackageVersion @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([versionId, os, arch])
+  @@index([versionId], map: "idx_artifacts_version_id")
+  @@index([os, arch], map: "idx_artifacts_platform")
+  @@map("artifacts")
+}
+
+// Security scan results for package versions
+model SecurityScan {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  versionId       String    @map("version_id") @db.Uuid
+  scanId          String    @unique @map("scan_id") @db.VarChar(100) // UUID passed to scanner Job
+  status          String    @db.VarChar(20) // pending, scanning, completed, failed
+  riskScore       String?   @map("risk_score") @db.VarChar(20) // CRITICAL, HIGH, MEDIUM, LOW, NONE
+  reportS3Uri     String?   @map("report_s3_uri") @db.VarChar(512)
+  pdfS3Uri        String?   @map("pdf_s3_uri") @db.VarChar(512)
+  report          Json?     // Full scan report JSON
+  error           String?   @db.Text
+  jobName         String?   @map("job_name") @db.VarChar(255) // K8s Job name for debugging
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamp(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamp(6)
+
+  // MTF Certification fields (calculated from scan report)
+  certificationLevel  Int?      @map("certification_level") // 0=None, 1=Basic, 2=Standard, 3=Verified, 4=Attested
+  controlsPassed      Int?      @map("controls_passed")
+  controlsFailed      Int?      @map("controls_failed")
+  controlsTotal       Int?      @map("controls_total")
+  findingsSummary     Json?     @map("findings_summary") // { critical: N, high: N, medium: N, low: N }
+
+  version         PackageVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId], map: "idx_security_scans_version_id")
+  @@index([scanId], map: "idx_security_scans_scan_id")
+  @@index([status], map: "idx_security_scans_status")
+  @@index([certificationLevel], map: "idx_security_scans_certification_level")
+  @@map("security_scans")
+}

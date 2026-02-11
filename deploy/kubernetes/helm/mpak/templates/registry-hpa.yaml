@@ -1,0 +1,46 @@
+{{- if .Values.registry.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "mpak.fullname" . }}-registry
+  namespace: {{ include "mpak.namespace" . }}
+  labels:
+    {{- include "mpak.registry.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "mpak.fullname" . }}-registry
+  minReplicas: {{ .Values.registry.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.registry.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.registry.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.registry.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.registry.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.registry.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+{{- end }}

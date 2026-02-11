@@ -1,0 +1,96 @@
+---
+title: Naming Conventions
+description: Package naming rules and best practices
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Every package on mpak has a scoped name in the format `@scope/name`. The scope is derived from your GitHub identity, and the registry enforces ownership cryptographically.
+
+## The Format
+
+```
+@scope/name
+```
+
+| Part | Source | Example |
+|------|--------|---------|
+| `@scope` | Your GitHub org or username (lowercased) | `@nimblebraininc` |
+| `name` | The package identifier you choose | `postgres-mcp` |
+| Full name | Combined | `@nimblebraininc/postgres-mcp` |
+
+## Scope Rules
+
+Your scope is automatically derived from the GitHub OIDC token at publish time. You cannot choose a different scope.
+
+| GitHub Owner | Package Scope |
+|--------------|--------------|
+| `NimbleBrainInc` (org) | `@nimblebraininc/...` |
+| `johndoe` (user) | `@johndoe/...` |
+| `My-Org` (org) | `@my-org/...` |
+
+Scopes are always lowercase. GitHub owner names are lowercased automatically.
+
+This means:
+- You can only publish packages under your own scope
+- No one else can publish to your scope
+- Scope ownership is verified cryptographically via OIDC (no API keys, no manual approval)
+
+## Name Rules
+
+Package names (the part after the scope) must follow these rules:
+
+| Rule | Example |
+|------|---------|
+| Lowercase letters, numbers, hyphens | `postgres-mcp` |
+| Must start with a letter | `my-server` (not `1-server`) |
+| No consecutive hyphens | `my-server` (not `my--server`) |
+| No leading or trailing hyphens | `server` (not `-server-`) |
+
+{/* TODO: Confirm exact character restrictions, min/max length limits from registry validation */}
+
+## Naming Best Practices
+
+**Be descriptive.** The name should tell users what the server connects to or does.
+
+| Good | Bad | Why |
+|------|-----|-----|
+| `postgres-mcp` | `my-server` | Tells users what it connects to |
+| `github-issues` | `tool` | Specific about what it does |
+| `slack-notifications` | `notifications` | Names the integration |
+| `code-review` | `helper` | Describes the capability |
+
+**Include the service or protocol name** when wrapping an API: `stripe-mcp`, `jira-mcp`, `openai-mcp`.
+
+**Avoid generic names** like `utils`, `tools`, `helper`, `core`. These don't help users discover your package.
+
+**Don't include your org name** in the package name. The scope already identifies you: `@yourorg/postgres-mcp`, not `@yourorg/yourorg-postgres-mcp`.
+
+## Namespace Governance
+
+The mpak Trust Framework includes [RG-02 namespace governance](https://mpaktrust.org) controls to prevent squatting and name confusion:
+
+- **Slopsquatting prevention**: Names that are confusingly similar to popular packages may be flagged
+- **Trademark enforcement**: Package names impersonating well-known brands may be removed
+
+<Aside>
+  Namespace governance policies are enforced reactively today. If you believe a package name infringes on your trademark or is squatting on your namespace, contact us via [GitHub Issues](https://github.com/NimbleBrainInc/mpak/issues).
+</Aside>
+
+## Renaming and Transfers
+
+{/* TODO: Document rename/transfer policy when available. Currently, renaming a package requires publishing under the new name and deprecating the old one. */}
+
+Package names are immutable once published. To "rename" a package:
+
+1. Publish a new package under the desired name
+2. Deprecate the old package (point users to the new one)
+3. The old name remains reserved to prevent confusion
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="Publishing" description="Step-by-step guide to publishing a bundle" href="/bundles/publishing" />
+  <LinkCard title="Access Model" description="How authentication and scope enforcement work" href="/registry/access-model" />
+  <LinkCard title="Manifest Reference" description="Full manifest.json documentation" href="/bundles/manifest" />
+</CardGrid>

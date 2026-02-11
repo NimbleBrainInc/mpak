@@ -1,0 +1,214 @@
+---
+title: VS Code Integration
+description: Use mpak bundles with VS Code and GitHub Copilot
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+[VS Code](https://code.visualstudio.com) supports MCP servers for extending GitHub Copilot's capabilities. mpak bundles integrate with VS Code's Agent mode.
+
+## Prerequisites
+
+- VS Code 1.99+ (April 2025 or later)
+- GitHub Copilot extension
+- Agent mode enabled
+
+## Configuration File Location
+
+<Tabs>
+  <TabItem label="Workspace">
+    ```
+    .vscode/mcp.json
+    ```
+    Commit to share with your team.
+  </TabItem>
+  <TabItem label="User Settings">
+    Open Command Palette → "Preferences: Open User Settings (JSON)"
+
+    Add under `"mcp.servers"`:
+    ```json
+    {
+      "mcp.servers": {
+        "echo": {
+          "command": "mpak",
+          "args": ["run", "@nimblebraininc/echo"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Quick Setup
+
+### Using Command Palette
+
+1. Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+2. Run "MCP: Add Server"
+3. Select "Command (stdio)"
+4. Enter: `mpak run @nimblebraininc/echo`
+
+### Manual Configuration
+
+Create `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside>
+VS Code uses `"servers"` instead of `"mcpServers"` in the workspace config file.
+</Aside>
+
+## Multiple Servers
+
+```json
+{
+  "servers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    },
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+## Using MCP Servers
+
+Once configured:
+
+1. Open the Chat view
+2. Switch to **Agent** mode (click the mode selector)
+3. Copilot will automatically use MCP tools when relevant
+
+You'll be prompted to approve tool usage the first time. Enable "Yolo mode" in settings to auto-approve.
+
+## Configuration with Secrets
+
+### Option 1: Input Variables (Recommended)
+
+VS Code can prompt for secrets and store them encrypted:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ipinfo-token",
+      "type": "promptString",
+      "description": "IPInfo API Token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "${input:ipinfo-token}"
+      }
+    }
+  }
+}
+```
+
+### Option 2: .env File
+
+Reference your existing `.env`:
+
+```json
+{
+  "servers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "envFile": "${workspaceFolder}/.env"
+    }
+  }
+}
+```
+
+### Option 3: mpak config
+
+Store secrets with mpak:
+
+```bash
+mpak config set @nimblebraininc/ipinfo api_key=your-token
+```
+
+Then use a clean config:
+
+```json
+{
+  "servers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"]
+    }
+  }
+}
+```
+
+## Auto-Discovery
+
+VS Code can discover MCP servers from Claude Desktop. If you already have servers configured there, enable auto-discovery in VS Code settings:
+
+```json
+{
+  "chat.mcp.discovery.enabled": true
+}
+```
+
+## Pin to a Specific Version
+
+```json
+{
+  "servers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo@1.0.0"]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+### Server Not Starting
+
+1. Check MCP server status in the Chat view
+2. View server logs: Command Palette → "MCP: Show Server Logs"
+3. Test the bundle directly: `mpak run @package/name`
+
+### Command Not Found
+
+Ensure mpak is installed globally:
+
+```bash
+npm install -g @nimblebrain/mpak
+which mpak
+```
+
+### Trust Prompt
+
+VS Code prompts you to trust MCP servers on first run. This is a security feature - only approve servers from trusted sources.
+
+## Resources
+
+- [VS Code MCP Documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+- [Agent Mode Blog Post](https://code.visualstudio.com/blogs/2025/04/07/agentMode)

@@ -1,0 +1,517 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   Workshop Design System - mpak.dev
+   Dark theme with dual-accent system: Gold (bundles/security) + Purple (skills)
+   ============================================================================= */
+
+@theme {
+  /* --- Accent Gold (bundles, security, CTAs) --- */
+  --color-accent-gold-50: #fffbeb;
+  --color-accent-gold-100: #fef3c7;
+  --color-accent-gold-200: #fde68a;
+  --color-accent-gold-300: #fcd34d;
+  --color-accent-gold-400: #fbbf24;
+  --color-accent-gold-500: #f59e0b;
+  --color-accent-gold-600: #d97706;
+  --color-accent-gold-glow: rgba(245, 158, 11, 0.12);
+  --color-accent-gold-border: rgba(245, 158, 11, 0.25);
+
+  /* --- Accent Purple (skills) --- */
+  --color-accent-purple: #8b5cf6;
+  --color-accent-purple-50: #f5f3ff;
+  --color-accent-purple-100: #ede9fe;
+  --color-accent-purple-200: #ddd6fe;
+  --color-accent-purple-300: #c4b5fd;
+  --color-accent-purple-400: #a78bfa;
+  --color-accent-purple-500: #8b5cf6;
+  --color-accent-purple-600: #7c3aed;
+  --color-accent-purple-glow: rgba(139, 92, 246, 0.12);
+  --color-accent-purple-border: rgba(139, 92, 246, 0.25);
+
+  /* --- Status accents (kept for compatibility) --- */
+  --color-accent-cyan: #06b6d4;
+  --color-accent-teal: #14b8a6;
+  --color-accent-emerald: #10b981;
+
+  /* --- Terminal colors --- */
+  --color-terminal-success: #34d399;
+  --color-terminal-warning: #fbbf24;
+  --color-terminal-error: #f87171;
+  --color-terminal-info: #60a5fa;
+
+  /* --- Surface system (dark backgrounds) --- */
+  --color-surface-base: #0c0a0f;
+  --color-surface: #13111a;
+  --color-surface-raised: #1a1724;
+  --color-surface-overlay: #211d2e;
+
+  /* --- Workshop neutrals (dark-native) --- */
+  --color-mpak-dark: #0c0a0f;
+  --color-mpak-gray-50: #13111a;
+  --color-mpak-gray-100: #1a1724;
+  --color-mpak-gray-200: #211d2e;
+  --color-mpak-gray-300: #2e2942;
+  --color-mpak-gray-400: #6a657f;
+  --color-mpak-gray-500: #8b859e;
+  --color-mpak-gray-600: #a8a3b8;
+  --color-mpak-gray-700: #cbc7d9;
+  --color-mpak-gray-800: #e8e5f0;
+  --color-mpak-gray-900: #f5f3ff;
+
+  /* --- Borders --- */
+  --color-workshop-border: rgba(255, 255, 255, 0.08);
+  --color-workshop-border-hover: rgba(255, 255, 255, 0.16);
+
+  /* --- Fonts --- */
+  --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* --- Custom animations --- */
+  --animate-cursor-blink: blink 1s step-end infinite;
+  --animate-fade-in-up: fadeInUp 0.6s ease-out;
+}
+
+/* =============================================================================
+   Keyframes
+   ============================================================================= */
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes look {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(2px, -1px); }
+  50% { transform: translate(-2px, 1px); }
+  75% { transform: translate(1px, 2px); }
+}
+
+/* =============================================================================
+   Base Styles
+   ============================================================================= */
+
+body {
+  margin: 0;
+  font-family: var(--font-display);
+  background: var(--color-surface-base);
+  color: #f5f3ff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* =============================================================================
+   Focus Indicators (Keyboard Accessibility)
+   ============================================================================= */
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-gold-400);
+  outline-offset: 2px;
+}
+
+/* Override for inputs that already have focus ring styles */
+.workshop-input:focus-visible,
+.workshop-select:focus-visible {
+  outline: none;
+}
+
+/* Skip-to-content link */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.skip-to-content:focus {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-accent-gold-400);
+  color: var(--color-mpak-dark);
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-radius: 8px;
+  z-index: 100;
+}
+
+/* =============================================================================
+   Reduced Motion
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Subtle ambient glow on body */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(139, 92, 246, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 0%, rgba(245, 158, 11, 0.04) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* =============================================================================
+   Workshop Card System
+   Bundle cards get gold top-border on hover, skill cards get purple
+   ============================================================================= */
+
+.workshop-card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-workshop-border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.workshop-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.workshop-card:hover {
+  background: var(--color-surface-overlay);
+  border-color: var(--color-workshop-border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.workshop-card:hover::before {
+  opacity: 1;
+}
+
+.workshop-card-gold::before {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.workshop-card-purple::before {
+  background: linear-gradient(90deg, #a78bfa, #7c3aed);
+}
+
+/* =============================================================================
+   Workshop Input System
+   ============================================================================= */
+
+.workshop-input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-workshop-border);
+  border-radius: 8px;
+  color: #f5f3ff;
+  font-family: var(--font-display);
+  transition: all 0.2s;
+}
+
+.workshop-input::placeholder {
+  color: var(--color-mpak-gray-400);
+}
+
+.workshop-input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+}
+
+.workshop-input-purple:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+}
+
+/* =============================================================================
+   Workshop Select System
+   ============================================================================= */
+
+.workshop-select {
+  background: var(--color-surface);
+  border: 1px solid var(--color-workshop-border);
+  border-radius: 8px;
+  color: #f5f3ff;
+  font-family: var(--font-display);
+  transition: all 0.2s;
+}
+
+.workshop-select:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+}
+
+.workshop-select-purple:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+}
+
+/* =============================================================================
+   Workshop Badge System
+   ============================================================================= */
+
+.workshop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--color-surface);
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  color: var(--color-mpak-gray-600);
+}
+
+.workshop-badge-gold {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.workshop-badge-purple {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+/* =============================================================================
+   Workshop Section Labels
+   ============================================================================= */
+
+.workshop-section-gold {
+  color: #f59e0b;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.workshop-section-purple {
+  color: #a78bfa;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* =============================================================================
+   Trust Score Mini Bar (for card footers)
+   ============================================================================= */
+
+.trust-mini-bar {
+  width: 40px;
+  height: 3px;
+  background: var(--color-surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* =============================================================================
+   Workshop Category Badges (for dark backgrounds)
+   Adjusted from light-theme versions
+   ============================================================================= */
+
+.workshop-cat-development { color: #818cf8; background: rgba(129, 140, 248, 0.12); border-color: rgba(129, 140, 248, 0.25); }
+.workshop-cat-writing { color: #a78bfa; background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.25); }
+.workshop-cat-research { color: #60a5fa; background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.25); }
+.workshop-cat-consulting { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.25); }
+.workshop-cat-data { color: #22d3ee; background: rgba(34, 211, 238, 0.12); border-color: rgba(34, 211, 238, 0.25); }
+.workshop-cat-design { color: #f472b6; background: rgba(244, 114, 182, 0.12); border-color: rgba(244, 114, 182, 0.25); }
+.workshop-cat-operations { color: #fb923c; background: rgba(251, 146, 60, 0.12); border-color: rgba(251, 146, 60, 0.25); }
+.workshop-cat-security { color: #f87171; background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.25); }
+.workshop-cat-other { color: #a8a3b8; background: rgba(168, 163, 184, 0.12); border-color: rgba(168, 163, 184, 0.25); }
+
+/* =============================================================================
+   Prose / README Styling for Dark Background
+   ============================================================================= */
+
+.workshop-prose h1 {
+  color: #f5f3ff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-workshop-border);
+}
+.workshop-prose h1:first-child { margin-top: 0; }
+.workshop-prose h2 {
+  color: #f5f3ff;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.workshop-prose h3 { color: #e8e5f0; font-size: 1rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.workshop-prose h4 { color: #cbc7d9; font-size: 0.875rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; }
+.workshop-prose p { color: #a8a3b8; margin-bottom: 1rem; line-height: 1.7; }
+.workshop-prose a { color: #f59e0b; text-decoration: underline; text-underline-offset: 2px; }
+.workshop-prose a:hover { color: #fbbf24; }
+.workshop-prose ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #a8a3b8; }
+.workshop-prose ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: 1rem; color: #a8a3b8; }
+.workshop-prose li { margin-bottom: 0.25rem; line-height: 1.6; }
+.workshop-prose li > ul,
+.workshop-prose li > ol { margin-top: 0.25rem; margin-bottom: 0; }
+.workshop-prose strong { color: #e8e5f0; font-weight: 600; }
+.workshop-prose em { color: #cbc7d9; }
+
+/* Inline code */
+.workshop-prose code {
+  background: var(--color-surface);
+  color: #e8e5f0;
+  padding: 0.125rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  border: 1px solid var(--color-workshop-border);
+}
+
+/* Code blocks */
+.workshop-prose pre {
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-workshop-border);
+}
+.workshop-prose pre code {
+  display: block;
+  background: var(--color-surface-base);
+  color: #e8e5f0;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  border: none;
+  border-radius: 0;
+}
+
+/* Tables */
+.workshop-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+.workshop-prose thead { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.workshop-prose th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  color: #cbc7d9;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.workshop-prose td {
+  padding: 0.5rem 0.75rem;
+  color: #a8a3b8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Blockquotes */
+.workshop-prose blockquote {
+  border-left: 2px solid rgba(245, 158, 11, 0.4);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--color-mpak-gray-500);
+  font-style: italic;
+}
+.workshop-prose blockquote p { color: inherit; }
+
+/* Horizontal rules */
+.workshop-prose hr {
+  border: none;
+  border-top: 1px solid var(--color-workshop-border);
+  margin: 1.5rem 0;
+}
+
+/* Images */
+.workshop-prose img {
+  border-radius: 8px;
+  max-width: 100%;
+  margin: 1rem 0;
+}
+
+/* =============================================================================
+   Syntax Highlighting (highlight.js dark theme for Workshop)
+   Based on GitHub Dark with Workshop accent colors
+   ============================================================================= */
+
+.workshop-prose .hljs { color: #e8e5f0; }
+.workshop-prose .hljs-comment,
+.workshop-prose .hljs-quote { color: #6d6880; font-style: italic; }
+.workshop-prose .hljs-keyword,
+.workshop-prose .hljs-selector-tag { color: #ff7b72; }
+.workshop-prose .hljs-literal,
+.workshop-prose .hljs-number,
+.workshop-prose .hljs-tag .hljs-attr { color: #79c0ff; }
+.workshop-prose .hljs-string,
+.workshop-prose .hljs-doctag,
+.workshop-prose .hljs-regexp { color: #a5d6ff; }
+.workshop-prose .hljs-title,
+.workshop-prose .hljs-title.function_,
+.workshop-prose .hljs-section { color: #d2a8ff; }
+.workshop-prose .hljs-built_in,
+.workshop-prose .hljs-type { color: #ffa657; }
+.workshop-prose .hljs-variable,
+.workshop-prose .hljs-template-variable { color: #ffa657; }
+.workshop-prose .hljs-name,
+.workshop-prose .hljs-selector-id,
+.workshop-prose .hljs-selector-class { color: #7ee787; }
+.workshop-prose .hljs-attr { color: #79c0ff; }
+.workshop-prose .hljs-attribute { color: #a5d6ff; }
+.workshop-prose .hljs-symbol,
+.workshop-prose .hljs-bullet,
+.workshop-prose .hljs-link { color: #ffa657; }
+.workshop-prose .hljs-meta { color: #79c0ff; }
+.workshop-prose .hljs-deletion { color: #ffa198; background: rgba(248, 81, 73, 0.1); }
+.workshop-prose .hljs-addition { color: #7ee787; background: rgba(46, 160, 67, 0.1); }
+.workshop-prose .hljs-params { color: #e8e5f0; }
+.workshop-prose .hljs-property { color: #79c0ff; }
+.workshop-prose .hljs-punctuation { color: #a8a3b8; }
+.workshop-prose .hljs-operator { color: #ff7b72; }
+.workshop-prose .hljs-subst { color: #e8e5f0; }
+
+/* =============================================================================
+   Loading Skeleton (dark pulse)
+   ============================================================================= */
+
+.workshop-skeleton {
+  background: var(--color-surface-raised);
+  animation: workshop-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes workshop-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

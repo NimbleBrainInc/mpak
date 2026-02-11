@@ -1,0 +1,79 @@
+---
+title: mpak run
+description: Run an MCP server from the registry
+---
+
+Run an MCP server directly from the registry. Bundles are cached locally for fast subsequent runs.
+
+## Usage
+
+```bash
+mpak run <package>
+```
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="tip">
+`mpak run` is a shortcut for `mpak bundle run`. Both work identically.
+</Aside>
+
+## Examples
+
+```bash
+# Run latest version
+mpak run @nimblebraininc/echo
+
+# Run specific version
+mpak run @nimblebraininc/echo@1.0.0
+
+# Force re-download (update cache)
+mpak run @nimblebraininc/echo --update
+
+# Run a local .mcpb bundle file
+mpak run --local ./path/to/bundle.mcpb
+```
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--update` | Force re-download even if cached |
+| `-l, --local <path>` | Run a local `.mcpb` bundle file instead of fetching from the registry |
+
+## How It Works
+
+1. **Check cache** - Look for bundle in `~/.mpak/cache/`
+2. **Download** - If not cached (or `--update`), download from registry
+3. **Extract** - Unzip the `.mcpb` file
+4. **Run** - Execute the server using the bundled configuration
+
+The server runs in the foreground, communicating via stdio (JSON-RPC).
+
+## Integration with Claude
+
+See the [Integrations](/integrations/claude-code) section for setting up mpak bundles with:
+
+- [Claude Code](/integrations/claude-code) - One command: `claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo`
+- [Claude Desktop](/integrations/claude-desktop) - JSON config file
+
+## Configuration
+
+Some bundles require configuration (API keys, etc.). See [mpak config](/cli/config) for storing configuration values.
+
+## Troubleshooting
+
+### Bundle not found
+
+```
+Error: No bundle found for @owner/package on darwin-arm64
+```
+
+The bundle may not be available for your platform. Check available platforms with `mpak bundle show`.
+
+### Python not found
+
+```
+Error: python3 not found
+```
+
+Python-based bundles require Python 3.10+ to be installed and available in your PATH.

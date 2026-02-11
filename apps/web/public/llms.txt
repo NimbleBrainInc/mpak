@@ -1,0 +1,69 @@
+# mpak
+
+> mpak is the secure, open-source package registry for MCP (Model Context Protocol) servers and Agent Skills. Standardized packaging, automated security scanning, and public trust scores for AI tool distribution.
+
+mpak is available at [mpak.dev](https://www.mpak.dev). Install the CLI with `npm install -g @nimblebrain/mpak`.
+
+## Package Types
+
+mpak hosts two types of packages:
+
+**Bundles** are pre-packaged MCP servers in the MCPB format that give AI agents new capabilities (database access, API integrations, file operations). They work cross-platform (macOS, Linux, Windows) and install with a single command: `mpak bundle pull @scope/name`.
+
+**Skills** are markdown instructions that teach AI agents new behaviors and domain expertise (code review patterns, writing styles, specialized knowledge). They follow the Agent Skills specification and work across AI platforms. Install with: `mpak skill install @scope/name`.
+
+## Security Model
+
+Every bundle published to mpak is scanned by the mpak Trust Framework (MTF) with 25 security controls across 5 domains:
+
+- **Supply Chain (SC)**: Dependencies are known, vulnerability-free, and from trusted sources
+- **Code Quality (CQ)**: Code is free from secrets, malware, and security defects
+- **Artifact Integrity (AI)**: Bundle has not been tampered with and can be verified
+- **Provenance (PR)**: Origin and build process are verifiable and trustworthy
+- **Capability Declaration (CD)**: Bundles accurately declare their capabilities and permissions
+
+Certification levels:
+
+- **L1 Basic** (6/25 controls): No embedded secrets, no malware patterns, valid manifest. For personal projects.
+- **L2 Standard** (14/25 controls): CVE + EPSS vulnerability scanning, dependency pinning, anti-slopsquatting, tool description safety. For teams.
+- **L3 Verified** (22/25 controls): Cryptographic bundle signatures, build provenance attestation, OpenSSF Scorecard. For production.
+- **L4 Attested** (25/25 controls): Behavioral analysis sandbox, reproducible builds, full provenance chain. For critical infrastructure.
+
+MCP-specific controls unique to mpak:
+
+- **Tool Description Safety (CD-03)**: Detects prompt injection in MCP tool descriptions
+- **Anti-Slopsquatting (CQ-06)**: Blocks packages named after LLM-hallucinated package names
+- **Credential Scope Declaration (CD-04)**: Enforces minimal declared OAuth scopes
+- **Behavioral Analysis (CQ-07)**: Isolated sandbox monitoring of runtime behavior
+
+## CLI Usage
+
+```
+npm install -g @nimblebrain/mpak
+mpak search postgres
+mpak bundle pull @mcp/server-postgres
+mpak skill install @scope/skill-name
+```
+
+## Publishing
+
+Publishers add a `manifest.json` to their MCP server repo and the `mcpb-pack` GitHub Action. On release, the action builds the MCPB bundle, scans it with MTF, computes a trust score, and publishes to the registry automatically.
+
+## Documentation
+
+- [Browse Bundles](https://www.mpak.dev/bundles): Search and discover MCP server bundles
+- [Browse Skills](https://www.mpak.dev/skills): Search and discover agent skills
+- [Security Certification](https://www.mpak.dev/security): MTF certification levels and security domains
+- [Publish Bundles](https://www.mpak.dev/publish/bundles): Guide to publishing MCP servers
+- [Publish Skills](https://www.mpak.dev/publish/skills): Guide to publishing agent skills
+- [Full Documentation](https://docs.mpak.dev): Complete mpak documentation
+- [About](https://www.mpak.dev/about): About mpak and NimbleBrain
+
+## Optional
+
+- [mpak Whitepaper](https://www.mpak.dev/mpak-whitepaper.pdf): Technical whitepaper on mpak architecture
+- [mpak on GitHub](https://github.com/NimbleBrainInc/mpak): Open source CLI and registry (Apache 2.0)
+- [mcpb-pack GitHub Action](https://github.com/NimbleBrainInc/mcpb-pack): Build and publish action
+- [mpak Security Scanner](https://github.com/NimbleBrainInc/mpak): MTF security scanner
+- [MTF Specification](https://mpaktrust.org): Full mpak Trust Framework specification
+- [Contact](https://www.mpak.dev/contact): Contact the mpak team

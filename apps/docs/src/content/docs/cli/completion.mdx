@@ -1,0 +1,56 @@
+---
+title: mpak completion
+description: Generate shell completion scripts
+---
+
+Generate shell completion scripts for tab-completion of mpak commands and subcommands.
+
+## Usage
+
+```bash
+mpak completion <shell>
+```
+
+Supported shells: `bash`, `zsh`, `fish`
+
+## Installation
+
+### Bash
+
+```bash
+# Add to current session
+eval "$(mpak completion bash)"
+
+# Or persist in your profile
+mpak completion bash >> ~/.bashrc
+```
+
+### Zsh
+
+```bash
+# Add to current session
+eval "$(mpak completion zsh)"
+
+# Or save to completions directory
+mpak completion zsh > ~/.zsh/completions/_mpak
+```
+
+### Fish
+
+```bash
+# Add to current session
+mpak completion fish | source
+
+# Or persist
+mpak completion fish > ~/.config/fish/completions/mpak.fish
+```
+
+## What Gets Completed
+
+The completion scripts provide tab-completion for:
+
+- Top-level commands: `search`, `run`, `bundle`, `skill`, `config`, `completion`, `help`
+- `bundle` subcommands: `search`, `show`, `pull`, `run`
+- `skill` subcommands: `validate`, `pack`, `search`, `show`, `pull`, `install`, `list`
+- `config` subcommands: `set`, `get`, `list`, `clear`
+- `completion` shells: `bash`, `zsh`, `fish`

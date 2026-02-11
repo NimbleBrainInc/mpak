@@ -1,0 +1,85 @@
+---
+title: Quickstart
+description: Run your first MCP server in 2 minutes
+---
+
+import { CardGrid, LinkCard, Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+## Install the CLI
+
+```bash
+npm install -g @nimblebrain/mpak
+```
+
+<Aside>
+  Requires Node.js 18 or later. You can also use `npx @nimblebrain/mpak` without installing.
+</Aside>
+
+## Search for a bundle
+
+Find MCP servers in the registry:
+
+```bash
+mpak bundle search echo
+```
+
+```
+  @nimblebraininc/echo (1.0.0)
+  A simple echo MCP server for testing
+  python | 2.1 KB | 1,250 downloads
+```
+
+## Run it
+
+```bash
+mpak bundle run @nimblebraininc/echo
+```
+
+That's it. The CLI:
+1. Downloads the bundle from mpak.dev
+2. Extracts it to `~/.mpak/cache/`
+3. Runs the MCP server
+
+## Use with Claude Desktop
+
+Add the server to your Claude Desktop config:
+
+<Tabs>
+  <TabItem label="macOS">
+    ```json
+    // ~/Library/Application Support/Claude/claude_desktop_config.json
+    {
+      "mcpServers": {
+        "echo": {
+          "command": "mpak",
+          "args": ["bundle", "run", "@nimblebraininc/echo"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```json
+    // %APPDATA%\Claude\claude_desktop_config.json
+    {
+      "mcpServers": {
+        "echo": {
+          "command": "mpak",
+          "args": ["bundle", "run", "@nimblebraininc/echo"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+Restart Claude Desktop to load the server.
+
+## Next Steps
+
+<CardGrid>
+  <LinkCard title="What is an MCP Bundle?" description="Deep dive on the bundle format and why it matters" href="/bundles/what-is-mcpb" />
+  <LinkCard title="CLI Reference" description="Full documentation for all CLI commands" href="/cli/install" />
+  <LinkCard title="Publish a Bundle" description="Package and publish your own MCP server" href="/bundles/migrating" />
+  <LinkCard title="Publish a Skill" description="Distribute domain knowledge as a skill" href="/skills/overview" />
+</CardGrid>
