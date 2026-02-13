@@ -62,7 +62,9 @@ src/mpak_scanner/
     └── capability_declaration/  # CD-01, CD-02, CD-03
 
 tests/
-├── test_scanner.py       # All tests
+├── test_scanner.py       # Unit + fixture-based integration tests
+├── test_e2e_bundles.py   # E2E tests against real registry bundles
+├── data/                 # Downloaded bundles for e2e tests (gitignored)
 └── fixtures/             # Test bundles (see fixtures/README.md)
     ├── clean-l1-bundle/      # Passes Level 1
     ├── has-secrets-bundle/   # Fails CQ-01
@@ -128,35 +130,58 @@ Located in `tests/fixtures/`. Each fixture tests specific controls:
 - `node-server-bundle/` - Clean Node.js bundle, passes CQ-05
 - `unsafe-node-bundle/` - Contains unsafe patterns (CQ-05 should fail)
 
+## E2E Tests
+
+End-to-end tests scan real bundles pulled from the mpak registry. They catch false positives and regressions that synthetic fixtures miss.
+
+### Setup (one-time)
+
+```bash
+mpak bundle pull @nimblebraininc/finnhub -o tests/data/finnhub.mcpb
+mpak bundle pull @nimblebraininc/folk -o tests/data/folk.mcpb
+mpak bundle pull @nimblebraininc/nationalparks -o tests/data/nationalparks.mcpb
+```
+
+Bundles are stored in `tests/data/` (gitignored). Tests skip gracefully if bundles are missing.
+
+### Running
+
+```bash
+uv run pytest -m e2e -v              # e2e tests only
+uv run pytest tests/test_scanner.py  # unit tests only (fast)
+uv run pytest                        # all tests (unit + e2e)
+```
+
+### Adding new e2e bundles
+
+1. `mpak bundle pull @scope/name -o tests/data/name.mcpb`
+2. Add a `pytest.param()` entry to the appropriate list in `test_e2e_bundles.py`
+
 ## Releasing a New Version
 
 The scanner is distributed via PyPI. The Docker image installs from PyPI, not local source.
 
 ### Steps
 
-1. **Bump version** in three files (must match):
+1. **Bump version** in four files (must all match):
    - `pyproject.toml` (`version = "X.Y.Z"`)
    - `src/mpak_scanner/__init__.py` (`__version__ = "X.Y.Z"`)
    - `src/mpak_scanner/scanner.py` (`SCANNER_VERSION = "X.Y.Z"`)
+   - `Dockerfile` (`mpak-scanner[job]==X.Y.Z`)
 
-2. **Update Dockerfile** version pin:
-   ```dockerfile
-   RUN pip install --no-cache-dir mpak-scanner==X.Y.Z
-   ```
-
-3. **Run verification**:
+2. **Run verification**:
    ```bash
    uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run ty check src/ && uv run pytest
    ```
 
-4. **Commit and push** in `apps/mpak`
+3. **Commit and push** in `apps/mpak`
 
-5. **Publish to PyPI**:
+4. **Publish to PyPI** (from `apps/mpak/apps/scanner/`):
    ```bash
    uv build && uv publish
    ```
 
-6. **Deploy Docker image** (from `hq/deployments/mpak/`):
+5. **Build + push Docker image** (from `hq/deployments/mpak/`):
    ```bash
    make deploy-scanner ENV=production
    make apply-scanner-infra ENV=production  # only if RBAC/secrets changed
