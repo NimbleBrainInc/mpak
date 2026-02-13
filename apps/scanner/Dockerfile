@@ -20,7 +20,7 @@ RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main
 RUN npm install -g eslint eslint-plugin-security --no-fund --no-audit
 
 # mpak-scanner + Python security tools (bandit, guarddog)
-RUN pip install --no-cache-dir "mpak-scanner[job]==0.2.3" bandit guarddog
+RUN pip install --no-cache-dir "mpak-scanner[job]==0.2.4" bandit guarddog
 
 ENTRYPOINT ["mpak-scanner"]
 CMD ["job"]

@@ -227,8 +227,10 @@ class AI05BundleCompleteness(Control):
                     cleaned = arg.replace("${__dirname}/", "")
                     referenced.add(cleaned)
 
-        # _meta.org.mpaktrust metadata (non-executable, always allowed)
-        # These don't need to be in the referenced set since they're not executable
+        # Node.js entry point directory resolution
+        server_type = server.get("type", "") if isinstance(server, dict) else ""
+        if server_type == "node" and entry_point and bundle_dir:
+            self._add_node_entry_point_files(entry_point, bundle_dir, referenced)
 
         return referenced
 
@@ -251,6 +253,27 @@ class AI05BundleCompleteness(Control):
                 for f in package_dir.rglob("*"):
                     if f.is_file():
                         referenced.add(str(f.relative_to(bundle_dir)).replace("\\", "/"))
+
+    def _add_node_entry_point_files(self, entry_point: str, bundle_dir: Path, referenced: set[str]) -> None:
+        """Resolve a Node.js entry point to its sibling modules.
+
+        TypeScript compiles to a directory (build/, dist/) where the entry
+        point imports other .js files. Add all files in the entry point's
+        directory tree as referenced.
+        """
+        entry_path = bundle_dir / entry_point
+        if not entry_path.exists():
+            return
+
+        # Add all files in the entry point's parent directory tree
+        entry_dir = entry_path.parent
+        if entry_dir == bundle_dir:
+            # Entry point is at root; don't add everything
+            return
+
+        for f in entry_dir.rglob("*"):
+            if f.is_file():
+                referenced.add(str(f.relative_to(bundle_dir)).replace("\\", "/"))
 
     def _looks_like_file(self, arg: str) -> bool:
         """Check if an argument looks like a file path."""

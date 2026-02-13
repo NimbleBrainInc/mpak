@@ -70,7 +70,7 @@ __all__ = ["scan_bundle", "extract_bundle"]
 logger = logging.getLogger(__name__)
 
 # Version of the scanner
-SCANNER_VERSION = "0.2.3"
+SCANNER_VERSION = "0.2.4"
 
 # Domain groupings for controls (matches MTF v0.1 spec)
 DOMAINS = {

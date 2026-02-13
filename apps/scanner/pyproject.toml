@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mpak-scanner"
-version = "0.2.3"
+version = "0.2.4"
 description = "Security scanner for MCP bundles. Powers mpak Certified verification."
 readme = "README.md"
 license = "Apache-2.0"
@@ -92,6 +92,9 @@ python-version = "3.13"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end tests against real bundles from the registry (requires tests/data/)",
+]
 
 [dependency-groups]
 dev = [

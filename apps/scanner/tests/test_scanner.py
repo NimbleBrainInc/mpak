@@ -862,6 +862,93 @@ class TestAI05BundleCompleteness:
         assert result.status == ControlStatus.FAIL
         assert any("backdoor.py" in f.file for f in result.findings if f.file)
 
+    def test_node_multi_file_build_passes(self, bundle_dir: Path) -> None:
+        """Node.js entry point in build/ should treat sibling modules as referenced."""
+        manifest = {
+            "name": "@test/node-multi",
+            "version": "1.0.0",
+            "server": {
+                "type": "node",
+                "entry_point": "build/index.js",
+                "mcp_config": {
+                    "command": "node",
+                    "args": ["${__dirname}/build/index.js", "--stdio"],
+                },
+            },
+        }
+        (bundle_dir / "manifest.json").write_text(json.dumps(manifest))
+        (bundle_dir / "package.json").write_text('{"name": "test"}')
+        build = bundle_dir / "build"
+        build.mkdir()
+        (build / "index.js").write_text("import './config.js';")
+        (build / "config.js").write_text("export const cfg = {};")
+        (build / "schemas.js").write_text("export const schemas = {};")
+        handlers = build / "handlers"
+        handlers.mkdir()
+        (handlers / "findParks.js").write_text("export function findParks() {}")
+        (handlers / "getAlerts.js").write_text("export function getAlerts() {}")
+
+        from mpak_scanner.controls.artifact_integrity import AI05BundleCompleteness
+
+        control = AI05BundleCompleteness()
+        result = control.run(bundle_dir, manifest)
+        assert result.status == ControlStatus.PASS
+
+    def test_node_build_with_stray_script_fails(self, bundle_dir: Path) -> None:
+        """Node.js build/ files are allowed but stray scripts at root should fail."""
+        manifest = {
+            "name": "@test/node-stray",
+            "version": "1.0.0",
+            "server": {
+                "type": "node",
+                "entry_point": "build/index.js",
+                "mcp_config": {
+                    "command": "node",
+                    "args": ["${__dirname}/build/index.js"],
+                },
+            },
+        }
+        (bundle_dir / "manifest.json").write_text(json.dumps(manifest))
+        build = bundle_dir / "build"
+        build.mkdir()
+        (build / "index.js").write_text("console.log('ok')")
+        # Stray script outside build/
+        (bundle_dir / "deploy.sh").write_text("#!/bin/bash\nrm -rf /")
+
+        from mpak_scanner.controls.artifact_integrity import AI05BundleCompleteness
+
+        control = AI05BundleCompleteness()
+        result = control.run(bundle_dir, manifest)
+        assert result.status == ControlStatus.FAIL
+        assert any("deploy.sh" in f.file for f in result.findings if f.file)
+        # build/index.js should NOT be flagged
+        assert not any("build/index.js" in f.file for f in result.findings if f.file)
+
+    def test_node_root_entry_point_no_over_allow(self, bundle_dir: Path) -> None:
+        """Node.js entry point at root should not whitelist all files."""
+        manifest = {
+            "name": "@test/node-root",
+            "version": "1.0.0",
+            "server": {
+                "type": "node",
+                "entry_point": "index.js",
+                "mcp_config": {
+                    "command": "node",
+                    "args": ["${__dirname}/index.js"],
+                },
+            },
+        }
+        (bundle_dir / "manifest.json").write_text(json.dumps(manifest))
+        (bundle_dir / "index.js").write_text("console.log('ok')")
+        (bundle_dir / "backdoor.js").write_text("require('child_process').exec('evil')")
+
+        from mpak_scanner.controls.artifact_integrity import AI05BundleCompleteness
+
+        control = AI05BundleCompleteness()
+        result = control.run(bundle_dir, manifest)
+        assert result.status == ControlStatus.FAIL
+        assert any("backdoor.js" in f.file for f in result.findings if f.file)
+
 
 # =============================================================================
 # Fixture-based Integration Tests

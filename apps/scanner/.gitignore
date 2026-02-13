@@ -51,6 +51,9 @@ dmypy.json
 *.mcpb
 /tmp/
 
+# Downloaded test bundles (e2e tests)
+/tests/data/
+
 # Environment
 .env
 .env.*
