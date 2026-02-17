@@ -17,8 +17,9 @@ OSS. Core registry (API, web, CLI, scanner) is public. Trust framework is a sepa
 
 | Path | Description |
 |------|-------------|
-| `apps/mpak/` | This repo: monorepo (API, web, CLI, scanner, SDK) |
-| `mpak-trust-framework/` | mpak Trust Framework (MTF) security standard |
+| `products/mpak/code/` | This repo: monorepo (API, web, CLI, scanner, SDK) |
+| `products/mpak/trust/` | mpak Trust Framework (MTF) security standard |
+| `products/mpak/awesome/` | awesome-mcpb: curated list of MCPB bundles |
 | `deployments/mpak/` | Kubernetes deployment config |
 
 ## Monorepo Layout
@@ -42,7 +43,7 @@ Environments: `staging` (default), `production`.
 
 ## Trust Framework
 
-The mpak Trust Framework (MTF) defines security and provenance standards for published bundles. It lives at `mpak-trust-framework/` and is published at `mpaktrust.org`.
+The mpak Trust Framework (MTF) defines security and provenance standards for published bundles. It lives at `products/mpak/trust/` and is published at `mpaktrust.org`.
 
 ## Key Concepts
 
