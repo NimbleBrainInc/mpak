@@ -8,6 +8,11 @@
  * If bundles are removed, tests may need updating.
  */
 
+import { createHash } from "crypto";
+import { mkdtemp, rm, readFile, readdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import JSZip from "jszip";
 import { describe, it, expect } from "vitest";
 import { MpakClient } from "../src/client.js";
 import { MpakNotFoundError } from "../src/errors.js";
@@ -92,6 +97,39 @@ describe("MpakClient Integration Tests", () => {
       expect(download.bundle).toBeDefined();
       expect(download.bundle.sha256).toBeDefined();
       expect(download.bundle.size).toBeGreaterThan(0);
+    });
+
+    it("downloads bundle, verifies SHA256, and extracts manifest", async () => {
+      const platform = MpakClient.detectPlatform();
+      const download = await client.getBundleDownload(
+        KNOWN_BUNDLE,
+        "latest",
+        platform,
+      );
+
+      // Download the actual .mcpb file from CDN
+      const response = await fetch(download.url);
+      expect(response.ok).toBe(true);
+
+      const buffer = await response.arrayBuffer();
+      expect(buffer.byteLength).toBeGreaterThan(0);
+
+      // Verify SHA256 integrity
+      const hash = createHash("sha256")
+        .update(Buffer.from(buffer))
+        .digest("hex");
+      expect(hash).toBe(download.bundle.sha256);
+
+      // Extract and verify manifest
+      const zip = await JSZip.loadAsync(buffer);
+      const manifestFile = zip.file("manifest.json");
+      expect(manifestFile).not.toBeNull();
+
+      const manifestText = await manifestFile!.async("string");
+      const manifest = JSON.parse(manifestText);
+      expect(manifest.name).toBe(KNOWN_BUNDLE);
+      expect(manifest.version).toBeDefined();
+      expect(manifest.server).toBeDefined();
     });
 
     it("throws MpakNotFoundError for nonexistent bundle", async () => {

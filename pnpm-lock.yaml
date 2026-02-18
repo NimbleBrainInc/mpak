@@ -149,7 +149,7 @@ importers:
         version: link:../../packages/schemas
       '@nimblebrain/mpak-sdk':
         specifier: workspace:*
-        version: link:../../packages/sdk
+        version: link:../../packages/sdk-typescript
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
@@ -237,7 +237,7 @@ importers:
         version: link:../schemas
       '@nimblebrain/mpak-sdk':
         specifier: workspace:*
-        version: link:../sdk
+        version: link:../sdk-typescript
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -283,7 +283,7 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.10.12)(jiti@2.6.1)(jsdom@28.0.0)(lightningcss@1.30.2)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/sdk:
+  packages/sdk-typescript:
     dependencies:
       '@nimblebrain/mpak-schemas':
         specifier: workspace:*

@@ -165,7 +165,7 @@ Zod schemas and inferred TypeScript types for the MCPB manifest format, API resp
 
 **Key exports:** `BundleSchema`, `SkillSchema`, `MpakJsonSchema`, `SearchParamsSchema`, validation functions.
 
-### `packages/sdk`
+### `packages/sdk-typescript`
 
 TypeScript SDK for interacting with a mpak registry. Wraps the HTTP API with typed methods for searching, downloading, and inspecting bundles and skills.
 
