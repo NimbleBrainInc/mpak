@@ -16,7 +16,7 @@ def test_get_bundle_download():
         "bundle": {
             "name": "@test/echo",
             "version": "1.0.0",
-            "platform": {"os": "linux", "arch": "amd64"},
+            "platform": {"os": "linux", "arch": "x64"},
             "sha256": "abc123def456",
             "size": 1024,
         },
@@ -27,7 +27,7 @@ def test_get_bundle_download():
     )
 
     client = MpakClient()
-    download = client.get_bundle_download("@test/echo", platform=("linux", "amd64"))
+    download = client.get_bundle_download("@test/echo", platform=("linux", "x64"))
 
     assert download.url == "https://cdn.example.com/bundle.mcpb"
     assert download.bundle.sha256 == "abc123def456"
@@ -43,7 +43,7 @@ def test_get_bundle_download_not_found():
 
     client = MpakClient()
     with pytest.raises(MpakNotFoundError) as exc_info:
-        client.get_bundle_download("@test/missing", platform=("linux", "amd64"))
+        client.get_bundle_download("@test/missing", platform=("linux", "x64"))
 
     assert "@test/missing" in str(exc_info.value)
 
@@ -82,4 +82,4 @@ def test_detect_platform_static_method():
     """Test static platform detection method."""
     os_name, arch = MpakClient.detect_platform()
     assert os_name in ("linux", "darwin", "win32")
-    assert arch in ("amd64", "arm64")
+    assert arch in ("x64", "arm64")

@@ -11,7 +11,7 @@ def test_detect_platform():
     assert os_name in ("linux", "darwin", "win32"), f"Unknown OS: {os_name}"
 
     # Should return known arch values
-    assert arch in ("amd64", "arm64"), f"Unknown arch: {arch}"
+    assert arch in ("x64", "arm64"), f"Unknown arch: {arch}"
 
 
 def test_detect_platform_type():

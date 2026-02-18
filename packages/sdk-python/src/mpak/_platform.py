@@ -13,12 +13,12 @@ def detect_platform() -> tuple[str, str]:
         >>> detect_platform()  # On macOS ARM
         ('darwin', 'arm64')
         >>> detect_platform()  # On Linux x86_64
-        ('linux', 'amd64')
+        ('linux', 'x64')
     """
     machine = platform.machine().lower()
     arch_map = {
-        "x86_64": "amd64",
-        "amd64": "amd64",
+        "x86_64": "x64",
+        "amd64": "x64",
         "aarch64": "arm64",
         "arm64": "arm64",
     }

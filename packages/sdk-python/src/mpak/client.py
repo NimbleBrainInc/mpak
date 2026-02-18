@@ -35,7 +35,10 @@ class MpakClient:
         self._client = httpx.Client(
             base_url=self.config.base_url,
             timeout=self.config.timeout,
-            headers={"User-Agent": self.config.user_agent},
+            headers={
+                "User-Agent": self.config.user_agent,
+                "Accept": "application/json",
+            },
             follow_redirects=True,
         )
 

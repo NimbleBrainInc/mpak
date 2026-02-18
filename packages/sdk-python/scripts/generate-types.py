@@ -91,11 +91,7 @@ def main():
     # Post-process: replace EmailStr with str (avoids email-validator dependency)
     print("Post-processing generated types...")
     content = output_file.read_text()
-    content = content.replace(
-        "    EmailStr,\n", ""
-    ).replace(
-        "EmailStr", "str"
-    )
+    content = content.replace("    EmailStr,\n", "").replace("EmailStr", "str")
 
     # Add header comment
     header = '''"""
