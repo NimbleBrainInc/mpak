@@ -1,13 +1,12 @@
 # @nimblebrain/mpak-sdk
 
-TypeScript SDK for mpak registry - MCPB bundles and Agent Skills.
+[![CI](https://github.com/NimbleBrainInc/mpak/actions/workflows/sdk-typescript-ci.yml/badge.svg)](https://github.com/NimbleBrainInc/mpak/actions/workflows/sdk-typescript-ci.yml)
+[![npm](https://img.shields.io/npm/v/@nimblebrain/mpak-sdk)](https://www.npmjs.com/package/@nimblebrain/mpak-sdk)
+[![Node](https://img.shields.io/node/v/@nimblebrain/mpak-sdk)](https://www.npmjs.com/package/@nimblebrain/mpak-sdk)
+[![License](https://img.shields.io/npm/l/@nimblebrain/mpak-sdk)](https://github.com/NimbleBrainInc/mpak/blob/main/packages/sdk-typescript/LICENSE)
+[![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
 
-## Features
-
-- Type-safe API (types from `@nimblebrain/mpak-schemas`)
-- Fail-closed integrity verification
-- Skill resolution from mpak, GitHub, and URL sources
-- Requires Node.js 18+ (native fetch)
+TypeScript SDK for the mpak registry - search, download, and resolve MCPB bundles and Agent Skills.
 
 ## Installation
 
@@ -15,9 +14,7 @@ TypeScript SDK for mpak registry - MCPB bundles and Agent Skills.
 pnpm add @nimblebrain/mpak-sdk
 ```
 
-## Usage
-
-### Search Bundles
+## Quick Start
 
 ```typescript
 import { MpakClient } from '@nimblebrain/mpak-sdk';
@@ -26,11 +23,17 @@ const client = new MpakClient();
 
 // Search for bundles
 const results = await client.searchBundles({ q: 'mcp', limit: 10 });
-
 for (const bundle of results.bundles) {
   console.log(`${bundle.name}@${bundle.latest_version}`);
 }
+
+// Get download info
+const download = await client.getBundleDownload('@nimblebraininc/echo', 'latest');
+console.log(`Download URL: ${download.url}`);
+console.log(`SHA256: ${download.bundle.sha256}`);
 ```
+
+## Usage
 
 ### Get Bundle Details
 
@@ -39,20 +42,6 @@ const bundle = await client.getBundle('@nimblebraininc/echo');
 
 console.log(bundle.description);
 console.log(`Versions: ${bundle.versions.map(v => v.version).join(', ')}`);
-```
-
-### Download a Bundle
-
-```typescript
-// Get download info for the latest version
-const versions = await client.getBundleVersions('@nimblebraininc/echo');
-const download = await client.getBundleDownload(
-  '@nimblebraininc/echo',
-  versions.latest
-);
-
-console.log(`Download URL: ${download.url}`);
-console.log(`SHA256: ${download.bundle.sha256}`);
 ```
 
 ### Platform-Specific Downloads
@@ -219,6 +208,50 @@ pnpm typecheck
 # Build
 pnpm build
 ```
+
+### Verification
+
+Run all checks before submitting changes:
+
+```bash
+pnpm --filter @nimblebrain/mpak-sdk lint           # lint
+pnpm --filter @nimblebrain/mpak-sdk exec prettier --check "src/**/*.ts" "tests/**/*.ts"  # format
+pnpm --filter @nimblebrain/mpak-sdk typecheck       # type check
+pnpm --filter @nimblebrain/mpak-sdk test            # unit tests
+pnpm --filter @nimblebrain/mpak-sdk test:integration  # integration tests (hits live registry)
+```
+
+CI runs lint, format check, typecheck, and unit tests on every PR via [`sdk-typescript-ci.yml`](../../.github/workflows/sdk-typescript-ci.yml).
+
+## Releasing
+
+Releases are automated via GitHub Actions. The publish workflow is triggered by git tags.
+
+**Version is defined in one place:** `package.json`.
+
+### Steps
+
+1. **Bump version** in `package.json`:
+   ```bash
+   cd packages/sdk-typescript
+   npm version patch   # 0.1.0 -> 0.1.1
+   npm version minor   # 0.1.0 -> 0.2.0
+   npm version major   # 0.1.0 -> 1.0.0
+   ```
+
+2. **Commit and push:**
+   ```bash
+   git commit -am "sdk-typescript: bump to X.Y.Z"
+   git push
+   ```
+
+3. **Tag and push** (this triggers the publish):
+   ```bash
+   git tag sdk-typescript-vX.Y.Z
+   git push origin sdk-typescript-vX.Y.Z
+   ```
+
+CI will run the full verification suite, verify the tag matches `package.json`, build, and publish to npm. See [`sdk-typescript-publish.yml`](../../.github/workflows/sdk-typescript-publish.yml).
 
 ## License
 

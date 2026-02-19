@@ -9,9 +9,6 @@
  */
 
 import { createHash } from "crypto";
-import { mkdtemp, rm, readFile, readdir } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
 import JSZip from "jszip";
 import { describe, it, expect } from "vitest";
 import { MpakClient } from "../src/client.js";
@@ -108,7 +105,9 @@ describe("MpakClient Integration Tests", () => {
       );
 
       // Download the actual .mcpb file from CDN
-      const response = await fetch(download.url);
+      const response = await fetch(download.url, {
+        signal: AbortSignal.timeout(30_000),
+      });
       expect(response.ok).toBe(true);
 
       const buffer = await response.arrayBuffer();

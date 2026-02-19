@@ -67,6 +67,10 @@ export class MpakClient {
 
     const response = await this.fetchWithTimeout(url);
 
+    if (response.status === 404) {
+      throw new MpakNotFoundError("bundles/search endpoint");
+    }
+
     if (!response.ok) {
       throw new MpakNetworkError(
         `Failed to search bundles: HTTP ${response.status}`,
@@ -204,6 +208,10 @@ export class MpakClient {
     const url = `${this.registryUrl}/v1/skills/search${queryString ? `?${queryString}` : ""}`;
 
     const response = await this.fetchWithTimeout(url);
+
+    if (response.status === 404) {
+      throw new MpakNotFoundError("skills/search endpoint");
+    }
 
     if (!response.ok) {
       throw new MpakNetworkError(

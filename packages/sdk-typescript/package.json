@@ -50,7 +50,7 @@
     "build": "tsup",
     "clean": "rm -rf dist coverage",
     "dev": "tsup --watch",
-    "lint": "eslint src/",
+    "lint": "eslint src/ tests/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
