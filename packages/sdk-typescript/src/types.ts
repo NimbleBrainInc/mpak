@@ -19,7 +19,7 @@ import type {
   FullProvenance,
   Bundle,
   SkillSummary,
-} from "@nimblebrain/mpak-schemas";
+} from '@nimblebrain/mpak-schemas';
 
 // =============================================================================
 // Re-exports from @nimblebrain/mpak-schemas
@@ -56,10 +56,10 @@ export type { Bundle };
 export type { BundleDetail };
 
 /** Version in versions listing */
-export type BundleVersion = VersionsResponse["versions"][number];
+export type BundleVersion = VersionsResponse['versions'][number];
 
 /** Artifact in version detail */
-export type BundleArtifact = VersionDetail["artifacts"][number];
+export type BundleArtifact = VersionDetail['artifacts'][number];
 
 /** Download info alias */
 export type BundleDownloadInfo = DownloadInfo;
@@ -74,7 +74,7 @@ export type { SkillDetail };
 export type { SkillDownloadInfo };
 
 /** Skill version in detail */
-export type SkillVersion = SkillDetail["versions"][number];
+export type SkillVersion = SkillDetail['versions'][number];
 
 // =============================================================================
 // Common Types
@@ -104,7 +104,7 @@ export interface Author {
 export interface BundleSearchParams {
   q?: string;
   type?: string;
-  sort?: "downloads" | "recent" | "name";
+  sort?: 'downloads' | 'recent' | 'name';
   limit?: number;
   offset?: number;
 }
@@ -115,7 +115,7 @@ export interface SkillSearchParams {
   tags?: string;
   category?: string;
   surface?: string;
-  sort?: "downloads" | "recent" | "name";
+  sort?: 'downloads' | 'recent' | 'name';
   limit?: number;
   offset?: number;
 }
@@ -167,14 +167,14 @@ interface SkillReferenceBase {
  * Skill reference from mpak registry
  */
 export interface MpakSkillReference extends SkillReferenceBase {
-  source: "mpak";
+  source: 'mpak';
 }
 
 /**
  * Skill reference from GitHub repository
  */
 export interface GithubSkillReference extends SkillReferenceBase {
-  source: "github";
+  source: 'github';
   /** GitHub repository (owner/repo) */
   repo: string;
   /** Path to skill file in repo */
@@ -185,7 +185,7 @@ export interface GithubSkillReference extends SkillReferenceBase {
  * Skill reference from direct URL
  */
 export interface UrlSkillReference extends SkillReferenceBase {
-  source: "url";
+  source: 'url';
   /** Direct download URL */
   url: string;
 }
@@ -193,10 +193,7 @@ export interface UrlSkillReference extends SkillReferenceBase {
 /**
  * Discriminated union of skill reference types
  */
-export type SkillReference =
-  | MpakSkillReference
-  | GithubSkillReference
-  | UrlSkillReference;
+export type SkillReference = MpakSkillReference | GithubSkillReference | UrlSkillReference;
 
 /**
  * Result of resolving a skill reference
@@ -207,7 +204,7 @@ export interface ResolvedSkill {
   /** Version that was resolved */
   version: string;
   /** Source the skill was fetched from */
-  source: "mpak" | "github" | "url";
+  source: 'mpak' | 'github' | 'url';
   /** Whether integrity was verified */
   verified: boolean;
 }

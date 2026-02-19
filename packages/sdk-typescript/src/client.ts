@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash } from 'crypto';
 import type {
   MpakClientConfig,
   BundleSearchParams,
@@ -14,18 +14,11 @@ import type {
   GithubSkillReference,
   UrlSkillReference,
   ResolvedSkill,
-} from "./types.js";
-import type {
-  BundleSearchResponse,
-  SkillSearchResponse,
-} from "@nimblebrain/mpak-schemas";
-import {
-  MpakNotFoundError,
-  MpakIntegrityError,
-  MpakNetworkError,
-} from "./errors.js";
+} from './types.js';
+import type { BundleSearchResponse, SkillSearchResponse } from '@nimblebrain/mpak-schemas';
+import { MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from './errors.js';
 
-const DEFAULT_REGISTRY_URL = "https://registry.mpak.dev";
+const DEFAULT_REGISTRY_URL = 'https://registry.mpak.dev';
 const DEFAULT_TIMEOUT = 30000;
 
 /**
@@ -52,29 +45,25 @@ export class MpakClient {
   /**
    * Search for bundles
    */
-  async searchBundles(
-    params: BundleSearchParams = {},
-  ): Promise<BundleSearchResponse> {
+  async searchBundles(params: BundleSearchParams = {}): Promise<BundleSearchResponse> {
     const searchParams = new URLSearchParams();
-    if (params.q) searchParams.set("q", params.q);
-    if (params.type) searchParams.set("type", params.type);
-    if (params.sort) searchParams.set("sort", params.sort);
-    if (params.limit) searchParams.set("limit", String(params.limit));
-    if (params.offset) searchParams.set("offset", String(params.offset));
+    if (params.q) searchParams.set('q', params.q);
+    if (params.type) searchParams.set('type', params.type);
+    if (params.sort) searchParams.set('sort', params.sort);
+    if (params.limit) searchParams.set('limit', String(params.limit));
+    if (params.offset) searchParams.set('offset', String(params.offset));
 
     const queryString = searchParams.toString();
-    const url = `${this.registryUrl}/v1/bundles/search${queryString ? `?${queryString}` : ""}`;
+    const url = `${this.registryUrl}/v1/bundles/search${queryString ? `?${queryString}` : ''}`;
 
     const response = await this.fetchWithTimeout(url);
 
     if (response.status === 404) {
-      throw new MpakNotFoundError("bundles/search endpoint");
+      throw new MpakNotFoundError('bundles/search endpoint');
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to search bundles: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to search bundles: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<BundleSearchResponse>;
@@ -94,9 +83,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get bundle: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get bundle: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<BundleDetailResponse>;
@@ -116,9 +103,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get bundle versions: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get bundle versions: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<BundleVersionsResponse>;
@@ -127,10 +112,7 @@ export class MpakClient {
   /**
    * Get a specific version of a bundle
    */
-  async getBundleVersion(
-    name: string,
-    version: string,
-  ): Promise<BundleVersionResponse> {
+  async getBundleVersion(name: string, version: string): Promise<BundleVersionResponse> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}`;
@@ -141,9 +123,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get bundle version: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get bundle version: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<BundleVersionResponse>;
@@ -161,15 +141,15 @@ export class MpakClient {
 
     const params = new URLSearchParams();
     if (platform) {
-      params.set("os", platform.os);
-      params.set("arch", platform.arch);
+      params.set('os', platform.os);
+      params.set('arch', platform.arch);
     }
 
     const queryString = params.toString();
-    const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ""}`;
+    const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ''}`;
 
     const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: 'application/json' },
     });
 
     if (response.status === 404) {
@@ -177,9 +157,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get bundle download: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get bundle download: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<BundleDownloadResponse>;
@@ -192,31 +170,27 @@ export class MpakClient {
   /**
    * Search for skills
    */
-  async searchSkills(
-    params: SkillSearchParams = {},
-  ): Promise<SkillSearchResponse> {
+  async searchSkills(params: SkillSearchParams = {}): Promise<SkillSearchResponse> {
     const searchParams = new URLSearchParams();
-    if (params.q) searchParams.set("q", params.q);
-    if (params.tags) searchParams.set("tags", params.tags);
-    if (params.category) searchParams.set("category", params.category);
-    if (params.surface) searchParams.set("surface", params.surface);
-    if (params.sort) searchParams.set("sort", params.sort);
-    if (params.limit) searchParams.set("limit", String(params.limit));
-    if (params.offset) searchParams.set("offset", String(params.offset));
+    if (params.q) searchParams.set('q', params.q);
+    if (params.tags) searchParams.set('tags', params.tags);
+    if (params.category) searchParams.set('category', params.category);
+    if (params.surface) searchParams.set('surface', params.surface);
+    if (params.sort) searchParams.set('sort', params.sort);
+    if (params.limit) searchParams.set('limit', String(params.limit));
+    if (params.offset) searchParams.set('offset', String(params.offset));
 
     const queryString = searchParams.toString();
-    const url = `${this.registryUrl}/v1/skills/search${queryString ? `?${queryString}` : ""}`;
+    const url = `${this.registryUrl}/v1/skills/search${queryString ? `?${queryString}` : ''}`;
 
     const response = await this.fetchWithTimeout(url);
 
     if (response.status === 404) {
-      throw new MpakNotFoundError("skills/search endpoint");
+      throw new MpakNotFoundError('skills/search endpoint');
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to search skills: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to search skills: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<SkillSearchResponse>;
@@ -236,9 +210,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get skill: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get skill: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<SkillDetailResponse>;
@@ -253,7 +225,7 @@ export class MpakClient {
     const url = `${this.registryUrl}/v1/skills/${name}/download`;
 
     const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: 'application/json' },
     });
 
     if (response.status === 404) {
@@ -261,9 +233,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get skill download: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<SkillDownloadResponse>;
@@ -272,16 +242,13 @@ export class MpakClient {
   /**
    * Get download info for a specific skill version
    */
-  async getSkillVersionDownload(
-    name: string,
-    version: string,
-  ): Promise<SkillDownloadResponse> {
+  async getSkillVersionDownload(name: string, version: string): Promise<SkillDownloadResponse> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/skills/${name}/versions/${version}/download`;
 
     const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: 'application/json' },
     });
 
     if (response.status === 404) {
@@ -289,9 +256,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to get skill download: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
     }
 
     return response.json() as Promise<SkillDownloadResponse>;
@@ -309,9 +274,7 @@ export class MpakClient {
     const response = await this.fetchWithTimeout(downloadUrl);
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to download skill: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to download skill: HTTP ${response.status}`);
     }
 
     const content = await response.text();
@@ -366,17 +329,15 @@ export class MpakClient {
    */
   async resolveSkillRef(ref: SkillReference): Promise<ResolvedSkill> {
     switch (ref.source) {
-      case "mpak":
+      case 'mpak':
         return this.resolveMpakSkill(ref);
-      case "github":
+      case 'github':
         return this.resolveGithubSkill(ref);
-      case "url":
+      case 'url':
         return this.resolveUrlSkill(ref);
       default: {
         const _exhaustive: never = ref;
-        throw new Error(
-          `Unknown skill source: ${(_exhaustive as SkillReference).source}`,
-        );
+        throw new Error(`Unknown skill source: ${(_exhaustive as SkillReference).source}`);
       }
     }
   }
@@ -386,9 +347,7 @@ export class MpakClient {
    *
    * The API returns a ZIP bundle containing SKILL.md and metadata.
    */
-  private async resolveMpakSkill(
-    ref: SkillReference & { source: "mpak" },
-  ): Promise<ResolvedSkill> {
+  private async resolveMpakSkill(ref: SkillReference & { source: 'mpak' }): Promise<ResolvedSkill> {
     const url = `${this.registryUrl}/v1/skills/${ref.name}/versions/${ref.version}/download`;
 
     const response = await this.fetchWithTimeout(url);
@@ -398,9 +357,7 @@ export class MpakClient {
     }
 
     if (!response.ok) {
-      throw new MpakNetworkError(
-        `Failed to fetch skill: HTTP ${response.status}`,
-      );
+      throw new MpakNetworkError(`Failed to fetch skill: HTTP ${response.status}`);
     }
 
     // Response is a ZIP file - extract SKILL.md
@@ -409,25 +366,21 @@ export class MpakClient {
 
     if (ref.integrity) {
       this.verifyIntegrityOrThrow(content, ref.integrity);
-      return { content, version: ref.version, source: "mpak", verified: true };
+      return { content, version: ref.version, source: 'mpak', verified: true };
     }
 
-    return { content, version: ref.version, source: "mpak", verified: false };
+    return { content, version: ref.version, source: 'mpak', verified: false };
   }
 
   /**
    * Resolve a skill from GitHub releases
    */
-  private async resolveGithubSkill(
-    ref: GithubSkillReference,
-  ): Promise<ResolvedSkill> {
+  private async resolveGithubSkill(ref: GithubSkillReference): Promise<ResolvedSkill> {
     const url = `https://github.com/${ref.repo}/releases/download/${ref.version}/${ref.path}`;
     const response = await this.fetchWithTimeout(url);
 
     if (!response.ok) {
-      throw new MpakNotFoundError(
-        `github:${ref.repo}/${ref.path}@${ref.version}`,
-      );
+      throw new MpakNotFoundError(`github:${ref.repo}/${ref.path}@${ref.version}`);
     }
 
     const content = await response.text();
@@ -437,7 +390,7 @@ export class MpakClient {
       return {
         content,
         version: ref.version,
-        source: "github",
+        source: 'github',
         verified: true,
       };
     }
@@ -445,7 +398,7 @@ export class MpakClient {
     return {
       content,
       version: ref.version,
-      source: "github",
+      source: 'github',
       verified: false,
     };
   }
@@ -453,9 +406,7 @@ export class MpakClient {
   /**
    * Resolve a skill from a direct URL
    */
-  private async resolveUrlSkill(
-    ref: UrlSkillReference,
-  ): Promise<ResolvedSkill> {
+  private async resolveUrlSkill(ref: UrlSkillReference): Promise<ResolvedSkill> {
     const response = await this.fetchWithTimeout(ref.url);
 
     if (!response.ok) {
@@ -466,39 +417,34 @@ export class MpakClient {
 
     if (ref.integrity) {
       this.verifyIntegrityOrThrow(content, ref.integrity);
-      return { content, version: ref.version, source: "url", verified: true };
+      return { content, version: ref.version, source: 'url', verified: true };
     }
 
-    return { content, version: ref.version, source: "url", verified: false };
+    return { content, version: ref.version, source: 'url', verified: false };
   }
 
   /**
    * Extract SKILL.md content from a skill bundle ZIP
    */
-  private async extractSkillFromZip(
-    zipBuffer: ArrayBuffer,
-    skillName: string,
-  ): Promise<string> {
-    const JSZip = (await import("jszip")).default;
+  private async extractSkillFromZip(zipBuffer: ArrayBuffer, skillName: string): Promise<string> {
+    const JSZip = (await import('jszip')).default;
     const zip = await JSZip.loadAsync(zipBuffer);
 
     // Skill name format: @scope/name -> folder is just 'name'
-    const folderName = skillName.split("/").pop() ?? skillName;
+    const folderName = skillName.split('/').pop() ?? skillName;
     const skillPath = `${folderName}/SKILL.md`;
 
     const skillFile = zip.file(skillPath);
     if (!skillFile) {
       // Try without folder prefix
-      const altFile = zip.file("SKILL.md");
+      const altFile = zip.file('SKILL.md');
       if (!altFile) {
-        throw new MpakNotFoundError(
-          `SKILL.md not found in bundle for ${skillName}`,
-        );
+        throw new MpakNotFoundError(`SKILL.md not found in bundle for ${skillName}`);
       }
-      return altFile.async("string");
+      return altFile.async('string');
     }
 
-    return skillFile.async("string");
+    return skillFile.async('string');
   }
 
   /**
@@ -517,10 +463,10 @@ export class MpakClient {
    * Extract hash from integrity string (removes prefix)
    */
   private extractHash(integrity: string): string {
-    if (integrity.startsWith("sha256:")) {
+    if (integrity.startsWith('sha256:')) {
       return integrity.slice(7);
     }
-    if (integrity.startsWith("sha256-")) {
+    if (integrity.startsWith('sha256-')) {
       return integrity.slice(7);
     }
     return integrity;
@@ -539,29 +485,29 @@ export class MpakClient {
 
     let os: string;
     switch (nodePlatform) {
-      case "darwin":
-        os = "darwin";
+      case 'darwin':
+        os = 'darwin';
         break;
-      case "win32":
-        os = "win32";
+      case 'win32':
+        os = 'win32';
         break;
-      case "linux":
-        os = "linux";
+      case 'linux':
+        os = 'linux';
         break;
       default:
-        os = "any";
+        os = 'any';
     }
 
     let arch: string;
     switch (nodeArch) {
-      case "x64":
-        arch = "x64";
+      case 'x64':
+        arch = 'x64';
         break;
-      case "arm64":
-        arch = "arm64";
+      case 'arm64':
+        arch = 'arm64';
         break;
       default:
-        arch = "any";
+        arch = 'any';
     }
 
     return { os, arch };
@@ -571,27 +517,22 @@ export class MpakClient {
    * Compute SHA256 hash of content
    */
   private computeSha256(content: string): string {
-    return createHash("sha256").update(content, "utf8").digest("hex");
+    return createHash('sha256').update(content, 'utf8').digest('hex');
   }
 
   /**
    * Validate that a name is scoped (@scope/name)
    */
   private validateScopedName(name: string): void {
-    if (!name.startsWith("@")) {
-      throw new Error(
-        "Package name must be scoped (e.g., @scope/package-name)",
-      );
+    if (!name.startsWith('@')) {
+      throw new Error('Package name must be scoped (e.g., @scope/package-name)');
     }
   }
 
   /**
    * Fetch with timeout support
    */
-  private async fetchWithTimeout(
-    url: string,
-    init?: RequestInit,
-  ): Promise<Response> {
+  private async fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
@@ -601,7 +542,7 @@ export class MpakClient {
       ...(init?.headers as Record<string, string>),
     };
     if (this.userAgent) {
-      headers["User-Agent"] = this.userAgent;
+      headers['User-Agent'] = this.userAgent;
     }
 
     try {
@@ -611,14 +552,10 @@ export class MpakClient {
         signal: controller.signal,
       });
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new MpakNetworkError(
-          `Request timeout after ${this.timeout}ms`,
-        );
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new MpakNetworkError(`Request timeout after ${this.timeout}ms`);
       }
-      throw new MpakNetworkError(
-        error instanceof Error ? error.message : "Network error",
-      );
+      throw new MpakNetworkError(error instanceof Error ? error.message : 'Network error');
     } finally {
       clearTimeout(timeoutId);
     }
