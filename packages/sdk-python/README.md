@@ -1,5 +1,11 @@
 # mpak Python SDK
 
+[![CI](https://github.com/NimbleBrainInc/mpak/actions/workflows/sdk-python-ci.yml/badge.svg)](https://github.com/NimbleBrainInc/mpak/actions/workflows/sdk-python-ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mpak)](https://pypi.org/project/mpak/)
+[![Python](https://img.shields.io/pypi/pyversions/mpak)](https://pypi.org/project/mpak/)
+[![License](https://img.shields.io/pypi/l/mpak)](https://github.com/NimbleBrainInc/mpak/blob/main/packages/sdk-python/LICENSE)
+[![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
+
 Python SDK for the mpak registry - search, download, and resolve MCPB bundles and Agent Skills.
 
 ## Installation
