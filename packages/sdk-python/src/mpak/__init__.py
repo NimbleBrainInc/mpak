@@ -26,7 +26,12 @@ from mpak.types import (
     Provenance,
 )
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version as _get_version
+
+    __version__ = _get_version("mpak")
+except Exception:
+    __version__ = "0.0.0"
 
 __all__ = [
     "Bundle",

@@ -109,8 +109,6 @@ class MpakClient:
             data = response.json()
             return BundleDownloadResponse.model_validate(data)
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                raise MpakNotFoundError(f"{package}@{version} ({os_name}/{arch})") from e
             raise MpakError(
                 f"HTTP {e.response.status_code}: {e.response.text}",
                 "HTTP_ERROR",
@@ -189,7 +187,7 @@ class MpakClient:
         # Download bundle
         print(f"Downloading bundle from {url}...")
         try:
-            with httpx.stream("GET", url, follow_redirects=True, timeout=self.config.timeout) as response:
+            with self._client.stream("GET", url) as response:
                 response.raise_for_status()
                 total_bytes = 0
                 with open(bundle_path, "wb") as f:
@@ -216,9 +214,15 @@ class MpakClient:
         else:
             print("⚠ Warning: No SHA256 hash provided, skipping integrity verification")
 
-        # Extract bundle
+        # Extract bundle (with zip slip protection)
         print(f"Extracting to {dest_path}...")
+        resolved_dest = dest_path.resolve()
         with zipfile.ZipFile(bundle_path, "r") as zf:
+            for member in zf.namelist():
+                member_path = (resolved_dest / member).resolve()
+                if not member_path.is_relative_to(resolved_dest):
+                    bundle_path.unlink()
+                    raise ValueError(f"Zip slip attempt detected: {member}")
             zf.extractall(dest_path)
 
         # Clean up bundle file

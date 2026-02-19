@@ -31,8 +31,8 @@ apps/
   cli/         # mpak CLI (Node)
   scanner/     # Bundle scanner/validator
 packages/
-  sdk/         # JS/TS SDK
-  python-sdk/  # Python SDK (OpenAPI-generated types)
+  sdk-typescript/  # JS/TS SDK
+  sdk-python/      # Python SDK (OpenAPI-generated types)
 ```
 
 ## Deployment

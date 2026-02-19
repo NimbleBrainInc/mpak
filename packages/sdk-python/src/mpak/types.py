@@ -1,6 +1,6 @@
 """SDK-specific types and re-exports from generated types."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Re-export commonly used generated types
 from mpak.generated.types import (
@@ -49,4 +49,13 @@ class MpakClientConfig:
 
     base_url: str = "https://registry.mpak.dev"
     timeout: float = 30.0
-    user_agent: str = "mpak-python/0.1.0"
+    user_agent: str = field(default_factory=lambda: f"mpak-python/{_get_version()}")
+
+
+def _get_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("mpak")
+    except Exception:
+        return "0.0.0"

@@ -16,7 +16,6 @@ Options:
 import argparse
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 
@@ -34,17 +33,8 @@ def main():
     sdk_root = script_dir.parent
     output_file = sdk_root / "src" / "mpak" / "generated" / "types.py"
 
-    print(f"Fetching OpenAPI spec from {args.url}...")
-    try:
-        with urllib.request.urlopen(args.url) as resp:
-            spec_content = resp.read()
-        print(f"✓ Fetched {len(spec_content)} bytes")
-    except Exception as e:
-        print(f"✗ Failed to fetch OpenAPI spec: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    # Generate Pydantic models
-    print(f"Generating Pydantic models to {output_file}...")
+    # Generate Pydantic models (datamodel-codegen fetches the spec directly)
+    print(f"Generating Pydantic models from {args.url} to {output_file}...")
     try:
         result = subprocess.run(
             [

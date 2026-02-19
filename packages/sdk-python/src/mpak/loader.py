@@ -21,6 +21,7 @@ def main():
         print("Usage: mpak-loader <bundle_url_or_package> <dest_dir> [expected_sha256]", file=sys.stderr)
         sys.exit(1)
 
+    client = None
     try:
         source = sys.argv[1]
         dest = sys.argv[2]
@@ -50,7 +51,8 @@ def main():
         print(f"Error loading bundle: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        client.close()
+        if client:
+            client.close()
 
 
 if __name__ == "__main__":

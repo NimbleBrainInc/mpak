@@ -27,9 +27,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.24",
     "respx>=0.22",
     "ruff>=0.8",
+    "ty>=0.0.1a1",
     "datamodel-code-generator>=0.26",
 ]
 
@@ -72,9 +72,11 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 
+[tool.ty.environment]
+python-version = "3.11"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
 pythonpath = ["src"]
 markers = [
     "integration: tests that hit the live mpak registry (deselect with '-m \"not integration\"')",
