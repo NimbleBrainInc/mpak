@@ -1,6 +1,6 @@
 [project]
 name = "mpak"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python SDK for the mpak registry - MCPB bundles and Agent Skills"
 authors = [
     {name = "NimbleBrain Inc", email = "engineering@mpak.dev"}
