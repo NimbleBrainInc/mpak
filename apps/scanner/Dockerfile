@@ -1,5 +1,5 @@
-ARG SCANNER_VERSION=0.2.4
 FROM python:3.13-slim
+ARG SCANNER_VERSION=0.2.5
 
 # System deps for external security tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
