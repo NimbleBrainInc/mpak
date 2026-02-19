@@ -1,3 +1,4 @@
+ARG SCANNER_VERSION=0.2.4
 FROM python:3.13-slim
 
 # System deps for external security tools
@@ -20,7 +21,7 @@ RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main
 RUN npm install -g eslint eslint-plugin-security --no-fund --no-audit
 
 # mpak-scanner + Python security tools (bandit, guarddog)
-RUN pip install --no-cache-dir "mpak-scanner[job]==0.2.4" bandit guarddog
+RUN pip install --no-cache-dir "mpak-scanner[job]==${SCANNER_VERSION}" bandit guarddog
 
 ENTRYPOINT ["mpak-scanner"]
 CMD ["job"]

@@ -69,8 +69,13 @@ __all__ = ["scan_bundle", "extract_bundle"]
 
 logger = logging.getLogger(__name__)
 
-# Version of the scanner
-SCANNER_VERSION = "0.2.4"
+# Version of the scanner (derived from pyproject.toml via importlib.metadata)
+try:
+    from importlib.metadata import version as _get_version
+
+    SCANNER_VERSION = _get_version("mpak-scanner")
+except Exception:
+    SCANNER_VERSION = "0.0.0"
 
 # Domain groupings for controls (matches MTF v0.1 spec)
 DOMAINS = {

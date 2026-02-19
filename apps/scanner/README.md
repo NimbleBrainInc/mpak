@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/mpak-scanner)](https://pypi.org/project/mpak-scanner/)
 [![Python](https://img.shields.io/pypi/pyversions/mpak-scanner)](https://pypi.org/project/mpak-scanner/)
 [![License](https://img.shields.io/pypi/l/mpak-scanner)](https://github.com/NimbleBrainInc/mpak/blob/main/apps/scanner/LICENSE)
+[![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
 
 Security scanner for [MCP](https://modelcontextprotocol.io/) bundles (.mcpb). Reference implementation of the [mpak Trust Framework (MTF)](https://mpaktrust.org), an open security standard for MCP server packaging.
 
@@ -120,6 +121,60 @@ The scanner ships with test fixtures for validation:
 | `unsafe-node-bundle/` | CQ-05 detection | Fails with unsafe patterns |
 
 See [tests/fixtures/README.md](tests/fixtures/README.md) for details.
+
+## Releasing
+
+Releases are automated via GitHub Actions. Pushing a tag triggers the full pipeline: verify, publish to PyPI (via [trusted publishing](https://docs.pypi.org/trusted-publishers/)), and build + push Docker image to GHCR.
+
+**Version is defined in one place:** `pyproject.toml`. The runtime version (`mpak_scanner.__version__`, `SCANNER_VERSION`) is derived automatically via `importlib.metadata`.
+
+### Steps
+
+1. **Bump version** in `pyproject.toml`:
+   ```bash
+   # Edit pyproject.toml version field, or use hatch:
+   hatch version patch   # 0.2.4 → 0.2.5
+   hatch version minor   # 0.2.4 → 0.3.0
+   ```
+
+2. **Run verification:**
+   ```bash
+   uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run ty check src/ && uv run pytest
+   ```
+
+3. **Commit and push:**
+   ```bash
+   git commit -am "scanner: bump to X.Y.Z"
+   git push
+   ```
+
+4. **Tag and push** (this triggers the publish):
+   ```bash
+   git tag scanner-vX.Y.Z
+   git push origin scanner-vX.Y.Z
+   ```
+
+CI will:
+- Run lint, format, type check, and unit tests
+- Verify the tag matches `pyproject.toml`
+- Build and publish to [PyPI](https://pypi.org/project/mpak-scanner/)
+- Build and push Docker image to `ghcr.io/nimblebraininc/mpak-scanner:{version}` and `:latest`
+
+See [`scanner-publish.yml`](../../.github/workflows/scanner-publish.yml).
+
+### Docker Image
+
+The Docker image includes all external security tools (Syft, Grype, TruffleHog, ESLint, Bandit, GuardDog) and installs `mpak-scanner` from PyPI.
+
+```bash
+# Pull from GHCR
+docker pull ghcr.io/nimblebraininc/mpak-scanner:latest
+
+# Run a scan
+docker run --rm -v /path/to/bundle.mcpb:/bundle.mcpb ghcr.io/nimblebraininc/mpak-scanner scan /bundle.mcpb
+```
+
+For production deployment to ECR/K8s, see `deployments/mpak/`.
 
 ## Related Projects
 
