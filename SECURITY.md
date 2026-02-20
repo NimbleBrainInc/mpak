@@ -29,7 +29,7 @@ The following are in scope:
 
 - The mpak registry server (`apps/registry`)
 - The mpak CLI (`packages/cli`)
-- The mpak SDK (`packages/sdk`)
+- The mpak SDK (`packages/sdk-typescript`)
 - The mpak web UI (`apps/web`)
 - The MTF security scanner (`apps/scanner`)
 - The OIDC publishing flow

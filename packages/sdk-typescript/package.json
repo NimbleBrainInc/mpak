@@ -1,13 +1,13 @@
 {
   "name": "@nimblebrain/mpak-sdk",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "TypeScript SDK for mpak registry - MCPB bundles and Agent Skills",
   "author": "NimbleBrain Inc <engineering@mpak.dev>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/NimbleBrainInc/mpak.git",
-    "directory": "packages/sdk"
+    "directory": "packages/sdk-typescript"
   },
   "homepage": "https://mpak.dev",
   "bugs": {
@@ -50,7 +50,7 @@
     "build": "tsup",
     "clean": "rm -rf dist coverage",
     "dev": "tsup --watch",
-    "lint": "eslint src/",
+    "lint": "eslint src/ tests/",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

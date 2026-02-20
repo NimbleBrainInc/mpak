@@ -7,7 +7,7 @@ export class MpakError extends Error {
 
   constructor(message: string, code: string, statusCode?: number) {
     super(message);
-    this.name = "MpakError";
+    this.name = 'MpakError';
     this.code = code;
     this.statusCode = statusCode;
   }
@@ -18,8 +18,8 @@ export class MpakError extends Error {
  */
 export class MpakNotFoundError extends MpakError {
   constructor(resource: string) {
-    super(`Resource not found: ${resource}`, "NOT_FOUND", 404);
-    this.name = "MpakNotFoundError";
+    super(`Resource not found: ${resource}`, 'NOT_FOUND', 404);
+    this.name = 'MpakNotFoundError';
   }
 }
 
@@ -32,11 +32,8 @@ export class MpakIntegrityError extends MpakError {
   actual: string;
 
   constructor(expected: string, actual: string) {
-    super(
-      `Integrity mismatch: expected ${expected}, got ${actual}`,
-      "INTEGRITY_MISMATCH",
-    );
-    this.name = "MpakIntegrityError";
+    super(`Integrity mismatch: expected ${expected}, got ${actual}`, 'INTEGRITY_MISMATCH');
+    this.name = 'MpakIntegrityError';
     this.expected = expected;
     this.actual = actual;
   }
@@ -47,7 +44,7 @@ export class MpakIntegrityError extends MpakError {
  */
 export class MpakNetworkError extends MpakError {
   constructor(message: string) {
-    super(message, "NETWORK_ERROR");
-    this.name = "MpakNetworkError";
+    super(message, 'NETWORK_ERROR');
+    this.name = 'MpakNetworkError';
   }
 }

@@ -103,7 +103,7 @@ pnpm build && pnpm publish --no-git-checks
 cd -
 
 # 3. Bump and publish sdk
-cd packages/sdk
+cd packages/sdk-typescript
 npm version patch
 pnpm build && pnpm publish --no-git-checks
 cd -
@@ -115,7 +115,7 @@ pnpm build && pnpm publish --no-git-checks
 cd -
 
 # 5. Commit and tag each
-git add packages/schemas/package.json packages/sdk/package.json packages/cli/package.json
+git add packages/schemas/package.json packages/sdk-typescript/package.json packages/cli/package.json
 git commit -m "release: mpak-schemas@0.2.0, mpak-sdk@0.1.1, mpak@0.1.1"
 git push
 ```
