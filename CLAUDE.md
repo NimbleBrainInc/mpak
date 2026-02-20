@@ -11,9 +11,10 @@ apps/
   scanner/      # Security scanner (Python, runs as K8s Jobs)
   docs/         # Documentation site (Astro/Starlight)
 packages/
-  cli/          # mpak CLI
-  schemas/      # Shared Zod schemas
-  sdk/          # TypeScript SDK
+  cli/              # mpak CLI
+  schemas/          # Shared Zod schemas
+  sdk-typescript/   # TypeScript SDK
+  sdk-python/       # Python SDK (OpenAPI-generated types)
 ```
 
 ## Verification

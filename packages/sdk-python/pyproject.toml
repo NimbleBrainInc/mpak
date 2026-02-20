@@ -1,0 +1,83 @@
+[project]
+name = "mpak"
+version = "0.1.1"
+description = "Python SDK for the mpak registry - MCPB bundles and Agent Skills"
+authors = [
+    {name = "NimbleBrain Inc", email = "engineering@mpak.dev"}
+]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["mpak", "mcp", "mcpb", "model-context-protocol", "agent-skills"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.22",
+    "ruff>=0.8",
+    "ty>=0.0.1a1",
+    "datamodel-code-generator>=0.26",
+]
+
+[project.urls]
+Homepage = "https://mpak.dev"
+Documentation = "https://mpak.dev/docs"
+Repository = "https://github.com/NimbleBrainInc/mpak"
+Issues = "https://github.com/NimbleBrainInc/mpak/issues"
+
+[project.scripts]
+mpak-loader = "mpak.loader:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mpak"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: tests that hit the live mpak registry (deselect with '-m \"not integration\"')",
+]
