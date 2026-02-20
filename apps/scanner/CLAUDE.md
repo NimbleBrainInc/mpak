@@ -159,35 +159,38 @@ uv run pytest                        # all tests (unit + e2e)
 
 ## Releasing a New Version
 
-The scanner is distributed via PyPI. The Docker image installs from PyPI, not local source.
+Releases are automated via GitHub Actions and PyPI trusted publishing. Pushing a tag triggers: verify → publish to PyPI → build + push Docker image to GHCR.
+
+**Version is in one place:** `pyproject.toml`. Runtime version (`__version__`, `SCANNER_VERSION`) is derived via `importlib.metadata`.
 
 ### Steps
 
-1. **Bump version** in four files (must all match):
-   - `pyproject.toml` (`version = "X.Y.Z"`)
-   - `src/mpak_scanner/__init__.py` (`__version__ = "X.Y.Z"`)
-   - `src/mpak_scanner/scanner.py` (`SCANNER_VERSION = "X.Y.Z"`)
-   - `Dockerfile` (`mpak-scanner[job]==X.Y.Z`)
+1. **Bump version** in `pyproject.toml` (the only place)
 
 2. **Run verification**:
    ```bash
    uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run ty check src/ && uv run pytest
    ```
 
-3. **Commit and push** in `apps/mpak`
-
-4. **Publish to PyPI** (from `apps/mpak/apps/scanner/`):
+3. **Commit, tag, and push:**
    ```bash
-   uv build && uv publish
+   git commit -am "scanner: bump to X.Y.Z"
+   git tag scanner-vX.Y.Z
+   git push origin main --tags
    ```
 
-5. **Build + push Docker image** (from `hq/deployments/mpak/`):
-   ```bash
-   make deploy-scanner ENV=production
-   make apply-scanner-infra ENV=production  # only if RBAC/secrets changed
-   ```
+CI handles PyPI publish and Docker build/push to `ghcr.io/nimblebraininc/mpak-scanner`. See `.github/workflows/scanner-publish.yml`.
 
-The Makefile pushes both the git commit tag and `latest`. The mpak-api references `latest`, so deploying automatically updates what production uses.
+### Production Deployment (ECR/K8s)
+
+After the PyPI release, deploy the scanner to production K8s (from `hq/deployments/mpak/`):
+
+```bash
+make deploy-scanner ENV=production
+make apply-scanner-infra ENV=production  # only if RBAC/secrets changed
+```
+
+The Makefile builds from the Dockerfile which pulls the version from PyPI.
 
 ### Schemas and Rules
 
