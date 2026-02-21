@@ -607,10 +607,15 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
           remediation: (f['remediation'] as string) ?? null,
         }));
 
+      // Extract scanner version from report metadata
+      const scanMeta = report?.['scan'] as Record<string, unknown> | undefined;
+      const scannerVersion = (scanMeta?.['scanner_version'] as string) ?? null;
+
       return {
         status: scan['status'],
         risk_score: scan['riskScore'],
         scanned_at: scan['completedAt'],
+        scanner_version: scannerVersion,
         certification: scan['certificationLevel'] !== null ? {
           level: scan['certificationLevel'],
           level_name: getCertificationLevelName(scan['certificationLevel'] as number | null),

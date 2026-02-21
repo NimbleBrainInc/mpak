@@ -44,6 +44,7 @@ interface SecurityScan {
   status: 'pending' | 'scanning' | 'completed' | 'failed';
   risk_score: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | null;
   scanned_at: string | Date | null;
+  scanner_version?: string | null;
   certification?: Certification | null;
   summary?: SecurityScanSummary;
   scans?: Record<string, ScanResult>;
@@ -227,6 +228,12 @@ export default function SecurityReportSection({ securityScan, version }: Props) 
               )}
               <span className="text-mpak-gray-300">|</span>
               <span>Scanned {formatDate(securityScan.scanned_at)}</span>
+              {securityScan.scanner_version && (
+                <>
+                  <span className="text-mpak-gray-300">|</span>
+                  <span>Scanner v{securityScan.scanner_version}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
