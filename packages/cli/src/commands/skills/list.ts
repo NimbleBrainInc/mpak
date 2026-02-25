@@ -1,14 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import matter from "gray-matter";
-
-/**
- * Get the Claude Code skills directory
- */
-function getSkillsDir(): string {
-  return join(homedir(), ".claude", "skills");
-}
+import { resolveProvider } from "../../utils/providers.js";
 
 interface InstalledSkill {
   name: string;
@@ -20,9 +13,7 @@ interface InstalledSkill {
 /**
  * List all installed skills
  */
-function listInstalledSkills(): InstalledSkill[] {
-  const skillsDir = getSkillsDir();
-
+function listInstalledSkills(skillsDir: string): InstalledSkill[] {
   if (!existsSync(skillsDir)) {
     return [];
   }
@@ -72,6 +63,7 @@ function listInstalledSkills(): InstalledSkill[] {
 
 export interface ListOptions {
   json?: boolean;
+  provider?: string;
 }
 
 /**
@@ -80,7 +72,8 @@ export interface ListOptions {
 export async function handleSkillList(
   options: ListOptions,
 ): Promise<void> {
-  const skills = listInstalledSkills();
+  const { provider, skillsDir } = resolveProvider(options.provider);
+  const skills = listInstalledSkills(skillsDir);
 
   if (options.json) {
     console.log(JSON.stringify(skills, null, 2));
@@ -91,7 +84,7 @@ export async function handleSkillList(
     console.log("No skills installed.");
     console.log("");
     console.log("Install skills with: mpak skill install <name>");
-    console.log("Or create your own in ~/.claude/skills/");
+    console.log(`Or create your own in ${skillsDir}/`);
     return;
   }
 
@@ -122,6 +115,6 @@ export async function handleSkillList(
 
   console.log("");
   console.log(
-    `${skills.length} skill(s) installed in ${getSkillsDir()}`,
+    `${skills.length} skill(s) installed in ${skillsDir} (${provider})`,
   );
 }
