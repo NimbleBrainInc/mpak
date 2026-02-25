@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import AdmZip from 'adm-zip';
 import { createHash, randomUUID } from 'crypto';
 import { createWriteStream, createReadStream, promises as fs } from 'fs';
 import { tmpdir } from 'os';
@@ -632,13 +633,18 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             );
           }
 
-          // Extract body content from the .skill file (after YAML frontmatter)
-          const fileContent = await fs.readFile(tempPath, 'utf-8');
-          const fmMatch = fileContent.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
-          if (fmMatch?.[1]) {
-            const body = fmMatch[1].trim();
-            if (body.length > 0) {
-              skillContent = body;
+          // Extract body content from SKILL.md inside the .skill ZIP archive
+          const zipBuffer = await fs.readFile(tempPath);
+          const zip = new AdmZip(zipBuffer);
+          const skillEntry = zip.getEntries().find((e) => e.entryName.endsWith('/SKILL.md') || e.entryName === 'SKILL.md');
+          if (skillEntry) {
+            const fileContent = skillEntry.getData().toString('utf-8');
+            const fmMatch = fileContent.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+            if (fmMatch?.[1]) {
+              const body = fmMatch[1].trim();
+              if (body.length > 0) {
+                skillContent = body;
+              }
             }
           }
 
