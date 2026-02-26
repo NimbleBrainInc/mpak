@@ -6,15 +6,16 @@ const detectProvidersMock = vi.fn();
 const resolveProviderMock = vi.fn();
 const setProviderMock = vi.fn();
 
-vi.mock("../utils/providers.js", () => ({
-  detectProviders: (...args: unknown[]) => detectProvidersMock(...args),
-  getProviderNames: () =>
-    ["claude", "cursor", "copilot", "codex", "gemini", "goose", "opencode"],
-  getSkillsDir: (name: string) => `/home/user/.${name}/skills`,
-  isValidProvider: (name: string) =>
-    ["claude", "cursor", "copilot", "codex", "gemini", "goose", "opencode"].includes(name),
-  resolveProvider: (...args: unknown[]) => resolveProviderMock(...args),
-}));
+vi.mock("../utils/providers.js", async () => {
+  const actual = await vi.importActual("../utils/providers.js") as Record<string, unknown>;
+  return {
+    detectProviders: (...args: unknown[]) => detectProvidersMock(...args),
+    getProviderNames: actual["getProviderNames"],
+    getSkillsDir: actual["getSkillsDir"],
+    isValidProvider: actual["isValidProvider"],
+    resolveProvider: (...args: unknown[]) => resolveProviderMock(...args),
+  };
+});
 
 vi.mock("../utils/config-manager.js", () => ({
   ConfigManager: class {
@@ -143,9 +144,9 @@ describe("handleProviderShow", () => {
     expect(output).toContain("/home/user/.cursor/skills");
   });
 
-  it("exits with error when resolution fails (e.g. ambiguous)", async () => {
+  it("exits with error when resolution fails (e.g. invalid config)", async () => {
     resolveProviderMock.mockImplementation(() => {
-      throw new Error("Multiple providers detected: claude, cursor");
+      throw new Error("Unknown provider in config: stale-value");
     });
 
     const exitSpy = vi
@@ -155,7 +156,7 @@ describe("handleProviderShow", () => {
     await handleProviderShow();
 
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(stderrOutput.join("")).toContain("Multiple providers detected");
+    expect(stderrOutput.join("")).toContain("Unknown provider in config");
 
     exitSpy.mockRestore();
   });

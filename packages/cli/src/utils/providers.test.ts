@@ -135,7 +135,7 @@ describe("providers", () => {
 
     it("checks the parent dir, not the skills dir itself", () => {
       // goose skills dir is ~/.config/agents/skills
-      // detection should check ~/.config/agents, NOT ~/.config/agents/skills
+      // detection should check ~/.config/goose, NOT ~/.config/agents/skills
       const calledPaths: string[] = [];
       mockedExistsSync.mockImplementation((p) => {
         calledPaths.push(String(p));
@@ -267,6 +267,14 @@ describe("providers", () => {
       expect(result.provider).toBe("gemini");
     });
 
+    it("treats empty MPAK_PROVIDER as unset (falls through to config)", () => {
+      process.env["MPAK_PROVIDER"] = "";
+      getProviderMock.mockReturnValue("copilot");
+
+      const result = resolveProvider();
+      expect(result.provider).toBe("copilot");
+    });
+
     it("defaults to claude when zero providers detected", () => {
       getProviderMock.mockReturnValue(undefined);
       mockedExistsSync.mockReturnValue(false);
@@ -329,7 +337,7 @@ describe("providers", () => {
       }
     });
 
-    it("ambiguous detection error lists the detected provider names", () => {
+    it("ambiguous detection defaults to claude and warns with detected names", () => {
       getProviderMock.mockReturnValue(undefined);
       mockedExistsSync.mockImplementation((p) => {
         return (
@@ -338,19 +346,28 @@ describe("providers", () => {
         );
       });
 
-      try {
-        resolveProvider();
-        expect.fail("should have thrown");
-      } catch (err) {
-        const msg = (err as Error).message;
-        expect(msg).toContain("claude");
-        expect(msg).toContain("gemini");
-        // Should NOT mention providers that weren't detected
-        expect(msg).not.toMatch(/\bcursor\b/);
-      }
+      const stderrChunks: string[] = [];
+      const spy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation((chunk) => {
+          stderrChunks.push(String(chunk));
+          return true;
+        });
+
+      const result = resolveProvider();
+      expect(result.provider).toBe("claude");
+      expect(result.skillsDir).toBe(getSkillsDir("claude"));
+
+      const warning = stderrChunks.join("");
+      expect(warning).toContain("claude");
+      expect(warning).toContain("gemini");
+      // Should NOT mention providers that weren't detected
+      expect(warning).not.toMatch(/\bcursor\b/);
+
+      spy.mockRestore();
     });
 
-    it("ambiguous detection error suggests remediation commands", () => {
+    it("ambiguous detection warning suggests remediation commands", () => {
       getProviderMock.mockReturnValue(undefined);
       mockedExistsSync.mockImplementation((p) => {
         return (
@@ -359,14 +376,21 @@ describe("providers", () => {
         );
       });
 
-      try {
-        resolveProvider();
-        expect.fail("should have thrown");
-      } catch (err) {
-        const msg = (err as Error).message;
-        expect(msg).toContain("mpak provider set");
-        expect(msg).toContain("--provider");
-      }
+      const stderrChunks: string[] = [];
+      const spy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation((chunk) => {
+          stderrChunks.push(String(chunk));
+          return true;
+        });
+
+      resolveProvider();
+
+      const warning = stderrChunks.join("");
+      expect(warning).toContain("mpak provider set");
+      expect(warning).toContain("--provider");
+
+      spy.mockRestore();
     });
   });
 

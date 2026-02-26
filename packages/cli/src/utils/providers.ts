@@ -27,7 +27,7 @@ const PROVIDER_PARENTS: Record<ProviderName, () => string> = {
   copilot: () => join(homedir(), ".copilot"),
   codex: () => join(homedir(), ".codex"),
   gemini: () => join(homedir(), ".gemini"),
-  goose: () => join(homedir(), ".config", "agents"),
+  goose: () => join(homedir(), ".config", "goose"),
   opencode: () => join(homedir(), ".config", "opencode"),
 };
 
@@ -78,7 +78,7 @@ export interface ResolvedProvider {
  * 1. Explicit --provider flag
  * 2. MPAK_PROVIDER env var
  * 3. provider field in ~/.mpak/config.json
- * 4. Auto-detect: exactly 1 → use it, 0 → default to claude, multiple → error
+ * 4. Auto-detect: exactly 1 → use it, 0 → default to claude, multiple → default to claude with warning
  */
 export function resolveProvider(explicit?: string): ResolvedProvider {
   // 1. Explicit --provider flag
@@ -130,8 +130,10 @@ export function resolveProvider(explicit?: string): ResolvedProvider {
     return { provider: "claude", skillsDir: getSkillsDir("claude") };
   }
 
-  // Multiple providers detected — ambiguous
-  throw new Error(
-    `Multiple providers detected: ${detected.join(", ")}\nSet a default: mpak provider set <name>\nOr specify: mpak skill install --provider <name> <skill>`,
+  // Multiple providers detected — default to claude with a warning
+  process.stderr.write(
+    `Warning: Multiple providers detected (${detected.join(", ")}). Defaulting to claude.\n` +
+      `Run 'mpak provider set <name>' to set a default, or use --provider <name>.\n`,
   );
+  return { provider: "claude", skillsDir: getSkillsDir("claude") };
 }
