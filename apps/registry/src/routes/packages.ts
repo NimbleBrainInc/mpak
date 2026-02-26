@@ -23,6 +23,7 @@ import {
   UnclaimedPackagesResponseSchema,
 } from '../schemas/generated/api-responses.js';
 import { generateMpakJsonExample } from '../schemas/mpak-schema.js';
+import { extractScannerVersion } from '../utils/scanner-version.js';
 import { fetchGitHubRepoStats, parseGitHubRepo, verifyPackageClaim } from '../services/github-verifier.js';
 import { validateManifest } from '../services/manifest-validator.js';
 import { triggerSecurityScan } from '../services/scanner.js';
@@ -608,8 +609,7 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
         }));
 
       // Extract scanner version from report metadata
-      const scanMeta = report?.['scan'] as Record<string, unknown> | undefined;
-      const scannerVersion = (scanMeta?.['scanner_version'] as string) ?? null;
+      const scannerVersion = extractScannerVersion(report);
 
       return {
         status: scan['status'],
