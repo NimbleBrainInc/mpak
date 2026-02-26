@@ -22,6 +22,7 @@ import {
 } from '../../schemas/generated/skill.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
+import { extractSkillContent } from '../../utils/skill-content.js';
 
 // GitHub release asset type
 interface GitHubReleaseAsset {
@@ -632,15 +633,9 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             );
           }
 
-          // Extract body content from the .skill file (after YAML frontmatter)
-          const fileContent = await fs.readFile(tempPath, 'utf-8');
-          const fmMatch = fileContent.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
-          if (fmMatch?.[1]) {
-            const body = fmMatch[1].trim();
-            if (body.length > 0) {
-              skillContent = body;
-            }
-          }
+          // Extract body content from SKILL.md inside the .skill ZIP archive
+          const zipBuffer = await fs.readFile(tempPath);
+          skillContent = extractSkillContent(zipBuffer);
 
           // Store the skill bundle (skills don't have platform variants)
           const uploadStream = createReadStream(tempPath);
