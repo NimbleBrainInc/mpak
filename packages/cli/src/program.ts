@@ -21,6 +21,11 @@ import {
   handleSkillInstall,
   handleSkillList,
 } from "./commands/skills/index.js";
+import {
+  handleProviderList,
+  handleProviderSet,
+  handleProviderShow,
+} from "./commands/provider.js";
 
 /**
  * Creates and configures the CLI program
@@ -173,9 +178,13 @@ export function createProgram(): Command {
 
   skill
     .command("install <name>")
-    .description("Install a skill to ~/.claude/skills/")
+    .description("Install a skill to the target provider's skills directory")
     .option("--force", "Overwrite existing installation")
     .option("--json", "Output as JSON")
+    .option(
+      "-p, --provider <name>",
+      "Target provider (claude, cursor, copilot, codex, gemini, goose, opencode)",
+    )
     .action(async (name, options) => {
       await handleSkillInstall(name, options);
     });
@@ -184,6 +193,10 @@ export function createProgram(): Command {
     .command("list")
     .description("List installed skills")
     .option("--json", "Output as JSON")
+    .option(
+      "-p, --provider <name>",
+      "Target provider (claude, cursor, copilot, codex, gemini, goose, opencode)",
+    )
     .action(async (options) => {
       await handleSkillList(options);
     });
@@ -224,6 +237,35 @@ export function createProgram(): Command {
     .description("Clear config for a package (all values or specific key)")
     .action(async (packageName, key) => {
       await handleConfigClear(packageName, key);
+    });
+
+  // ==========================================================================
+  // Provider commands
+  // ==========================================================================
+
+  const providerCmd = program
+    .command("provider")
+    .description("Manage skill provider (claude, cursor, copilot, etc.)");
+
+  providerCmd
+    .command("list")
+    .description("List supported providers and show which are detected")
+    .action(async () => {
+      await handleProviderList();
+    });
+
+  providerCmd
+    .command("set <name>")
+    .description("Set the default provider")
+    .action(async (name) => {
+      await handleProviderSet(name);
+    });
+
+  providerCmd
+    .command("show")
+    .description("Show the current resolved provider and skills directory")
+    .action(async () => {
+      await handleProviderShow();
     });
 
   // ==========================================================================

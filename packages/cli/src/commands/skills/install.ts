@@ -1,16 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { join, basename } from "path";
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { execFileSync } from "child_process";
 import { formatSize, fmtError } from "../../utils/format.js";
 import { createClient } from "../../utils/client.js";
-
-/**
- * Get the Claude Code skills directory
- */
-function getSkillsDir(): string {
-  return join(homedir(), ".claude", "skills");
-}
+import { resolveProvider } from "../../utils/providers.js";
 
 /**
  * Parse skill spec into name and version
@@ -45,6 +39,7 @@ function getShortName(scopedName: string): string {
 export interface InstallOptions {
   force?: boolean;
   json?: boolean;
+  provider?: string;
 }
 
 /**
@@ -57,13 +52,15 @@ export async function handleSkillInstall(
   try {
     const { name, version } = parseSkillSpec(skillSpec);
 
+    // Resolve target provider
+    const { provider, skillsDir } = resolveProvider(options.provider);
+
     // Get download info
     const client = createClient();
     const downloadInfo = version
       ? await client.getSkillVersionDownload(name, version)
       : await client.getSkillDownload(name);
     const shortName = getShortName(downloadInfo.skill.name);
-    const skillsDir = getSkillsDir();
     const installPath = join(skillsDir, shortName);
 
     // Check if already installed
@@ -138,6 +135,7 @@ export async function handleSkillInstall(
             shortName,
             version: downloadInfo.skill.version,
             path: installPath,
+            provider,
           },
           null,
           2,
@@ -148,7 +146,7 @@ export async function handleSkillInstall(
       console.log(`\u2713 Installed: ${shortName}`);
       console.log("");
       console.log(
-        "Skill available in Claude Code. Restart to activate.",
+        `Skill available in ${provider}. Restart to activate.`,
       );
     }
   } catch (err) {
