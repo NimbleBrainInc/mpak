@@ -398,36 +398,20 @@ describe('MpakClient', () => {
   });
 
   describe('downloadSkillContent', () => {
-    it('downloads and extracts content without verification', async () => {
+    it('downloads, verifies, and extracts SKILL.md content', async () => {
       const client = new MpakClient();
       const skillContent = '# My Skill\n\nSkill content here';
-      const zipBuffer = await createMockSkillZip('@test/skill', skillContent);
-      fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
-
-      const result = await client.downloadSkillContent(
-        'https://example.com/skill.skill',
-        '@test/skill',
-      );
-
-      expect(result.content).toBe(skillContent);
-      expect(result.verified).toBe(false);
-    });
-
-    it('verifies integrity when hash provided', async () => {
-      const client = new MpakClient();
-      const skillContent = '# My Skill';
       const zipBuffer = await createMockSkillZip('@test/skill', skillContent);
       const hash = sha256FromBuffer(zipBuffer);
       fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
-      const result = await client.downloadSkillContent(
-        'https://example.com/skill.skill',
-        '@test/skill',
-        hash,
-      );
+      const content = await client.downloadSkillContent({
+        url: 'https://example.com/skill.skill',
+        skill: { name: '@test/skill', version: '1.0.0', sha256: hash, size: 1024 },
+        expires_at: '2024-01-02T00:00:00Z',
+      });
 
-      expect(result.content).toBe(skillContent);
-      expect(result.verified).toBe(true);
+      expect(content).toBe(skillContent);
     });
 
     it('throws MpakIntegrityError on hash mismatch (fail-closed)', async () => {
@@ -436,11 +420,11 @@ describe('MpakClient', () => {
       fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
       await expect(
-        client.downloadSkillContent(
-          'https://example.com/skill.skill',
-          '@test/skill',
-          'wrong_hash',
-        ),
+        client.downloadSkillContent({
+          url: 'https://example.com/skill.skill',
+          skill: { name: '@test/skill', version: '1.0.0', sha256: 'wrong_hash', size: 1024 },
+          expires_at: '2024-01-02T00:00:00Z',
+        }),
       ).rejects.toThrow(MpakIntegrityError);
     });
 
@@ -451,12 +435,11 @@ describe('MpakClient', () => {
 
       let leakedContent: string | undefined;
       try {
-        const result = await client.downloadSkillContent(
-          'https://example.com/skill.skill',
-          '@test/skill',
-          'wrong_hash',
-        );
-        leakedContent = result.content;
+        leakedContent = await client.downloadSkillContent({
+          url: 'https://example.com/skill.skill',
+          skill: { name: '@test/skill', version: '1.0.0', sha256: 'wrong_hash', size: 1024 },
+          expires_at: '2024-01-02T00:00:00Z',
+        });
       } catch {
         // Expected
       }

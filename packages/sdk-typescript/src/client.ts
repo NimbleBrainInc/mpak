@@ -1,10 +1,8 @@
-// import { createHash } from 'crypto';
-
+import { createHash } from "node:crypto";
 import type {
 	BundleSearchResponse,
 	SkillSearchResponse,
 } from "@nimblebrain/mpak-schemas";
-import { createHash } from "crypto";
 import {
 	MpakIntegrityError,
 	MpakNetworkError,
@@ -301,16 +299,15 @@ export class MpakClient {
 	}
 
 	/**
-	 * Download skill and verify integrity
+	 * Download skill content, verify integrity, and extract SKILL.md
 	 *
-	 * @throws {MpakIntegrityError} If expectedSha256 is provided and doesn't match (fail-closed)
+	 * @throws {MpakIntegrityError} If SHA-256 doesn't match (fail-closed)
+	 * @throws {MpakNetworkError} For network failures
 	 */
 	async downloadSkillContent(
-		downloadUrl: string,
-		skillName: string,
-		expectedSha256?: string,
-	): Promise<{ content: string; verified: boolean }> {
-		const response = await this.fetchWithTimeout(downloadUrl);
+		downloadInfo: SkillDownloadResponse,
+	): Promise<string> {
+		const response = await this.fetchWithTimeout(downloadInfo.url);
 
 		if (!response.ok) {
 			throw new MpakNetworkError(
@@ -320,19 +317,12 @@ export class MpakClient {
 
 		const zipBuffer = await response.arrayBuffer();
 
-		if (expectedSha256) {
-			const actualHash = this.computeSha256(zipBuffer);
-			if (actualHash !== expectedSha256) {
-				throw new MpakIntegrityError(expectedSha256, actualHash);
-			}
+		const actualHash = this.computeSha256(zipBuffer);
+		if (actualHash !== downloadInfo.skill.sha256) {
+			throw new MpakIntegrityError(downloadInfo.skill.sha256, actualHash);
 		}
 
-		const skillContent: string = await this.extractSkillFromZip(
-			zipBuffer,
-			skillName,
-		);
-
-		return { content: skillContent, verified: !!expectedSha256 };
+		return this.extractSkillFromZip(zipBuffer, downloadInfo.skill.name);
 	}
 
 	// TODO: Remove Dead Code
