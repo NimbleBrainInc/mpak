@@ -96,6 +96,7 @@ export const SecurityScanSchema = z.object({
   status: z.enum(['pending', 'scanning', 'completed', 'failed']),
   risk_score: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).nullable(),
   scanned_at: z.union([z.string(), z.date()]).nullable(),
+  scanner_version: z.string().nullable().optional(),
   certification: CertificationSchema.nullable().optional(),
   summary: z.object({
     components: z.number(), // Total SBOM components
