@@ -7,7 +7,7 @@
  *
  * @example
  * ```typescript
- * import { MpakClient, SkillReference } from '@nimblebrain/mpak-sdk';
+ * import { MpakClient } from '@nimblebrain/mpak-sdk';
  *
  * const client = new MpakClient();
  *
@@ -20,14 +20,10 @@
  * // Search for skills
  * const skills = await client.searchSkills({ q: 'crm' });
  *
- * // Resolve a skill reference to content (recommended)
- * const ref: SkillReference = {
- *   source: 'mpak',
- *   name: '@nimblebraininc/folk-crm',
- *   version: '1.3.0',
- * };
- * const resolved = await client.resolveSkillRef(ref);
- * console.log(resolved.content); // Skill markdown content
+ * // Download skill content
+ * const downloadInfo = await client.getSkillDownload('@nimblebraininc/folk-crm');
+ * const content = await client.downloadSkillContent(downloadInfo);
+ * console.log(content); // Skill markdown content
  * ```
  */
 
@@ -62,13 +58,6 @@ export type {
   SkillDetail,
   SkillDownloadInfo,
   SkillVersion,
-  // TODO: Remove dead code.
-  // Skill reference types (for resolveSkillRef)
-  // SkillReference,
-  // MpakSkillReference,
-  // GithubSkillReference,
-  // UrlSkillReference,
-  // ResolvedSkill,
 } from './types.js';
 
 // Re-export SkillSearchResponse from schemas
