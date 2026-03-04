@@ -62,12 +62,13 @@ export type {
   SkillDetail,
   SkillDownloadInfo,
   SkillVersion,
+  // TODO: Remove dead code.
   // Skill reference types (for resolveSkillRef)
-  SkillReference,
-  MpakSkillReference,
-  GithubSkillReference,
-  UrlSkillReference,
-  ResolvedSkill,
+  // SkillReference,
+  // MpakSkillReference,
+  // GithubSkillReference,
+  // UrlSkillReference,
+  // ResolvedSkill,
 } from './types.js';
 
 // Re-export SkillSearchResponse from schemas
