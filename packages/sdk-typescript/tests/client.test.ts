@@ -4,8 +4,13 @@ import { MpakClient } from '../src/client.js';
 import { MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from '../src/errors.js';
 
 // Helper to compute SHA256 hash (same as client implementation)
-function sha256(content: string): string {
-  return createHash('sha256').update(content, 'utf8').digest('hex');
+// function sha256(content: string): string {
+//   return createHash('sha256').update(content, 'utf8').digest('hex');
+// }
+
+// Helper to compute SHA256 hash of a buffer (matches new client implementation)
+function sha256FromBuffer(content: ArrayBuffer): string {
+  return createHash('sha256').update(Buffer.from(content)).digest('hex');
 }
 
 // Helper to create a mock Response
@@ -19,6 +24,27 @@ function mockResponse(
     json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
     status: init.status ?? 200,
     ok: init.ok ?? (init.status === undefined || init.status < 400),
+  } as Response;
+}
+
+// Helper to create a mock .skill ZIP containing SKILL.md
+async function createMockSkillZip(skillName: string, content: string): Promise<ArrayBuffer> {
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+  const folderName = skillName.split('/').pop() ?? skillName;
+  zip.file(`${folderName}/SKILL.md`, content);
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+// Helper to create a mock binary Response (returns arrayBuffer instead of text)
+function mockBinaryResponse(
+  buffer: ArrayBuffer,
+  init: { status?: number; ok?: boolean } = {},
+): Response {
+  return {
+    arrayBuffer: () => Promise.resolve(buffer),
+    status: init.status ?? 200,
+    ok: init.ok ?? true,
   } as Response;
 }
 
@@ -372,48 +398,62 @@ describe('MpakClient', () => {
   });
 
   describe('downloadSkillContent', () => {
-    it('downloads content without verification', async () => {
+    it('downloads and extracts content without verification', async () => {
       const client = new MpakClient();
-      const content = '# My Skill\n\nSkill content here';
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
+      const skillContent = '# My Skill\n\nSkill content here';
+      const zipBuffer = await createMockSkillZip('@test/skill', skillContent);
+      fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
-      const result = await client.downloadSkillContent('https://example.com/skill.skill');
+      const result = await client.downloadSkillContent(
+        'https://example.com/skill.skill',
+        '@test/skill',
+      );
 
-      expect(result.content).toBe(content);
+      expect(result.content).toBe(skillContent);
       expect(result.verified).toBe(false);
     });
 
     it('verifies integrity when hash provided', async () => {
       const client = new MpakClient();
-      const content = 'skill content';
-      const hash = sha256(content);
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
+      const skillContent = '# My Skill';
+      const zipBuffer = await createMockSkillZip('@test/skill', skillContent);
+      const hash = sha256FromBuffer(zipBuffer);
+      fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
-      const result = await client.downloadSkillContent('https://example.com/skill.skill', hash);
+      const result = await client.downloadSkillContent(
+        'https://example.com/skill.skill',
+        '@test/skill',
+        hash,
+      );
 
-      expect(result.content).toBe(content);
+      expect(result.content).toBe(skillContent);
       expect(result.verified).toBe(true);
     });
 
     it('throws MpakIntegrityError on hash mismatch (fail-closed)', async () => {
       const client = new MpakClient();
-      const content = 'actual content';
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
+      const zipBuffer = await createMockSkillZip('@test/skill', 'content');
+      fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
       await expect(
-        client.downloadSkillContent('https://example.com/skill.skill', 'wrong_hash'),
+        client.downloadSkillContent(
+          'https://example.com/skill.skill',
+          '@test/skill',
+          'wrong_hash',
+        ),
       ).rejects.toThrow(MpakIntegrityError);
     });
 
     it('does not return content when integrity fails', async () => {
       const client = new MpakClient();
-      const secretContent = 'sensitive skill content';
-      fetchMock.mockResolvedValueOnce(mockResponse(secretContent));
+      const zipBuffer = await createMockSkillZip('@test/skill', 'sensitive skill content');
+      fetchMock.mockResolvedValueOnce(mockBinaryResponse(zipBuffer));
 
       let leakedContent: string | undefined;
       try {
         const result = await client.downloadSkillContent(
           'https://example.com/skill.skill',
+          '@test/skill',
           'wrong_hash',
         );
         leakedContent = result.content;
