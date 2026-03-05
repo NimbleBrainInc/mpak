@@ -521,6 +521,26 @@ export class MpakClient {
     return { bundleRaw, bundleMetadata: downloadInfo.bundle };
   }
 
+  /**
+   * Download a skill bundle by name, with optional version.
+   * Defaults to latest version.
+   *
+   * @throws {MpakNotFoundError} If skill not found
+   * @throws {MpakIntegrityError} If SHA-256 doesn't match
+   * @throws {MpakNetworkError} For network failures
+   */
+  async downloadSkillBundle(
+    name: string,
+    version?: string,
+  ): Promise<{ skillRaw: Buffer; skillMetadata: SkillDownloadResponse['skill'] }> {
+    const resolvedVersion = version ?? 'latest';
+
+    const downloadInfo = await this.getSkillVersionDownload(name, resolvedVersion);
+    const skillRaw = await this.downloadContent(downloadInfo.url, downloadInfo.skill.sha256);
+
+    return { skillRaw, skillMetadata: downloadInfo.skill };
+  }
+
   // ===========================================================================
   // Utility Methods
   // ===========================================================================

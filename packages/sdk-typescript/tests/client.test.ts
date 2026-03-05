@@ -535,6 +535,67 @@ describe('MpakClient', () => {
     });
   });
 
+  describe('downloadSkillBundle', () => {
+    const skillContent = Buffer.from('fake skill bundle');
+    const skillHash = sha256(skillContent);
+    const skillDownloadInfoResponse = {
+      url: 'https://storage.example.com/skill.skill',
+      skill: {
+        name: '@test/skill',
+        version: '1.0.0',
+        sha256: skillHash,
+        size: skillContent.length,
+      },
+      expires_at: '2024-01-02T00:00:00Z',
+    };
+
+    it('resolves download info and returns verified buffer + metadata', async () => {
+      const client = new MpakClient();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(skillDownloadInfoResponse))
+        .mockResolvedValueOnce(mockBinaryResponse(skillContent));
+
+      const result = await client.downloadSkillBundle('@test/skill', '1.0.0');
+
+      expect(Buffer.isBuffer(result.skillRaw)).toBe(true);
+      expect(result.skillRaw.toString()).toBe('fake skill bundle');
+      expect(result.skillMetadata.name).toBe('@test/skill');
+      expect(result.skillMetadata.version).toBe('1.0.0');
+      expect(result.skillMetadata.sha256).toBe(skillHash);
+    });
+
+    it('defaults version to latest', async () => {
+      const client = new MpakClient();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(skillDownloadInfoResponse))
+        .mockResolvedValueOnce(mockBinaryResponse(skillContent));
+
+      await client.downloadSkillBundle('@test/skill');
+
+      const calledUrl = fetchMock.mock.calls[0]?.[0] as string;
+      expect(calledUrl).toContain('/versions/latest/download');
+    });
+
+    it('propagates MpakNotFoundError from getSkillVersionDownload', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('', { status: 404 }));
+
+      await expect(client.downloadSkillBundle('@test/nonexistent')).rejects.toThrow(MpakNotFoundError);
+    });
+
+    it('propagates MpakIntegrityError on SHA-256 mismatch', async () => {
+      const client = new MpakClient();
+      const tampered = Buffer.from('tampered content');
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(skillDownloadInfoResponse))
+        .mockResolvedValueOnce(mockBinaryResponse(tampered));
+
+      await expect(
+        client.downloadSkillBundle('@test/skill', '1.0.0'),
+      ).rejects.toThrow(MpakIntegrityError);
+    });
+  });
+
   describe('detectPlatform', () => {
     it('returns current platform', () => {
       const platform = MpakClient.detectPlatform();
