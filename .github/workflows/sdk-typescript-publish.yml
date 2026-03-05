@@ -53,5 +53,8 @@ jobs:
         run: pnpm --filter @nimblebrain/mpak-sdk... build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
+          pnpm pack
+          npm publish nimblebrain-mpak-sdk-*.tgz --provenance --access public
         working-directory: packages/sdk-typescript
