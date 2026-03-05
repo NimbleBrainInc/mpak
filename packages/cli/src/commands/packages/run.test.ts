@@ -5,6 +5,7 @@ import {
   parsePackageSpec,
   getCacheDir,
   resolveArgs,
+  resolveWorkspace,
   substituteUserConfig,
   substituteEnvVars,
   getLocalCacheDir,
@@ -310,5 +311,25 @@ describe("localBundleNeedsExtract", () => {
     expect(
       localBundleNeedsExtract("/any/path.mcpb", "/tmp"),
     ).toBe(true);
+  });
+});
+
+describe("resolveWorkspace", () => {
+  it("defaults to $cwd/.mpak when no override", () => {
+    expect(resolveWorkspace(undefined, "/home/user/project")).toBe(
+      join("/home/user/project", ".mpak"),
+    );
+  });
+
+  it("uses override when provided", () => {
+    expect(
+      resolveWorkspace("/data/custom", "/home/user/project"),
+    ).toBe("/data/custom");
+  });
+
+  it("treats empty string as no override", () => {
+    expect(resolveWorkspace("", "/home/user/project")).toBe(
+      join("/home/user/project", ".mpak"),
+    );
   });
 });

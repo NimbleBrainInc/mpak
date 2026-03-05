@@ -197,6 +197,17 @@ export function resolveArgs(args: string[], cacheDir: string): string[] {
 }
 
 /**
+ * Resolve the MPAK_WORKSPACE value.
+ * If an override is provided (via env), use it. Otherwise default to $cwd/.mpak.
+ */
+export function resolveWorkspace(
+  override: string | undefined,
+  cwd: string,
+): string {
+  return override || join(cwd, ".mpak");
+}
+
+/**
  * Substitute ${user_config.*} placeholders in a string
  * @example substituteUserConfig('${user_config.api_key}', { api_key: 'secret' }) => 'secret'
  */
@@ -655,6 +666,10 @@ export async function handleRun(
     default:
       throw new Error(`Unsupported server type: ${type as string}`);
   }
+
+  // Provide a project-local workspace directory for stateful bundles.
+  // Defaults to $CWD/.mpak — user can override via MPAK_WORKSPACE in their environment.
+  env["MPAK_WORKSPACE"] = resolveWorkspace(env["MPAK_WORKSPACE"], process.cwd());
 
   // Spawn with stdio passthrough for MCP
   const child = spawn(command, args, {
