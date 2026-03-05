@@ -54,6 +54,6 @@ jobs:
       - name: Publish to npm
         run: |
           # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
-          pnpm --filter @nimblebrain/mpak pack --pack-destination .
+          pnpm pack
           npm publish nimblebrain-mpak-*.tgz --provenance --access public
         working-directory: packages/cli
