@@ -147,64 +147,13 @@ export interface MpakClientConfig {
   userAgent?: string;
 }
 
+// TODO: remove once approved — resolveSkillRef types not used by CLI or external consumers
 // =============================================================================
 // Skill Reference Types (for resolveSkillRef)
 // =============================================================================
-
-/**
- * Base fields shared by all skill reference types
- */
-interface SkillReferenceBase {
-  /** Skill artifact identifier (e.g., '@nimbletools/folk-crm') */
-  name: string;
-  /** Semver version (e.g., '1.0.0') or 'latest' */
-  version: string;
-  /** SHA256 integrity hash (format: 'sha256-hexdigest') */
-  integrity?: string;
-}
-
-/**
- * Skill reference from mpak registry
- */
-export interface MpakSkillReference extends SkillReferenceBase {
-  source: 'mpak';
-}
-
-/**
- * Skill reference from GitHub repository
- */
-export interface GithubSkillReference extends SkillReferenceBase {
-  source: 'github';
-  /** GitHub repository (owner/repo) */
-  repo: string;
-  /** Path to skill file in repo */
-  path: string;
-}
-
-/**
- * Skill reference from direct URL
- */
-export interface UrlSkillReference extends SkillReferenceBase {
-  source: 'url';
-  /** Direct download URL */
-  url: string;
-}
-
-/**
- * Discriminated union of skill reference types
- */
-export type SkillReference = MpakSkillReference | GithubSkillReference | UrlSkillReference;
-
-/**
- * Result of resolving a skill reference
- */
-export interface ResolvedSkill {
-  /** The markdown content of the skill */
-  content: string;
-  /** Version that was resolved */
-  version: string;
-  /** Source the skill was fetched from */
-  source: 'mpak' | 'github' | 'url';
-  /** Whether integrity was verified */
-  verified: boolean;
-}
+// interface SkillReferenceBase { name: string; version: string; integrity?: string; }
+// export interface MpakSkillReference extends SkillReferenceBase { source: 'mpak'; }
+// export interface GithubSkillReference extends SkillReferenceBase { source: 'github'; repo: string; path: string; }
+// export interface UrlSkillReference extends SkillReferenceBase { source: 'url'; url: string; }
+// export type SkillReference = MpakSkillReference | GithubSkillReference | UrlSkillReference;
+// export interface ResolvedSkill { content: string; version: string; source: 'mpak' | 'github' | 'url'; verified: boolean; }
