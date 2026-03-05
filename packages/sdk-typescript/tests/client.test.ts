@@ -384,59 +384,13 @@ describe('MpakClient', () => {
     });
   });
 
-  describe('downloadSkillContent', () => {
-    it('downloads content without verification', async () => {
-      const client = new MpakClient();
-      const content = '# My Skill\n\nSkill content here';
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
-
-      const result = await client.downloadSkillContent('https://example.com/skill.skill');
-
-      expect(result.content).toBe(content);
-      expect(result.verified).toBe(false);
-    });
-
-    it('verifies integrity when hash provided', async () => {
-      const client = new MpakClient();
-      const content = 'skill content';
-      const hash = sha256(content);
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
-
-      const result = await client.downloadSkillContent('https://example.com/skill.skill', hash);
-
-      expect(result.content).toBe(content);
-      expect(result.verified).toBe(true);
-    });
-
-    it('throws MpakIntegrityError on hash mismatch (fail-closed)', async () => {
-      const client = new MpakClient();
-      const content = 'actual content';
-      fetchMock.mockResolvedValueOnce(mockResponse(content));
-
-      await expect(
-        client.downloadSkillContent('https://example.com/skill.skill', 'wrong_hash'),
-      ).rejects.toThrow(MpakIntegrityError);
-    });
-
-    it('does not return content when integrity fails', async () => {
-      const client = new MpakClient();
-      const secretContent = 'sensitive skill content';
-      fetchMock.mockResolvedValueOnce(mockResponse(secretContent));
-
-      let leakedContent: string | undefined;
-      try {
-        const result = await client.downloadSkillContent(
-          'https://example.com/skill.skill',
-          'wrong_hash',
-        );
-        leakedContent = result.content;
-      } catch {
-        // Expected
-      }
-
-      expect(leakedContent).toBeUndefined();
-    });
-  });
+  // TODO: remove once approved — downloadSkillContent replaced by downloadContent + downloadSkillBundle
+  // describe('downloadSkillContent', () => {
+  //   it('downloads content without verification', async () => { ... });
+  //   it('verifies integrity when hash provided', async () => { ... });
+  //   it('throws MpakIntegrityError on hash mismatch (fail-closed)', async () => { ... });
+  //   it('does not return content when integrity fails', async () => { ... });
+  // });
 
   describe('downloadContent', () => {
     it('downloads and verifies SHA-256', async () => {
