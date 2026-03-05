@@ -216,8 +216,8 @@ export class MpakClient {
     return response.json() as Promise<SkillDetailResponse>;
   }
 
-	// TODO: The next 2 functions `getSkillDownload` and `getSkillVersionDownload` should be merged into 1, making the skill download functionality consistent with bundle download function. We can not do it right now because both of these functions are used by CLI.
-	// In future, the single merged function should mirror `getBundleDownload`
+  // TODO: The next 2 functions `getSkillDownload` and `getSkillVersionDownload` should be merged into 1, making the skill download functionality consistent with bundle download function. We can not do it right now because both of these functions are used by CLI.
+  // In future, the single merged function should mirror `getBundleDownload`
 
   /**
    * Get download info for a skill (latest version)

@@ -29,7 +29,10 @@ function mockBinaryResponse(
   init: { status?: number; ok?: boolean } = {},
 ): Response {
   return {
-    arrayBuffer: () => Promise.resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)),
+    arrayBuffer: () =>
+      Promise.resolve(
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+      ),
     status: init.status ?? 200,
     ok: init.ok ?? (init.status === undefined || init.status < 400),
   } as Response;
@@ -417,7 +420,9 @@ describe('MpakClient', () => {
 
     it('throws MpakNetworkError on fetch failure', async () => {
       const client = new MpakClient();
-      fetchMock.mockResolvedValueOnce(mockBinaryResponse(Buffer.from(''), { status: 500, ok: false }));
+      fetchMock.mockResolvedValueOnce(
+        mockBinaryResponse(Buffer.from(''), { status: 500, ok: false }),
+      );
 
       await expect(
         client.downloadContent('https://example.com/file.mcpb', 'anyhash'),
@@ -446,7 +451,10 @@ describe('MpakClient', () => {
         .mockResolvedValueOnce(mockResponse(downloadInfoResponse))
         .mockResolvedValueOnce(mockBinaryResponse(bundleContent));
 
-      const result = await client.downloadBundle('@test/bundle', '1.0.0', { os: 'darwin', arch: 'arm64' });
+      const result = await client.downloadBundle('@test/bundle', '1.0.0', {
+        os: 'darwin',
+        arch: 'arm64',
+      });
 
       expect(Buffer.isBuffer(result.bundleRaw)).toBe(true);
       expect(result.bundleRaw.toString()).toBe('fake mcpb bundle');
@@ -483,9 +491,9 @@ describe('MpakClient', () => {
         .mockResolvedValueOnce(mockResponse(downloadInfoResponse))
         .mockResolvedValueOnce(mockBinaryResponse(tampered));
 
-      await expect(
-        client.downloadBundle('@test/bundle', '1.0.0'),
-      ).rejects.toThrow(MpakIntegrityError);
+      await expect(client.downloadBundle('@test/bundle', '1.0.0')).rejects.toThrow(
+        MpakIntegrityError,
+      );
     });
   });
 
@@ -534,7 +542,9 @@ describe('MpakClient', () => {
       const client = new MpakClient();
       fetchMock.mockResolvedValueOnce(mockResponse('', { status: 404 }));
 
-      await expect(client.downloadSkillBundle('@test/nonexistent')).rejects.toThrow(MpakNotFoundError);
+      await expect(client.downloadSkillBundle('@test/nonexistent')).rejects.toThrow(
+        MpakNotFoundError,
+      );
     });
 
     it('propagates MpakIntegrityError on SHA-256 mismatch', async () => {
@@ -544,9 +554,9 @@ describe('MpakClient', () => {
         .mockResolvedValueOnce(mockResponse(skillDownloadInfoResponse))
         .mockResolvedValueOnce(mockBinaryResponse(tampered));
 
-      await expect(
-        client.downloadSkillBundle('@test/skill', '1.0.0'),
-      ).rejects.toThrow(MpakIntegrityError);
+      await expect(client.downloadSkillBundle('@test/skill', '1.0.0')).rejects.toThrow(
+        MpakIntegrityError,
+      );
     });
   });
 
