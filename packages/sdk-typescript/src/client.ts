@@ -473,6 +473,55 @@ export class MpakClient {
   }
 
   // ===========================================================================
+  // Download Methods
+  // ===========================================================================
+
+  /**
+   * Download content from a URL and verify its SHA-256 integrity.
+   *
+   * @throws {MpakIntegrityError} If SHA-256 doesn't match
+   * @throws {MpakNetworkError} For network failures
+   */
+  async downloadContent(url: string, sha256: string): Promise<Buffer> {
+    const response = await this.fetchWithTimeout(url);
+
+    if (!response.ok) {
+      throw new MpakNetworkError(`Failed to download: HTTP ${response.status}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    const actualHash = this.computeSha256(buffer);
+    if (actualHash !== sha256) {
+      throw new MpakIntegrityError(sha256, actualHash);
+    }
+
+    return buffer;
+  }
+
+  /**
+   * Download a bundle by name, with optional version and platform.
+   * Defaults to latest version and auto-detected platform.
+   *
+   * @throws {MpakNotFoundError} If bundle not found
+   * @throws {MpakIntegrityError} If SHA-256 doesn't match
+   * @throws {MpakNetworkError} For network failures
+   */
+  async downloadBundle(
+    name: string,
+    version?: string,
+    platform?: Platform,
+  ): Promise<{ bundleRaw: Buffer; bundleMetadata: BundleDownloadResponse['bundle'] }> {
+    const resolvedPlatform = platform ?? MpakClient.detectPlatform();
+    const resolvedVersion = version ?? 'latest';
+
+    const downloadInfo = await this.getBundleDownload(name, resolvedVersion, resolvedPlatform);
+    const bundleRaw = await this.downloadContent(downloadInfo.url, downloadInfo.bundle.sha256);
+
+    return { bundleRaw, bundleMetadata: downloadInfo.bundle };
+  }
+
+  // ===========================================================================
   // Utility Methods
   // ===========================================================================
 
@@ -516,8 +565,8 @@ export class MpakClient {
   /**
    * Compute SHA256 hash of content
    */
-  private computeSha256(content: string): string {
-    return createHash('sha256').update(content, 'utf8').digest('hex');
+  private computeSha256(content: string | Buffer): string {
+    return createHash('sha256').update(content).digest('hex');
   }
 
   /**
