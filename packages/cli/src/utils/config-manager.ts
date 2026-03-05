@@ -21,6 +21,7 @@ export interface MpakConfig {
   version: string;
   lastUpdated: string;
   registryUrl?: string;
+  provider?: string;
   packages?: Record<string, PackageConfig>;
 }
 
@@ -77,6 +78,16 @@ function validateConfig(data: unknown, configPath: string): MpakConfig {
     );
   }
 
+  if (
+    obj["provider"] !== undefined &&
+    typeof obj["provider"] !== "string"
+  ) {
+    throw new ConfigCorruptedError(
+      "Config field provider must be a string",
+      configPath,
+    );
+  }
+
   if (obj["packages"] !== undefined) {
     if (typeof obj["packages"] !== "object" || obj["packages"] === null) {
       throw new ConfigCorruptedError(
@@ -114,6 +125,7 @@ function validateConfig(data: unknown, configPath: string): MpakConfig {
     "version",
     "lastUpdated",
     "registryUrl",
+    "provider",
     "packages",
   ]);
   for (const key of Object.keys(obj)) {
@@ -211,6 +223,17 @@ export class ConfigManager {
       process.env["MPAK_REGISTRY_URL"] ||
       "https://registry.mpak.dev"
     );
+  }
+
+  setProvider(name: string): void {
+    const config = this.loadConfig();
+    config.provider = name;
+    this.saveConfig();
+  }
+
+  getProvider(): string | undefined {
+    const config = this.loadConfig();
+    return config.provider;
   }
 
   /**
