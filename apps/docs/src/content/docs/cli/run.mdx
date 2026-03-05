@@ -56,6 +56,31 @@ See the [Integrations](/integrations/claude-code) section for setting up mpak bu
 - [Claude Code](/integrations/claude-code) - One command: `claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo`
 - [Claude Desktop](/integrations/claude-desktop) - JSON config file
 
+## Environment Variables
+
+When `mpak run` spawns a bundle, it sets the following environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MPAK_WORKSPACE` | `$CWD/.mpak` | Project-local directory for stateful data. Bundles should read/write persistent data here instead of using relative paths. |
+
+Override the workspace directory:
+
+```bash
+MPAK_WORKSPACE=/data/my-project mpak run @nimblebraininc/leadgen
+```
+
+Bundles access it via standard environment variable APIs:
+
+```python
+import os
+workspace = os.environ.get("MPAK_WORKSPACE", ".")
+```
+
+```typescript
+const workspace = process.env.MPAK_WORKSPACE ?? ".";
+```
+
 ## Configuration
 
 Some bundles require configuration (API keys, etc.). See [mpak config](/cli/config) for storing configuration values.

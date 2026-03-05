@@ -140,6 +140,20 @@ Use `${__dirname}` to reference the bundle's extraction directory:
 }
 ```
 
+### Runtime Environment Variables
+
+`mpak run` automatically sets environment variables that bundles can use at runtime:
+
+| Variable | Description |
+|----------|-------------|
+| `MPAK_WORKSPACE` | Project-local directory for persistent data (defaults to `$CWD/.mpak`). Use this instead of relative paths for any data that should survive across restarts. |
+
+```python
+import os
+workspace = os.environ.get("MPAK_WORKSPACE", ".")
+entities_dir = os.path.join(workspace, "entities")
+```
+
 ## user_config
 
 Define configuration that users need to provide (API keys, etc.):
