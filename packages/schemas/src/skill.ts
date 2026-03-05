@@ -79,6 +79,7 @@ export const SkillDiscoveryMetadataSchema = z
 export const SkillFrontmatterSchema = z.object({
   name: SkillNameSchema,
   description: SkillDescriptionSchema,
+  version: z.string().optional(),
   license: z.string().optional(),
   compatibility: z.string().max(500).optional(),
   "allowed-tools": z.string().optional(),
