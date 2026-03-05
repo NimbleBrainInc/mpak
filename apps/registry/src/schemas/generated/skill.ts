@@ -101,6 +101,7 @@ export const SkillFrontmatterSchema = z.object({
   description: SkillDescriptionSchema,
 
   // Optional (official spec - informational pass-through)
+  version: z.string().optional(),
   license: z.string().optional(),
   compatibility: z.string().max(500).optional(),
   'allowed-tools': z.string().optional(), // space-delimited, experimental
