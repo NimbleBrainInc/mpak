@@ -17,8 +17,10 @@ import { MpakNotFoundError } from '../src/errors.js';
 // Known bundle that exists in the registry
 const KNOWN_BUNDLE = '@nimblebraininc/echo';
 
+const registryUrl = process.env.MPAK_REGISTRY_URL ?? 'https://registry.mpak.dev';
+
 describe('MpakClient Integration Tests', () => {
-  const client = new MpakClient();
+  const client = new MpakClient({ registryUrl });
 
   describe('Bundle API', () => {
     it('searches bundles', async () => {
