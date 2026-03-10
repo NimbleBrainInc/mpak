@@ -23,6 +23,7 @@ import {
   AnnounceRequestSchema,
   AnnounceResponseSchema,
 } from '../../schemas/generated/api-responses.js';
+import { BundleSearchQuerySchema, type BundleSearchQuery } from '../../schemas/query.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
@@ -133,38 +134,17 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   const { packages: packageRepo } = fastify.repositories;
 
   // GET /v1/bundles/search - Search bundles
-  fastify.get('/search', {
+  fastify.get<{ Querystring: BundleSearchQuery }>('/search', {
     schema: {
       tags: ['bundles'],
       description: 'Search for bundles',
-      querystring: {
-        type: 'object',
-        properties: {
-          q: { type: 'string', description: 'Search query' },
-          type: { type: 'string', description: 'Filter by server type' },
-          sort: { type: 'string', enum: ['downloads', 'recent', 'name'], default: 'downloads' },
-          limit: { type: 'number', default: 20, maximum: 100 },
-          offset: { type: 'number', default: 0 },
-        },
-      },
+      querystring: toJsonSchema(BundleSearchQuerySchema),
       response: {
         200: toJsonSchema(BundleSearchResponseSchema),
       },
     },
     handler: async (request) => {
-      const {
-        q,
-        type,
-        sort = 'downloads',
-        limit = 20,
-        offset = 0,
-      } = request.query as {
-        q?: string;
-        type?: string;
-        sort?: string;
-        limit?: number;
-        offset?: number;
-      };
+      const { q, type, sort, limit, offset } = request.query;
 
       // Build filters
       const filters: Record<string, unknown> = {};
@@ -179,9 +159,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         orderBy = { name: 'asc' };
       }
 
-      // Clamp pagination values to safe ranges
-      const safeLimit = Math.max(1, Math.min(limit, 100));
-      const safeOffset = Math.max(0, offset);
+      const safeLimit = limit;
+      const safeOffset = offset;
 
       // Search packages
       const startTime = Date.now();
