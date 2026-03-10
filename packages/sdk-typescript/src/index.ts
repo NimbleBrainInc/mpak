@@ -7,27 +7,18 @@
  *
  * @example
  * ```typescript
- * import { MpakClient, SkillReference } from '@nimblebrain/mpak-sdk';
+ * import { MpakClient } from '@nimblebrain/mpak-sdk';
  *
  * const client = new MpakClient();
  *
  * // Search for bundles
  * const bundles = await client.searchBundles({ q: 'mcp' });
  *
- * // Get bundle details
- * const bundle = await client.getBundle('@nimbletools/echo');
+ * // Download a bundle (latest version, auto-detected platform)
+ * const { data, metadata } = await client.downloadBundle('@nimbletools/echo');
  *
- * // Search for skills
- * const skills = await client.searchSkills({ q: 'crm' });
- *
- * // Resolve a skill reference to content (recommended)
- * const ref: SkillReference = {
- *   source: 'mpak',
- *   name: '@nimblebraininc/folk-crm',
- *   version: '1.3.0',
- * };
- * const resolved = await client.resolveSkillRef(ref);
- * console.log(resolved.content); // Skill markdown content
+ * // Download a skill bundle
+ * const { data, metadata } = await client.downloadSkillBundle('@nimblebraininc/folk-crm');
  * ```
  */
 
@@ -62,12 +53,6 @@ export type {
   SkillDetail,
   SkillDownloadInfo,
   SkillVersion,
-  // Skill reference types (for resolveSkillRef)
-  SkillReference,
-  MpakSkillReference,
-  GithubSkillReference,
-  UrlSkillReference,
-  ResolvedSkill,
 } from './types.js';
 
 // Re-export SkillSearchResponse from schemas

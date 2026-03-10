@@ -14,8 +14,9 @@ import { describe, it, expect } from 'vitest';
 import { MpakClient } from '../src/client.js';
 import { MpakNotFoundError } from '../src/errors.js';
 
-// Known bundle that exists in the registry
+// Known bundle and skill that exist in the registry
 const KNOWN_BUNDLE = '@nimblebraininc/echo';
+const KNOWN_SKILL = '@nimblebraininc/ipinfo';
 
 const registryUrl = process.env.MPAK_REGISTRY_URL ?? 'https://registry.mpak.dev';
 
@@ -121,6 +122,17 @@ describe('MpakClient Integration Tests', () => {
       expect(manifest.server).toBeDefined();
     });
 
+    it('downloads bundle with verified integrity', async () => {
+      const { data, metadata } = await client.downloadBundle(KNOWN_BUNDLE);
+
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(data.byteLength).toBeGreaterThan(0);
+      expect(metadata.name).toBe(KNOWN_BUNDLE);
+      expect(metadata.version).toBeDefined();
+      expect(metadata.sha256).toBeDefined();
+      expect(metadata.size).toBeGreaterThan(0);
+    });
+
     it('throws MpakNotFoundError for nonexistent bundle', async () => {
       await expect(client.getBundle('@nonexistent/bundle-that-does-not-exist')).rejects.toThrow(
         MpakNotFoundError,
@@ -145,6 +157,17 @@ describe('MpakClient Integration Tests', () => {
 
       expect(result.skills).toBeInstanceOf(Array);
       expect(result.pagination).toBeDefined();
+    });
+
+    it('downloads skill bundle with verified integrity', async () => {
+      const { data, metadata } = await client.downloadSkillBundle(KNOWN_SKILL);
+
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(data.byteLength).toBeGreaterThan(0);
+      expect(metadata.name).toBe(KNOWN_SKILL);
+      expect(metadata.version).toBeDefined();
+      expect(metadata.sha256).toBeDefined();
+      expect(metadata.size).toBeGreaterThan(0);
     });
 
     it('throws MpakNotFoundError for nonexistent skill', async () => {
