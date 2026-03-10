@@ -29,7 +29,8 @@ function mockBinaryResponse(
   init: { status?: number; ok?: boolean } = {},
 ): Response {
   return {
-    arrayBuffer: () => Promise.resolve(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)),
+    arrayBuffer: () =>
+      Promise.resolve(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)),
     status: init.status ?? 200,
     ok: init.ok ?? (init.status === undefined || init.status < 400),
   } as Response;
