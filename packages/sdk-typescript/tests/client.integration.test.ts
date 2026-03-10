@@ -121,14 +121,14 @@ describe('MpakClient Integration Tests', () => {
     });
 
     it('downloads bundle with verified integrity', async () => {
-      const { bundleRaw, bundleMetadata } = await client.downloadBundle(KNOWN_BUNDLE);
+      const { data, metadata } = await client.downloadBundle(KNOWN_BUNDLE);
 
-      expect(Buffer.isBuffer(bundleRaw)).toBe(true);
-      expect(bundleRaw.byteLength).toBeGreaterThan(0);
-      expect(bundleMetadata.name).toBe(KNOWN_BUNDLE);
-      expect(bundleMetadata.version).toBeDefined();
-      expect(bundleMetadata.sha256).toBeDefined();
-      expect(bundleMetadata.size).toBeGreaterThan(0);
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(data.byteLength).toBeGreaterThan(0);
+      expect(metadata.name).toBe(KNOWN_BUNDLE);
+      expect(metadata.version).toBeDefined();
+      expect(metadata.sha256).toBeDefined();
+      expect(metadata.size).toBeGreaterThan(0);
     });
 
     it('throws MpakNotFoundError for nonexistent bundle', async () => {
@@ -158,14 +158,14 @@ describe('MpakClient Integration Tests', () => {
     });
 
     it('downloads skill bundle with verified integrity', async () => {
-      const { skillRaw, skillMetadata } = await client.downloadSkillBundle(KNOWN_SKILL);
+      const { data, metadata } = await client.downloadSkillBundle(KNOWN_SKILL);
 
-      expect(Buffer.isBuffer(skillRaw)).toBe(true);
-      expect(skillRaw.byteLength).toBeGreaterThan(0);
-      expect(skillMetadata.name).toBe(KNOWN_SKILL);
-      expect(skillMetadata.version).toBeDefined();
-      expect(skillMetadata.sha256).toBeDefined();
-      expect(skillMetadata.size).toBeGreaterThan(0);
+      expect(data).toBeInstanceOf(Uint8Array);
+      expect(data.byteLength).toBeGreaterThan(0);
+      expect(metadata.name).toBe(KNOWN_SKILL);
+      expect(metadata.version).toBeDefined();
+      expect(metadata.sha256).toBeDefined();
+      expect(metadata.size).toBeGreaterThan(0);
     });
 
     it('throws MpakNotFoundError for nonexistent skill', async () => {

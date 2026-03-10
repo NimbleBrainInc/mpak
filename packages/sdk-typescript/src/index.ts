@@ -15,10 +15,10 @@
  * const bundles = await client.searchBundles({ q: 'mcp' });
  *
  * // Download a bundle (latest version, auto-detected platform)
- * const { bundleRaw, bundleMetadata } = await client.downloadBundle('@nimbletools/echo');
+ * const { data, metadata } = await client.downloadBundle('@nimbletools/echo');
  *
  * // Download a skill bundle
- * const { skillRaw, skillMetadata } = await client.downloadSkillBundle('@nimblebraininc/folk-crm');
+ * const { data, metadata } = await client.downloadSkillBundle('@nimblebraininc/folk-crm');
  * ```
  */
 

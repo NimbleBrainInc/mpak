@@ -4,7 +4,7 @@ import { MpakClient } from '../src/client.js';
 import { MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from '../src/errors.js';
 
 // Helper to compute SHA256 hash (same as client implementation)
-function sha256(content: string | Buffer): string {
+function sha256(content: string | Uint8Array): string {
   return createHash('sha256').update(content).digest('hex');
 }
 
@@ -25,14 +25,11 @@ function mockResponse(
 
 // Helper to create a mock binary Response
 function mockBinaryResponse(
-  buffer: Buffer,
+  data: Uint8Array,
   init: { status?: number; ok?: boolean } = {},
 ): Response {
   return {
-    arrayBuffer: () =>
-      Promise.resolve(
-        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
-      ),
+    arrayBuffer: () => Promise.resolve(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)),
     status: init.status ?? 200,
     ok: init.ok ?? (init.status === undefined || init.status < 400),
   } as Response;
@@ -390,19 +387,19 @@ describe('MpakClient', () => {
   describe('downloadContent', () => {
     it('downloads and verifies SHA-256', async () => {
       const client = new MpakClient();
-      const content = Buffer.from('bundle binary data');
+      const content = new TextEncoder().encode('bundle binary data');
       const hash = sha256(content);
       fetchMock.mockResolvedValueOnce(mockBinaryResponse(content));
 
       const result = await client.downloadContent('https://example.com/file.mcpb', hash);
 
-      expect(Buffer.isBuffer(result)).toBe(true);
-      expect(result.toString()).toBe('bundle binary data');
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(new TextDecoder().decode(result)).toBe('bundle binary data');
     });
 
     it('throws MpakIntegrityError on SHA-256 mismatch', async () => {
       const client = new MpakClient();
-      const content = Buffer.from('some data');
+      const content = new TextEncoder().encode('some data');
       fetchMock.mockResolvedValueOnce(mockBinaryResponse(content));
 
       await expect(
@@ -413,7 +410,7 @@ describe('MpakClient', () => {
     it('throws MpakNetworkError on fetch failure', async () => {
       const client = new MpakClient();
       fetchMock.mockResolvedValueOnce(
-        mockBinaryResponse(Buffer.from(''), { status: 500, ok: false }),
+        mockBinaryResponse(new Uint8Array(0), { status: 500, ok: false }),
       );
 
       await expect(
@@ -423,7 +420,7 @@ describe('MpakClient', () => {
   });
 
   describe('downloadBundle', () => {
-    const bundleContent = Buffer.from('fake mcpb bundle');
+    const bundleContent = new TextEncoder().encode('fake mcpb bundle');
     const bundleHash = sha256(bundleContent);
     const downloadInfoResponse = {
       url: 'https://storage.example.com/bundle.mcpb',
@@ -448,11 +445,11 @@ describe('MpakClient', () => {
         arch: 'arm64',
       });
 
-      expect(Buffer.isBuffer(result.bundleRaw)).toBe(true);
-      expect(result.bundleRaw.toString()).toBe('fake mcpb bundle');
-      expect(result.bundleMetadata.name).toBe('@test/bundle');
-      expect(result.bundleMetadata.version).toBe('1.0.0');
-      expect(result.bundleMetadata.sha256).toBe(bundleHash);
+      expect(result.data).toBeInstanceOf(Uint8Array);
+      expect(new TextDecoder().decode(result.data)).toBe('fake mcpb bundle');
+      expect(result.metadata.name).toBe('@test/bundle');
+      expect(result.metadata.version).toBe('1.0.0');
+      expect(result.metadata.sha256).toBe(bundleHash);
     });
 
     it('defaults version to latest and auto-detects platform', async () => {
@@ -478,7 +475,7 @@ describe('MpakClient', () => {
 
     it('propagates MpakIntegrityError on SHA-256 mismatch', async () => {
       const client = new MpakClient();
-      const tampered = Buffer.from('tampered content');
+      const tampered = new TextEncoder().encode('tampered content');
       fetchMock
         .mockResolvedValueOnce(mockResponse(downloadInfoResponse))
         .mockResolvedValueOnce(mockBinaryResponse(tampered));
@@ -490,7 +487,7 @@ describe('MpakClient', () => {
   });
 
   describe('downloadSkillBundle', () => {
-    const skillContent = Buffer.from('fake skill bundle');
+    const skillContent = new TextEncoder().encode('fake skill bundle');
     const skillHash = sha256(skillContent);
     const skillDownloadInfoResponse = {
       url: 'https://storage.example.com/skill.skill',
@@ -511,11 +508,11 @@ describe('MpakClient', () => {
 
       const result = await client.downloadSkillBundle('@test/skill', '1.0.0');
 
-      expect(Buffer.isBuffer(result.skillRaw)).toBe(true);
-      expect(result.skillRaw.toString()).toBe('fake skill bundle');
-      expect(result.skillMetadata.name).toBe('@test/skill');
-      expect(result.skillMetadata.version).toBe('1.0.0');
-      expect(result.skillMetadata.sha256).toBe(skillHash);
+      expect(result.data).toBeInstanceOf(Uint8Array);
+      expect(new TextDecoder().decode(result.data)).toBe('fake skill bundle');
+      expect(result.metadata.name).toBe('@test/skill');
+      expect(result.metadata.version).toBe('1.0.0');
+      expect(result.metadata.sha256).toBe(skillHash);
     });
 
     it('defaults version to latest', async () => {
@@ -541,7 +538,7 @@ describe('MpakClient', () => {
 
     it('propagates MpakIntegrityError on SHA-256 mismatch', async () => {
       const client = new MpakClient();
-      const tampered = Buffer.from('tampered content');
+      const tampered = new TextEncoder().encode('tampered content');
       fetchMock
         .mockResolvedValueOnce(mockResponse(skillDownloadInfoResponse))
         .mockResolvedValueOnce(mockBinaryResponse(tampered));
