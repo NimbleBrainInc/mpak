@@ -387,14 +387,6 @@ describe('MpakClient', () => {
     });
   });
 
-  // TODO: remove once approved — downloadSkillContent replaced by downloadContent + downloadSkillBundle
-  // describe('downloadSkillContent', () => {
-  //   it('downloads content without verification', async () => { ... });
-  //   it('verifies integrity when hash provided', async () => { ... });
-  //   it('throws MpakIntegrityError on hash mismatch (fail-closed)', async () => { ... });
-  //   it('does not return content when integrity fails', async () => { ... });
-  // });
-
   describe('downloadContent', () => {
     it('downloads and verifies SHA-256', async () => {
       const client = new MpakClient();

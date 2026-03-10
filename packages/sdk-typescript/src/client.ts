@@ -10,11 +10,6 @@ import type {
   SkillDownloadResponse,
   SkillSearchParams,
   Platform,
-  // TODO: remove once approved
-  // SkillReference,
-  // GithubSkillReference,
-  // UrlSkillReference,
-  // ResolvedSkill,
 } from './types.js';
 import type { BundleSearchResponse, SkillSearchResponse } from '@nimblebrain/mpak-schemas';
 import { MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from './errors.js';
@@ -216,9 +211,6 @@ export class MpakClient {
     return response.json() as Promise<SkillDetailResponse>;
   }
 
-  // TODO: The next 2 functions `getSkillDownload` and `getSkillVersionDownload` should be merged into 1, making the skill download functionality consistent with bundle download function. We can not do it right now because both of these functions are used by CLI.
-  // In future, the single merged function should mirror `getBundleDownload`
-
   /**
    * Get download info for a skill (latest version)
    */
@@ -264,22 +256,6 @@ export class MpakClient {
 
     return response.json() as Promise<SkillDownloadResponse>;
   }
-
-  // TODO: remove once approved — replaced by downloadContent + downloadSkillBundle
-  // async downloadSkillContent(
-  //   downloadUrl: string,
-  //   expectedSha256?: string,
-  // ): Promise<{ content: string; verified: boolean }> { ... }
-
-  // TODO: remove once approved — resolveSkillRef and all supporting methods
-  // are not used by the CLI or any external consumer
-  // async resolveSkillRef(ref: SkillReference): Promise<ResolvedSkill> { ... }
-  // private async resolveMpakSkill(ref: SkillReference & { source: 'mpak' }): Promise<ResolvedSkill> { ... }
-  // private async resolveGithubSkill(ref: GithubSkillReference): Promise<ResolvedSkill> { ... }
-  // private async resolveUrlSkill(ref: UrlSkillReference): Promise<ResolvedSkill> { ... }
-  // private async extractSkillFromZip(zipBuffer: ArrayBuffer, skillName: string): Promise<string> { ... }
-  // private verifyIntegrityOrThrow(content: string, integrity: string): void { ... }
-  // private extractHash(integrity: string): string { ... }
 
   // ===========================================================================
   // Download Methods

@@ -146,14 +146,3 @@ export interface MpakClientConfig {
    */
   userAgent?: string;
 }
-
-// TODO: remove once approved — resolveSkillRef types not used by CLI or external consumers
-// =============================================================================
-// Skill Reference Types (for resolveSkillRef)
-// =============================================================================
-// interface SkillReferenceBase { name: string; version: string; integrity?: string; }
-// export interface MpakSkillReference extends SkillReferenceBase { source: 'mpak'; }
-// export interface GithubSkillReference extends SkillReferenceBase { source: 'github'; repo: string; path: string; }
-// export interface UrlSkillReference extends SkillReferenceBase { source: 'url'; url: string; }
-// export type SkillReference = MpakSkillReference | GithubSkillReference | UrlSkillReference;
-// export interface ResolvedSkill { content: string; version: string; source: 'mpak' | 'github' | 'url'; verified: boolean; }

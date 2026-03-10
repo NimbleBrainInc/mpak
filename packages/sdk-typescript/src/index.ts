@@ -53,12 +53,6 @@ export type {
   SkillDetail,
   SkillDownloadInfo,
   SkillVersion,
-  // TODO: remove once approved — resolveSkillRef types not used by CLI or external consumers
-  // SkillReference,
-  // MpakSkillReference,
-  // GithubSkillReference,
-  // UrlSkillReference,
-  // ResolvedSkill,
 } from './types.js';
 
 // Re-export SkillSearchResponse from schemas
