@@ -503,6 +503,46 @@ describe('Bundle Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('accepts package name with mixed-case scope', async () => {
+      (verifyGitHubOIDC as Mock).mockResolvedValue({
+        ...validOIDCClaims,
+        repository: 'Test-Org/mcp-server',
+        repository_owner: 'Test-Org',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/announce',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          ...validPayload,
+          name: '@Test-Org/mcp-server',
+        },
+      });
+
+      // The request should pass name validation (not get rejected for invalid name)
+      const body = JSON.parse(res.payload);
+      if (res.statusCode === 400) {
+        expect(body.error.message).not.toContain('Invalid package name');
+      }
+    });
+
+    it('rejects package name with invalid characters', async () => {
+      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/announce',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          ...validPayload,
+          name: '@test-org/mcp server!',
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
     it('rejects manifest without server type', async () => {
       (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
 

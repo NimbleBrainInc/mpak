@@ -47,7 +47,7 @@ function getPlatformString(os: string, arch: string): string {
 }
 
 // Package name validation (scoped only for v1 API)
-const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/;
+const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/i;
 
 function isValidScopedPackageName(name: string): boolean {
   return SCOPED_REGEX.test(name);
@@ -769,7 +769,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         // Validate package name
         if (!isValidScopedPackageName(name)) {
           throw new BadRequestError(
-            `Invalid package name: "${name}". Must be scoped (@scope/name) with lowercase alphanumeric characters and hyphens.`
+            `Invalid package name: "${name}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
           );
         }
 

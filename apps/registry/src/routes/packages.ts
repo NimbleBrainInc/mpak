@@ -30,8 +30,8 @@ import { triggerSecurityScan } from '../services/scanner.js';
 import type { MCPBManifest } from '../types.js';
 
 // Package name validation
-const UNSCOPED_REGEX = /^[a-z0-9][a-z0-9-]{0,213}$/;
-const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/;
+const UNSCOPED_REGEX = /^[a-z0-9][a-z0-9-]{0,213}$/i;
+const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/i;
 
 function parsePackageName(name: string): { scope: string | null; packageName: string; isScoped: boolean } {
   if (name.startsWith('@')) {

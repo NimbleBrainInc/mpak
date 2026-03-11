@@ -34,7 +34,7 @@ interface GitHubReleaseAsset {
 }
 
 // Scoped name validation
-const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]*$/;
+const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]*$/i;
 
 function isValidScopedName(name: string): boolean {
   return SCOPED_REGEX.test(name);
@@ -505,7 +505,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         // Validate name
         if (!isValidScopedName(name)) {
           throw new BadRequestError(
-            `Invalid skill name: "${name}". Must be scoped (@scope/name) with lowercase alphanumeric characters and hyphens.`
+            `Invalid skill name: "${name}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
           );
         }
 
