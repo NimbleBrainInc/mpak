@@ -143,16 +143,11 @@ describe('Bundle Routes', () => {
       expect(body.total).toBe(0);
     });
 
-    it('clamps pagination limits to safe ranges', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+    it('rejects invalid pagination values', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
 
-      // limit=0 should be clamped to 1, offset=-5 should be clamped to 0
-      await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
-
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ take: 1, skip: 0 }),
-      );
+      expect(res.statusCode).toBe(400);
+      expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
     it('supports sort parameter', async () => {
