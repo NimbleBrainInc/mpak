@@ -107,12 +107,15 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         // Extract name and version from manifest
-        const packageName = manifest.name;
+        const rawPackageName = manifest.name;
         const version = manifest.version;
 
-        if (!packageName || !version) {
+        if (!rawPackageName || !version) {
           throw new BadRequestError('Manifest must contain name and version');
         }
+
+        // Normalise to lowercase so @Foo/bar and @foo/bar are the same package
+        const packageName = rawPackageName.toLowerCase();
 
         // Validate package name format
         if (!isValidPackageName(packageName)) {

@@ -724,7 +724,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Extract body
         const {
-          name,
+          name: rawName,
           version,
           manifest,
           release_tag,
@@ -744,6 +744,9 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             size: number;
           };
         };
+
+        // Normalise to lowercase so @Foo/bar and @foo/bar are the same package
+        const name = rawName.toLowerCase();
 
         // Validate artifact platform values
         const VALID_OS = ['darwin', 'linux', 'win32', 'any'];
@@ -769,7 +772,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         // Validate package name
         if (!isValidScopedPackageName(name)) {
           throw new BadRequestError(
-            `Invalid package name: "${name}". Must be scoped (@scope/name) with lowercase alphanumeric characters and hyphens.`
+            `Invalid package name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
           );
         }
 
