@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import type { FastifyPluginAsync } from 'fastify';
-import { createWriteStream, createReadStream, promises as fs } from 'fs';
+import { createReadStream, createWriteStream, promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { config } from '../../config.js';
@@ -8,23 +8,28 @@ import { runInTransaction } from '../../db/index.js';
 import type { PackageSearchFilters } from '../../db/types.js';
 import {
   BadRequestError,
+  handleError,
   NotFoundError,
   UnauthorizedError,
-  handleError,
 } from '../../errors/index.js';
 import { buildProvenance, type ProvenanceRecord, verifyGitHubOIDC } from '../../lib/oidc.js';
 import { toJsonSchema } from '../../lib/zod-schema.js';
 import {
-  BundleSearchResponseSchema,
-  BundleDetailSchema,
-  VersionsResponseSchema,
-  VersionDetailSchema,
-  DownloadInfoSchema,
-  MCPBIndexSchema,
   AnnounceRequestSchema,
   AnnounceResponseSchema,
+  BundleDetailSchema,
+  type BundleSearchResponse,
+  BundleSearchResponseSchema,
+  type PackageTool,
+  DownloadInfoSchema,
+  MCPBIndexSchema,
+  VersionDetailSchema,
+  VersionsResponseSchema,
 } from '../../schemas/generated/api-responses.js';
-import { BundleSearchQuerySchema, type BundleSearchQuery } from '../../schemas/query.js';
+import {
+  type BundleSearchParams,
+  BundleSearchParamsSchema,
+} from '../../schemas/generated/package.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
@@ -74,7 +79,7 @@ function getProvenanceSummary(version: { publishMethod: string | null; provenanc
   }
   const p = version.provenance as ProvenanceRecord;
   return {
-    schema_version: p.schema_version,
+    schema_version: String(p.schema_version),
     provider: p.provider,
     repository: p.repository,
     sha: p.sha,
@@ -135,11 +140,11 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   const { packages: packageRepo } = fastify.repositories;
 
   // GET /v1/bundles/search - Search bundles
-  fastify.get<{ Querystring: BundleSearchQuery }>('/search', {
+  fastify.get<{ Querystring: BundleSearchParams }>('/search', {
     schema: {
       tags: ['bundles'],
       description: 'Search for bundles',
-      querystring: toJsonSchema(BundleSearchQuerySchema),
+      querystring: toJsonSchema(BundleSearchParamsSchema),
       response: {
         200: toJsonSchema(BundleSearchResponseSchema),
       },
@@ -197,17 +202,17 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             latest_version: pkg.latestVersion,
             icon: pkg.iconUrl,
             server_type: pkg.serverType,
-            tools: (manifest['tools'] as unknown[]) ?? [],
+            tools: (manifest['tools'] as PackageTool[]) ?? [],
             downloads: Number(pkg.totalDownloads),
-            published_at: latestVersion?.publishedAt ?? pkg.createdAt,
-            verified: pkg.verified,
+            published_at: latestVersion?.publishedAt ?? (pkg.createdAt as Date),
+            verified: pkg.verified || false,
             provenance: latestVersion ? getProvenanceSummary(latestVersion) : null,
             certification_level: scan?.certificationLevel ?? null,
           };
         }),
       );
 
-      return {
+      const response: BundleSearchResponse = {
         bundles,
         total,
         pagination: {
@@ -216,6 +221,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           has_more: offset + bundles.length < total,
         },
       };
+
+      return response;
     },
   });
 
