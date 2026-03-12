@@ -367,6 +367,263 @@ The skill follows a structured thinking process:
 ];
 
 // ---------------------------------------------------------------------------
+// Seed data: Packages (bundles)
+// ---------------------------------------------------------------------------
+
+interface SeedPackageVersion {
+  version: string;
+  prerelease?: boolean;
+  downloads: number;
+  manifest: object;
+  publishedAt: string;
+  publishMethod: string;
+  provenanceRepository: string;
+  provenanceSha: string;
+  releaseTag?: string;
+  releaseUrl?: string;
+}
+
+interface SeedPackage {
+  name: string;
+  description: string;
+  authorName: string;
+  serverType: string;
+  license?: string;
+  githubRepo?: string;
+  versions: SeedPackageVersion[];
+}
+
+const echoManifest = (version: string) => ({
+  name: '@nimblebraininc/echo',
+  version,
+  description: 'Echo server for testing and debugging MCP connections',
+  manifest_version: '0.3',
+  author: { name: 'NimbleBrain Inc' },
+  server: {
+    type: 'python',
+    mcp_config: { command: 'python', args: ['-m', 'mcp_echo.server'] },
+    entry_point: 'mcp_echo.server',
+  },
+});
+
+const nationalparksManifest = (version: string) => ({
+  name: '@nimblebraininc/nationalparks',
+  version,
+  description: 'MCP server for National Parks Service API',
+  manifest_version: '0.3',
+  author: { name: 'NimbleBrain Inc' },
+  server: {
+    type: 'node',
+    mcp_config: {
+      command: 'node',
+      args: ['${__dirname}/build/index.js'],
+      env: { NPS_API_KEY: '${user_config.api_key}' },
+    },
+    entry_point: 'build/index.js',
+  },
+  user_config: {
+    api_key: {
+      type: 'string',
+      title: 'NPS API Key',
+      required: true,
+      sensitive: true,
+      description: 'Your NPS API key from https://www.nps.gov/subjects/developer/get-started.htm',
+    },
+  },
+});
+
+const PACKAGES: SeedPackage[] = [
+  {
+    name: '@nimblebraininc/echo',
+    description: 'Echo server for testing and debugging MCP connections',
+    authorName: 'NimbleBrain Inc',
+    serverType: 'python',
+    license: 'Apache-2.0',
+    githubRepo: 'NimbleBrainInc/mcp-echo',
+    versions: [
+      {
+        version: '0.1.0',
+        downloads: 103,
+        publishedAt: '2025-12-31T19:46:28.468Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: 'e3406ec72697feaba4da26f18f356ac9aae8a31f',
+        releaseTag: 'v0.1.0',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.0',
+        manifest: echoManifest('0.1.0'),
+      },
+      {
+        version: '0.1.1-beta.1',
+        prerelease: true,
+        downloads: 208,
+        publishedAt: '2026-01-02T22:00:46.118Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: '1b0be7da2ff7f6f88e738e8897b8b2e602816935',
+        releaseTag: 'v0.1.1-beta.1',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1-beta.1',
+        manifest: echoManifest('0.1.1-beta.1'),
+      },
+      {
+        version: '0.1.1',
+        downloads: 336,
+        publishedAt: '2026-01-02T22:27:05.591Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: 'df13c722759cd066aa97ce6a9921cab52dbf5c58',
+        releaseTag: 'v0.1.1',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1',
+        manifest: echoManifest('0.1.1'),
+      },
+      {
+        version: '0.1.2',
+        downloads: 124,
+        publishedAt: '2026-01-04T19:22:00.731Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: '01a67c0c69847783c53fb428b898ebd64d439a4a',
+        releaseTag: 'v0.1.2',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.2',
+        manifest: echoManifest('0.1.2'),
+      },
+      {
+        version: '0.1.3',
+        downloads: 226,
+        publishedAt: '2026-01-04T19:48:38.421Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: 'ea9ea341fdd7085e5ced55c8748010efa07ef492',
+        releaseTag: 'v0.1.3',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.3',
+        manifest: echoManifest('0.1.3'),
+      },
+      {
+        version: '0.1.4-rc.1',
+        prerelease: true,
+        downloads: 0,
+        publishedAt: '2026-02-09T18:47:48.584Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: 'facc63fda3553268eee4da38ceb7758dc7d47607',
+        releaseTag: 'v0.1.4-rc.1',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.1',
+        manifest: echoManifest('0.1.4-rc.1'),
+      },
+      {
+        version: '0.1.4-rc.4',
+        prerelease: true,
+        downloads: 0,
+        publishedAt: '2026-02-09T19:21:38.476Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: 'facc63fda3553268eee4da38ceb7758dc7d47607',
+        releaseTag: 'v0.1.4-rc.4',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.4',
+        manifest: echoManifest('0.1.4-rc.4'),
+      },
+      {
+        version: '0.1.4',
+        downloads: 2,
+        publishedAt: '2026-02-11T03:40:32.500Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: '638181a3357e89fcf8f77234667459df97d61d89',
+        releaseTag: 'v0.1.4',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4',
+        manifest: echoManifest('0.1.4'),
+      },
+      {
+        version: '0.1.5',
+        downloads: 101,
+        publishedAt: '2026-02-11T08:11:50.559Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-echo',
+        provenanceSha: '640aa8ef2dd3843f834292015b3562349ebcbf00',
+        releaseTag: 'v0.1.5',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.5',
+        manifest: echoManifest('0.1.5'),
+      },
+    ],
+  },
+  {
+    name: '@nimblebraininc/nationalparks',
+    description: 'MCP server for National Parks Service API',
+    authorName: 'NimbleBrain Inc',
+    serverType: 'node',
+    license: 'Apache-2.0',
+    githubRepo: 'NimbleBrainInc/mcp-server-nationalparks',
+    versions: [
+      {
+        version: '0.1.1',
+        downloads: 255,
+        publishedAt: '2026-01-05T05:52:56.802Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: '528a517c72167f6e2903a40a67b233a3c2bb641a',
+        releaseTag: 'v0.1.1',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.1',
+        manifest: nationalparksManifest('0.1.1'),
+      },
+      {
+        version: '0.1.2',
+        downloads: 56,
+        publishedAt: '2026-01-05T06:12:53.512Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: 'acd8c36aa4bea46ce69c8b6f3225a23ce8b83e19',
+        releaseTag: 'v0.1.2',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.2',
+        manifest: nationalparksManifest('0.1.2'),
+      },
+      {
+        version: '0.1.3',
+        downloads: 67,
+        publishedAt: '2026-01-05T07:01:29.791Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: 'd4d7e54b40a4f96aa79778239da71b5c635f4377',
+        releaseTag: 'v0.1.3',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.3',
+        manifest: nationalparksManifest('0.1.3'),
+      },
+      {
+        version: '0.1.4',
+        downloads: 171,
+        publishedAt: '2026-01-05T07:04:34.396Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: '4897a961ace1e34760fd5aff15496ff520ca7ce7',
+        releaseTag: 'v0.1.4',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.4',
+        manifest: nationalparksManifest('0.1.4'),
+      },
+      {
+        version: '0.1.5',
+        downloads: 174,
+        publishedAt: '2026-01-05T07:08:30.892Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: '5e6f1f3f5512b837a14f564d6c182e6a370d7a66',
+        releaseTag: 'v0.1.5',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.5',
+        manifest: nationalparksManifest('0.1.5'),
+      },
+      {
+        version: '0.2.0',
+        downloads: 2,
+        publishedAt: '2026-02-12T23:33:07.687Z',
+        publishMethod: 'oidc',
+        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
+        provenanceSha: 'b4566b1298b2617aedd1a2cc7d23b1576fe96e5d',
+        releaseTag: 'v0.2.0',
+        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.2.0',
+        manifest: nationalparksManifest('0.2.0'),
+      },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -466,7 +723,66 @@ async function seed() {
     }
   }
 
-  console.log(`\nSeeded ${SKILLS.length} skills successfully.`);
+  console.log(`\nSeeded ${SKILLS.length} skills successfully.\n`);
+
+  // Seed packages (bundles)
+  for (const p of PACKAGES) {
+    const totalDownloads = p.versions.reduce((sum, v) => sum + v.downloads, 0);
+    const latestVersion = p.versions[p.versions.length - 1]!.version;
+
+    const pkg = await prisma.package.upsert({
+      where: { name: p.name },
+      create: {
+        name: p.name,
+        description: p.description,
+        authorName: p.authorName,
+        serverType: p.serverType,
+        license: p.license ?? null,
+        githubRepo: p.githubRepo ?? null,
+        latestVersion,
+        totalDownloads: BigInt(totalDownloads),
+      },
+      update: {
+        description: p.description,
+        authorName: p.authorName,
+        serverType: p.serverType,
+        license: p.license ?? null,
+        latestVersion,
+        totalDownloads: BigInt(totalDownloads),
+      },
+    });
+
+    console.log(`  Package: ${p.name} (${pkg.id})`);
+
+    for (const v of p.versions) {
+      await prisma.packageVersion.upsert({
+        where: {
+          packageId_version: { packageId: pkg.id, version: v.version },
+        },
+        create: {
+          packageId: pkg.id,
+          version: v.version,
+          manifest: v.manifest,
+          prerelease: v.prerelease ?? false,
+          downloadCount: BigInt(v.downloads),
+          publishMethod: v.publishMethod,
+          provenanceRepository: v.provenanceRepository,
+          provenanceSha: v.provenanceSha,
+          releaseTag: v.releaseTag ?? null,
+          releaseUrl: v.releaseUrl ?? null,
+          publishedAt: new Date(v.publishedAt),
+        },
+        update: {
+          manifest: v.manifest,
+          downloadCount: BigInt(v.downloads),
+        },
+      });
+
+      console.log(`    v${v.version} (${v.downloads} downloads)`);
+    }
+  }
+
+  console.log(`\nSeeded ${PACKAGES.length} packages successfully.`);
 }
 
 // ---------------------------------------------------------------------------
