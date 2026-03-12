@@ -160,6 +160,68 @@ describe('Bundle Routes', () => {
         expect.objectContaining({ orderBy: { name: 'asc' } }),
       );
     });
+
+    it('applies defaults when no params provided', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({
+          skip: 0,
+          take: 20,
+          orderBy: { totalDownloads: 'desc' },
+        }),
+      );
+    });
+
+    it('passes type filter to search', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search?type=node' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ serverType: 'node' }),
+        expect.any(Object),
+      );
+    });
+
+    it('rejects invalid type and sort enum values', async () => {
+      const typeRes = await app.inject({ method: 'GET', url: '/search?type=invalid' });
+      const sortRes = await app.inject({ method: 'GET', url: '/search?sort=bogus' });
+
+      expect(typeRes.statusCode).toBe(400);
+      expect(sortRes.statusCode).toBe(400);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects q longer than 200 characters', async () => {
+      const res = await app.inject({ method: 'GET', url: `/search?q=${'a'.repeat(201)}` });
+
+      expect(res.statusCode).toBe(400);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects limit above 100', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?limit=101' });
+
+      expect(res.statusCode).toBe(400);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('sets has_more when total exceeds returned results', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [mockPackage], total: 50 });
+      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
+
+      const res = await app.inject({ method: 'GET', url: '/search?limit=1&offset=0' });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.pagination).toEqual({ limit: 1, offset: 0, has_more: true });
+    });
   });
 
   // =========================================================================
