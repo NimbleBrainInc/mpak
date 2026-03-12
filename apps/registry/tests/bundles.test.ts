@@ -71,6 +71,7 @@ import {
   mockVersionWithScans,
 } from './helpers.js';
 import { verifyGitHubOIDC } from '../src/lib/oidc.js';
+import { errorHandler } from '../src/errors/middleware.js';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -90,6 +91,7 @@ describe('Bundle Routes', () => {
     app = Fastify({ logger: false });
     app.setReplySerializer((payload) => JSON.stringify(payload));
     await app.register(sensible);
+    app.setErrorHandler(errorHandler);
 
     // Decorate with mocks
     app.decorate('repositories', {
@@ -146,7 +148,7 @@ describe('Bundle Routes', () => {
     it('rejects invalid pagination values', async () => {
       const res = await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
 
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(422);
       expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
@@ -193,22 +195,22 @@ describe('Bundle Routes', () => {
       const typeRes = await app.inject({ method: 'GET', url: '/search?type=invalid' });
       const sortRes = await app.inject({ method: 'GET', url: '/search?sort=bogus' });
 
-      expect(typeRes.statusCode).toBe(400);
-      expect(sortRes.statusCode).toBe(400);
+      expect(typeRes.statusCode).toBe(422);
+      expect(sortRes.statusCode).toBe(422);
       expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
     it('rejects q longer than 200 characters', async () => {
       const res = await app.inject({ method: 'GET', url: `/search?q=${'a'.repeat(201)}` });
 
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(422);
       expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
     it('rejects limit above 100', async () => {
       const res = await app.inject({ method: 'GET', url: '/search?limit=101' });
 
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(422);
       expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
@@ -361,6 +363,17 @@ describe('Bundle Routes', () => {
       });
 
       expect(res.statusCode).toBe(404);
+    });
+
+    it('rejects invalid os and arch query params', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=foo&arch=bar',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.findByName).not.toHaveBeenCalled();
     });
 
     it('returns 404 for unknown bundle', async () => {

@@ -28,6 +28,12 @@ export const PackageSearchParamsSchema = z.object({
   offset: z.union([z.string(), z.number()]).optional(),
 });
 
+/** Bundle download query parameters. */
+export const BundleDownloadParamsSchema = z.object({
+  os: z.enum(['darwin', 'linux', 'win32']).describe('Target OS (darwin, linux, win32)').optional(),
+  arch: z.enum(['x64', 'arm64']).describe('Target arch (x64, arm64)').optional(),
+});
+
 /** Bundle search query parameters. */
 export const BundleSearchParamsSchema = z.object({
   q: z.string().max(200).optional(),
@@ -45,4 +51,5 @@ export type ServerType = z.infer<typeof ServerTypeSchema>;
 export type Platform = z.infer<typeof PlatformSchema>;
 export type PackageSort = z.infer<typeof PackageSortSchema>;
 export type PackageSearchParams = z.infer<typeof PackageSearchParamsSchema>;
+export type BundleDownloadParams = z.infer<typeof BundleDownloadParamsSchema>;
 export type BundleSearchParams = z.infer<typeof BundleSearchParamsSchema>;
