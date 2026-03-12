@@ -387,6 +387,20 @@ describe('Bundle Routes', () => {
 
       expect(res.statusCode).toBe(404);
     });
+
+    it('returns 404 when platform params do not match any artifact', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      // mockArtifact is linux/x64 — requesting darwin/arm64 should 404
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=darwin&arch=arm64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
   });
 
   // =========================================================================

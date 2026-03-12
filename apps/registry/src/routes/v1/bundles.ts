@@ -1,3 +1,4 @@
+import type { Artifact } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import { createReadStream, createWriteStream, promises as fs } from 'fs';
@@ -586,132 +587,128 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /v1/bundles/@:scope/:package/versions/:version/download - Download bundle
-  fastify.get<{ Params: BundleVersionPathParams; Querystring: BundleDownloadParams }>(
-    '/@:scope/:package/versions/:version/download',
-    {
-      schema: {
-        tags: ['bundles'],
-        description: 'Download a specific version of a bundle',
-        params: toJsonSchema(BundleVersionPathParamsSchema),
-        querystring: toJsonSchema(BundleDownloadParamsSchema),
-        response: {
-          200: toJsonSchema(DownloadInfoSchema),
-          302: { type: 'null', description: 'Redirect to download URL' },
-        },
-      },
-      handler: async (request, reply) => {
-        // Destructure query and path params
-        const { scope, package: packageName, version: versionParam } = request.params;
-        const { os: queryOs, arch: queryArch } = request.query;
-        const name = `@${scope}/${packageName}`;
-
-        const pkg = await packageRepo.findByName(name);
-
-        if (!pkg) {
-          throw new NotFoundError('Bundle not found');
-        }
-
-        // Resolve "latest" to actual version
-        const version = versionParam === 'latest' ? pkg.latestVersion : versionParam;
-
-        const packageVersion = await packageRepo.findVersionWithArtifacts(pkg.id, version);
-
-        if (!packageVersion) {
-          throw new NotFoundError('Version not found');
-        }
-
-        // Find the appropriate artifact
-        let artifact = packageVersion.artifacts[0]; // Default to first
-
-        if (queryOs || queryArch) {
-          // Look for exact match
-          const match = packageVersion.artifacts.find(
-            (a) => a.os === queryOs && a.arch === queryArch,
-          );
-          if (match) {
-            artifact = match;
-          } else {
-            // Look for universal fallback
-            const universal = packageVersion.artifacts.find(
-              (a) => a.os === 'any' && a.arch === 'any',
-            );
-            if (universal) {
-              artifact = universal;
-            }
-          }
-        }
-
-        if (!artifact) {
-          throw new NotFoundError('No artifact found for this version');
-        }
-
-        // Log download
-        const platform = artifact.os === 'any' ? 'universal' : `${artifact.os}-${artifact.arch}`;
-        fastify.log.info(
-          {
-            op: 'download',
-            pkg: name,
-            version,
-            platform,
-          },
-          `download: ${name}@${version} (${platform})`,
-        );
-
-        // Increment download counts atomically in a single transaction
-        void runInTransaction(async (tx) => {
-          await packageRepo.incrementArtifactDownloads(artifact.id, tx);
-          await packageRepo.incrementVersionDownloads(pkg.id, version, tx);
-          await packageRepo.incrementDownloads(pkg.id, tx);
-        }).catch((err: unknown) => fastify.log.error({ err }, 'Failed to update download counts'));
-
-        // Check if client wants JSON response (CLI/API) or redirect (browser)
-        const acceptHeader = request.headers.accept ?? '';
-        const wantsJson = acceptHeader.includes('application/json');
-
-        // Generate signed download URL using the actual storage path
-        const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(
-          artifact.storagePath,
-        );
-
-        if (wantsJson) {
-          // CLI/API mode: Return JSON with download URL and metadata
-          const expiresAt = new Date();
-          expiresAt.setSeconds(
-            expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
-          );
-
-          return {
-            url: downloadUrl,
-            bundle: {
-              name,
-              version,
-              platform: { os: artifact.os, arch: artifact.arch },
-              sha256: artifact.digest.replace('sha256:', ''),
-              size: Number(artifact.sizeBytes),
-            },
-            expires_at: expiresAt.toISOString(),
-          };
-        } else {
-          // Browser mode: Redirect to download URL
-          if (downloadUrl.startsWith('/')) {
-            // Local storage - serve file directly
-            const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
-
-            return reply
-              .header('Content-Type', 'application/octet-stream')
-              .header(
-                'Content-Disposition',
-                `attachment; filename="${packageName}-${version}.mcpb"`,
-              )
-              .send(fileBuffer);
-          } else {
-            // S3/CloudFront - redirect to signed URL
-            return reply.code(302).redirect(downloadUrl);
-          }
-        }
+  fastify.get<{
+    Params: BundleVersionPathParams;
+    Querystring: BundleDownloadParams;
+  }>('/@:scope/:package/versions/:version/download', {
+    schema: {
+      tags: ['bundles'],
+      description: 'Download a specific version of a bundle',
+      params: toJsonSchema(BundleVersionPathParamsSchema),
+      querystring: toJsonSchema(BundleDownloadParamsSchema),
+      response: {
+        200: toJsonSchema(DownloadInfoSchema),
+        302: { type: 'null', description: 'Redirect to download URL' },
       },
     },
-  );
+    handler: async (request, reply) => {
+      const { scope, package: packageName, version: versionParam } = request.params;
+      const { os: queryOs, arch: queryArch } = request.query;
+      const name = `@${scope}/${packageName}`;
+
+      const pkg = await packageRepo.findByName(name);
+
+      if (!pkg) {
+        throw new NotFoundError('Bundle not found');
+      }
+
+      // Resolve "latest" to actual version
+      const version = versionParam === 'latest' ? pkg.latestVersion : versionParam;
+
+      const packageVersion = await packageRepo.findVersionWithArtifacts(pkg.id, version);
+
+      if (!packageVersion) {
+        throw new NotFoundError('Version not found');
+      }
+
+      // Find the appropriate artifact
+      let artifact: Artifact | undefined = packageVersion.artifacts[0]; // Default to first
+
+      if (queryOs || queryArch) {
+        // Look for exact match
+        const match = packageVersion.artifacts.find(
+          (a) => a.os === queryOs && a.arch === queryArch,
+        );
+        if (match) {
+          artifact = match;
+        } else {
+          // Look for universal fallback
+          const universal = packageVersion.artifacts.find(
+            (a) => a.os === 'any' && a.arch === 'any',
+          );
+          if (universal) {
+            artifact = universal;
+          } else {
+            artifact = undefined;
+          }
+        }
+      }
+
+      if (!artifact) {
+        throw new NotFoundError('No artifact found for this version');
+      }
+
+      // Log download
+      const platform = artifact.os === 'any' ? 'universal' : `${artifact.os}-${artifact.arch}`;
+      fastify.log.info(
+        {
+          op: 'download',
+          pkg: name,
+          version,
+          platform,
+        },
+        `download: ${name}@${version} (${platform})`,
+      );
+
+      // Increment download counts atomically in a single transaction
+      void runInTransaction(async (tx) => {
+        await packageRepo.incrementArtifactDownloads(artifact.id, tx);
+        await packageRepo.incrementVersionDownloads(pkg.id, version, tx);
+        await packageRepo.incrementDownloads(pkg.id, tx);
+      }).catch((err: unknown) => fastify.log.error({ err }, 'Failed to update download counts'));
+
+      // Check if client wants JSON response (CLI/API) or redirect (browser)
+      const acceptHeader = request.headers.accept ?? '';
+      const wantsJson = acceptHeader.includes('application/json');
+
+      // Generate signed download URL using the actual storage path
+      const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
+
+      if (wantsJson) {
+        // CLI/API mode: Return JSON with download URL and metadata
+        const expiresAt = new Date();
+        expiresAt.setSeconds(
+          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
+        );
+
+        return {
+          url: downloadUrl,
+          bundle: {
+            name,
+            version,
+            platform: { os: artifact.os, arch: artifact.arch },
+            sha256: artifact.digest.replace('sha256:', ''),
+            size: Number(artifact.sizeBytes),
+          },
+          expires_at: expiresAt.toISOString(),
+        };
+      } else {
+        // Browser mode: Redirect to download URL
+        if (downloadUrl.startsWith('/')) {
+          // Local storage - serve file directly
+          const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
+
+          return reply
+            .header('Content-Type', 'application/octet-stream')
+            .header('Content-Disposition', `attachment; filename="${packageName}-${version}.mcpb"`)
+            .send(fileBuffer);
+        } else {
+          // S3/CloudFront - redirect to signed URL
+          return reply.code(302).redirect(downloadUrl);
+        }
+      }
+    },
+  });
 
   // POST /v1/bundles/announce - Announce a single artifact (OIDC only, idempotent per-artifact)
   fastify.post('/announce', {
