@@ -22,7 +22,7 @@ import {
   MCPBIndexSchema,
   AnnounceRequestSchema,
   AnnounceResponseSchema,
-} from '../../schemas/generated/api-responses.js';
+} from '@nimblebrain/mpak-schemas';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';

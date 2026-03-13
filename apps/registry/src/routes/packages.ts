@@ -11,7 +11,7 @@ import {
   handleError,
 } from '../errors/index.js';
 import { toJsonSchema } from '../lib/zod-schema.js';
-import type { PackageSearchParams } from '../schemas/generated/package.js';
+import type { PackageSearchParams } from '@nimblebrain/mpak-schemas';
 import {
   PublishResponseSchema,
   PackageSearchResponseSchema,
@@ -21,7 +21,7 @@ import {
   ClaimResponseSchema,
   MyPackagesResponseSchema,
   UnclaimedPackagesResponseSchema,
-} from '../schemas/generated/api-responses.js';
+} from '@nimblebrain/mpak-schemas';
 import { generateMpakJsonExample } from '../schemas/mpak-schema.js';
 import { extractScannerVersion } from '../utils/scanner-version.js';
 import { fetchGitHubRepoStats, parseGitHubRepo, verifyPackageClaim } from '../services/github-verifier.js';
