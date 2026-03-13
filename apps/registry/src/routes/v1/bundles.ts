@@ -22,7 +22,12 @@ import {
   MCPBIndexSchema,
   AnnounceRequestSchema,
   AnnounceResponseSchema,
+  BundleSearchParamsSchema,
+  type BundleSearchParams,
+  type BundleSearchResponse,
+  type PackageTool,
 } from '@nimblebrain/mpak-schemas';
+import type { PackageSearchFilters } from '../../db/types.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
@@ -72,7 +77,7 @@ function getProvenanceSummary(version: { publishMethod: string | null; provenanc
   }
   const p = version.provenance as ProvenanceRecord;
   return {
-    schema_version: p.schema_version,
+    schema_version: String(p.schema_version),
     provider: p.provider,
     repository: p.repository,
     sha: p.sha,
@@ -133,63 +138,38 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   const { packages: packageRepo } = fastify.repositories;
 
   // GET /v1/bundles/search - Search bundles
-  fastify.get('/search', {
+  fastify.get<{ Querystring: BundleSearchParams }>('/search', {
     schema: {
       tags: ['bundles'],
       description: 'Search for bundles',
-      querystring: {
-        type: 'object',
-        properties: {
-          q: { type: 'string', description: 'Search query' },
-          type: { type: 'string', description: 'Filter by server type' },
-          sort: { type: 'string', enum: ['downloads', 'recent', 'name'], default: 'downloads' },
-          limit: { type: 'number', default: 20, maximum: 100 },
-          offset: { type: 'number', default: 0 },
-        },
-      },
+      querystring: toJsonSchema(BundleSearchParamsSchema),
       response: {
         200: toJsonSchema(BundleSearchResponseSchema),
       },
     },
     handler: async (request) => {
-      const {
-        q,
-        type,
-        sort = 'downloads',
-        limit = 20,
-        offset = 0,
-      } = request.query as {
-        q?: string;
-        type?: string;
-        sort?: string;
-        limit?: number;
-        offset?: number;
-      };
+      const { q, type, sort, limit, offset } = request.query;
 
       // Build filters
-      const filters: Record<string, unknown> = {};
-      if (q) filters['query'] = q;
-      if (type) filters['serverType'] = type;
+      const filters: PackageSearchFilters = {};
+      if (q) filters.query = q;
+      if (type) filters.serverType = type;
 
       // Build sort options
-      let orderBy: Record<string, string> = { totalDownloads: 'desc' };
-      if (sort === 'recent') {
-        orderBy = { createdAt: 'desc' };
-      } else if (sort === 'name') {
-        orderBy = { name: 'asc' };
-      }
-
-      // Clamp pagination values to safe ranges
-      const safeLimit = Math.max(1, Math.min(limit, 100));
-      const safeOffset = Math.max(0, offset);
+      const sortMap: Record<string, Record<string, string>> = {
+        downloads: { totalDownloads: 'desc' },
+        recent: { createdAt: 'desc' },
+        name: { name: 'asc' },
+      };
+      const orderBy = sortMap[sort];
 
       // Search packages
       const startTime = Date.now();
       const { packages, total } = await packageRepo.search(
         filters,
         {
-          skip: safeOffset,
-          take: safeLimit,
+          skip: offset,
+          take: limit,
           orderBy,
         }
       );
@@ -218,17 +198,17 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             latest_version: pkg.latestVersion,
             icon: pkg.iconUrl,
             server_type: pkg.serverType,
-            tools: (manifest['tools'] as unknown[]) ?? [],
+            tools: (manifest['tools'] as PackageTool[]) ?? [],
             downloads: Number(pkg.totalDownloads),
-            published_at: latestVersion?.publishedAt ?? pkg.createdAt,
-            verified: pkg.verified,
+            published_at: latestVersion?.publishedAt ?? pkg.createdAt as Date,
+            verified: Boolean(pkg.verified),
             provenance: latestVersion ? getProvenanceSummary(latestVersion) : null,
             certification_level: scan?.certificationLevel ?? null,
           };
         })
       );
 
-      return {
+      const response: BundleSearchResponse = {
         bundles,
         total,
         pagination: {
@@ -237,6 +217,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           has_more: offset + bundles.length < total,
         },
       };
+      return response;
     },
   });
 
