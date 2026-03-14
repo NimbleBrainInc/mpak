@@ -1,3 +1,4 @@
+import type { Artifact } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import { createHash, randomUUID } from 'crypto';
 import { createWriteStream, createReadStream, promises as fs } from 'fs';
@@ -22,7 +23,18 @@ import {
   MCPBIndexSchema,
   AnnounceRequestSchema,
   AnnounceResponseSchema,
-} from '../../schemas/generated/api-responses.js';
+  BundleSearchParamsSchema,
+  BundleDownloadParamsSchema,
+  type BundleSearchParams,
+  type BundleDownloadParams,
+  type BundleSearchResponse,
+  type PackageTool,
+} from '@nimblebrain/mpak-schemas';
+import type { PackageSearchFilters } from '../../db/types.js';
+import {
+  BundleVersionPathParamsSchema,
+  type BundleVersionPathParams,
+} from '../../schemas/bundles.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
@@ -53,6 +65,30 @@ function isValidScopedPackageName(name: string): boolean {
   return SCOPED_REGEX.test(name);
 }
 
+/**
+ * Resolve the correct artifact given optional platform query params.
+ *
+ * - Neither os nor arch → return the any/any (universal) artifact, or null
+ * - Only one of os/arch → throws BadRequestError
+ * - Both os and arch → return exact match, or null
+ */
+function resolveArtifact(
+  artifacts: Artifact[],
+  os?: string,
+  arch?: string,
+): Artifact | null {
+  if ((os && !arch) || (!os && arch)) {
+    throw new BadRequestError('Both os and arch are required when specifying platform');
+  }
+
+  if (os && arch) {
+    return artifacts.find((a) => a.os === os && a.arch === arch) ?? null;
+  }
+
+  // No platform params: return universal artifact only
+  return artifacts.find((a) => a.os === 'any' && a.arch === 'any') ?? null;
+}
+
 function parsePackageName(name: string): { scope: string; packageName: string } | null {
   if (!name.startsWith('@')) return null;
   const parts = name.split('/');
@@ -72,7 +108,7 @@ function getProvenanceSummary(version: { publishMethod: string | null; provenanc
   }
   const p = version.provenance as ProvenanceRecord;
   return {
-    schema_version: p.schema_version,
+    schema_version: String(p.schema_version),
     provider: p.provider,
     repository: p.repository,
     sha: p.sha,
@@ -133,63 +169,38 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   const { packages: packageRepo } = fastify.repositories;
 
   // GET /v1/bundles/search - Search bundles
-  fastify.get('/search', {
+  fastify.get<{ Querystring: BundleSearchParams }>('/search', {
     schema: {
       tags: ['bundles'],
       description: 'Search for bundles',
-      querystring: {
-        type: 'object',
-        properties: {
-          q: { type: 'string', description: 'Search query' },
-          type: { type: 'string', description: 'Filter by server type' },
-          sort: { type: 'string', enum: ['downloads', 'recent', 'name'], default: 'downloads' },
-          limit: { type: 'number', default: 20, maximum: 100 },
-          offset: { type: 'number', default: 0 },
-        },
-      },
+      querystring: toJsonSchema(BundleSearchParamsSchema),
       response: {
         200: toJsonSchema(BundleSearchResponseSchema),
       },
     },
     handler: async (request) => {
-      const {
-        q,
-        type,
-        sort = 'downloads',
-        limit = 20,
-        offset = 0,
-      } = request.query as {
-        q?: string;
-        type?: string;
-        sort?: string;
-        limit?: number;
-        offset?: number;
-      };
+      const { q, type, sort, limit, offset } = request.query;
 
       // Build filters
-      const filters: Record<string, unknown> = {};
-      if (q) filters['query'] = q;
-      if (type) filters['serverType'] = type;
+      const filters: PackageSearchFilters = {};
+      if (q) filters.query = q;
+      if (type) filters.serverType = type;
 
       // Build sort options
-      let orderBy: Record<string, string> = { totalDownloads: 'desc' };
-      if (sort === 'recent') {
-        orderBy = { createdAt: 'desc' };
-      } else if (sort === 'name') {
-        orderBy = { name: 'asc' };
-      }
-
-      // Clamp pagination values to safe ranges
-      const safeLimit = Math.max(1, Math.min(limit, 100));
-      const safeOffset = Math.max(0, offset);
+      const sortMap: Record<string, Record<string, string>> = {
+        downloads: { totalDownloads: 'desc' },
+        recent: { createdAt: 'desc' },
+        name: { name: 'asc' },
+      };
+      const orderBy = sortMap[sort];
 
       // Search packages
       const startTime = Date.now();
       const { packages, total } = await packageRepo.search(
         filters,
         {
-          skip: safeOffset,
-          take: safeLimit,
+          skip: offset,
+          take: limit,
           orderBy,
         }
       );
@@ -218,17 +229,17 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             latest_version: pkg.latestVersion,
             icon: pkg.iconUrl,
             server_type: pkg.serverType,
-            tools: (manifest['tools'] as unknown[]) ?? [],
+            tools: (manifest['tools'] as PackageTool[]) ?? [],
             downloads: Number(pkg.totalDownloads),
-            published_at: latestVersion?.publishedAt ?? pkg.createdAt,
-            verified: pkg.verified,
+            published_at: latestVersion?.publishedAt ?? pkg.createdAt as Date,
+            verified: Boolean(pkg.verified),
             provenance: latestVersion ? getProvenanceSummary(latestVersion) : null,
             certification_level: scan?.certificationLevel ?? null,
           };
         })
       );
 
-      return {
+      const response: BundleSearchResponse = {
         bundles,
         total,
         pagination: {
@@ -237,6 +248,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           has_more: offset + bundles.length < total,
         },
       };
+      return response;
     },
   });
 
@@ -558,38 +570,23 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /v1/bundles/@:scope/:package/versions/:version/download - Download bundle
-  fastify.get('/@:scope/:package/versions/:version/download', {
+  fastify.get<{
+    Params: BundleVersionPathParams;
+    Querystring: BundleDownloadParams;
+  }>('/@:scope/:package/versions/:version/download', {
     schema: {
       tags: ['bundles'],
       description: 'Download a specific version of a bundle',
-      params: {
-        type: 'object',
-        properties: {
-          scope: { type: 'string' },
-          package: { type: 'string' },
-          version: { type: 'string' },
-        },
-        required: ['scope', 'package', 'version'],
-      },
-      querystring: {
-        type: 'object',
-        properties: {
-          os: { type: 'string', description: 'Target OS (darwin, linux, win32, any)' },
-          arch: { type: 'string', description: 'Target arch (x64, arm64, any)' },
-        },
-      },
+      params: toJsonSchema(BundleVersionPathParamsSchema),
+      querystring: toJsonSchema(BundleDownloadParamsSchema),
       response: {
         200: toJsonSchema(DownloadInfoSchema),
         302: { type: 'null', description: 'Redirect to download URL' },
       },
     },
     handler: async (request, reply) => {
-      const { scope, package: packageName, version: versionParam } = request.params as {
-        scope: string;
-        package: string;
-        version: string;
-      };
-      const { os: queryOs, arch: queryArch } = request.query as { os?: string; arch?: string };
+      const { scope, package: packageName, version: versionParam } = request.params;
+      const { os: queryOs, arch: queryArch } = request.query;
       const name = `@${scope}/${packageName}`;
 
       const pkg = await packageRepo.findByName(name);
@@ -608,28 +605,10 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // Find the appropriate artifact
-      let artifact = packageVersion.artifacts[0]; // Default to first
-
-      if (queryOs || queryArch) {
-        // Look for exact match
-        const match = packageVersion.artifacts.find(
-          (a) => a.os === queryOs && a.arch === queryArch
-        );
-        if (match) {
-          artifact = match;
-        } else {
-          // Look for universal fallback
-          const universal = packageVersion.artifacts.find(
-            (a) => a.os === 'any' && a.arch === 'any'
-          );
-          if (universal) {
-            artifact = universal;
-          }
-        }
-      }
+      const artifact = resolveArtifact(packageVersion.artifacts, queryOs, queryArch);
 
       if (!artifact) {
-        throw new NotFoundError('No artifact found for this version');
+        throw new NotFoundError('No artifact found for the requested platform');
       }
 
       // Log download

@@ -87,14 +87,14 @@ export interface PackageVersion {
   published_at: Date;
 }
 
-// API response types - now imported from schemas
+// API response types - imported from shared schemas package
 export type {
   Package as PackageListItem,
   PackageDetail as PackageInfo,
-} from './schemas/generated/api-responses.js';
+} from '@nimblebrain/mpak-schemas';
 
-// API query params - now imported from schemas
-export type { PackageSearchParams } from './schemas/generated/package.js';
+// API query params - imported from shared schemas package
+export type { PackageSearchParams } from '@nimblebrain/mpak-schemas';
 
 // MCP Registry types
 export interface MCPServerDetail {
