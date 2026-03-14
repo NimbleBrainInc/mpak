@@ -23,11 +23,17 @@ import {
   AnnounceRequestSchema,
   AnnounceResponseSchema,
   BundleSearchParamsSchema,
+  BundleDownloadParamsSchema,
   type BundleSearchParams,
+  type BundleDownloadParams,
   type BundleSearchResponse,
   type PackageTool,
 } from '@nimblebrain/mpak-schemas';
 import type { PackageSearchFilters } from '../../db/types.js';
+import {
+  BundleVersionPathParamsSchema,
+  type BundleVersionPathParams,
+} from '../../schemas/bundles.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
@@ -539,38 +545,23 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // GET /v1/bundles/@:scope/:package/versions/:version/download - Download bundle
-  fastify.get('/@:scope/:package/versions/:version/download', {
+  fastify.get<{
+    Params: BundleVersionPathParams;
+    Querystring: BundleDownloadParams;
+  }>('/@:scope/:package/versions/:version/download', {
     schema: {
       tags: ['bundles'],
       description: 'Download a specific version of a bundle',
-      params: {
-        type: 'object',
-        properties: {
-          scope: { type: 'string' },
-          package: { type: 'string' },
-          version: { type: 'string' },
-        },
-        required: ['scope', 'package', 'version'],
-      },
-      querystring: {
-        type: 'object',
-        properties: {
-          os: { type: 'string', description: 'Target OS (darwin, linux, win32, any)' },
-          arch: { type: 'string', description: 'Target arch (x64, arm64, any)' },
-        },
-      },
+      params: toJsonSchema(BundleVersionPathParamsSchema),
+      querystring: toJsonSchema(BundleDownloadParamsSchema),
       response: {
         200: toJsonSchema(DownloadInfoSchema),
         302: { type: 'null', description: 'Redirect to download URL' },
       },
     },
     handler: async (request, reply) => {
-      const { scope, package: packageName, version: versionParam } = request.params as {
-        scope: string;
-        package: string;
-        version: string;
-      };
-      const { os: queryOs, arch: queryArch } = request.query as { os?: string; arch?: string };
+      const { scope, package: packageName, version: versionParam } = request.params;
+      const { os: queryOs, arch: queryArch } = request.query;
       const name = `@${scope}/${packageName}`;
 
       const pkg = await packageRepo.findByName(name);

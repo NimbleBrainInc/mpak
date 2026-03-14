@@ -37,6 +37,12 @@ export const BundleSearchParamsSchema = z.object({
   offset: z.number().min(0).optional().default(0),
 });
 
+/** Bundle download query parameters (os + arch). */
+export const BundleDownloadParamsSchema = z.object({
+  os: z.enum(["darwin", "linux", "win32"]).describe("Target OS (darwin, linux, win32)").optional(),
+  arch: z.enum(["x64", "arm64"]).describe("Target arch (x64, arm64)").optional(),
+});
+
 // =============================================================================
 // TypeScript Types
 // =============================================================================
@@ -46,3 +52,4 @@ export type Platform = z.infer<typeof PlatformSchema>;
 export type PackageSort = z.infer<typeof PackageSortSchema>;
 export type PackageSearchParams = z.infer<typeof PackageSearchParamsSchema>;
 export type BundleSearchParams = z.infer<typeof BundleSearchParamsSchema>;
+export type BundleDownloadParams = z.infer<typeof BundleDownloadParamsSchema>;
