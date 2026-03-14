@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   chmodSync,
   rmSync,
@@ -416,6 +417,193 @@ function findPythonCommand(): string {
 }
 
 /**
+ * Get the user's CPython ABI tag (e.g. "cpython310")
+ */
+export function getPythonCpythonTag(pythonCmd: string): string | null {
+  try {
+    const result = spawnSync(
+      pythonCmd,
+      ["-c", "import sys; print(f'cpython{sys.version_info.major}{sys.version_info.minor}')"],
+      { stdio: "pipe", encoding: "utf8", timeout: 10000 },
+    );
+    if (result.status === 0 && result.stdout) {
+      return result.stdout.trim() || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scan deps directory for native extensions and extract the cpython tag from the first match.
+ * Returns e.g. "cpython313" or null if no native extensions found.
+ */
+export function scanNativeExtensions(depsDir: string): string | null {
+  if (!existsSync(depsDir)) return null;
+  try {
+    const entries = readdirSync(depsDir, { recursive: true }) as string[];
+    for (const entry of entries) {
+      const match = String(entry).match(/\.cpython-(\d+)[\w-]*\.(so|pyd)$/);
+      if (match) {
+        return `cpython${match[1]}`;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract package requirements from dist-info directories in deps/.
+ * Returns array of "name==version" strings.
+ */
+export function extractDepsRequirements(depsDir: string): string[] {
+  if (!existsSync(depsDir)) return [];
+  try {
+    const entries = readdirSync(depsDir);
+    const requirements: string[] = [];
+    for (const entry of entries) {
+      const match = entry.match(/^(.+)-(\d[\w.]*(?:\.\w+)*)\.dist-info$/);
+      if (match) {
+        requirements.push(`${match[1]}==${match[2]}`);
+      }
+    }
+    return requirements;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Install compatible deps using uv (preferred) or pip (fallback).
+ */
+export function installCompatibleDeps(options: {
+  requirements: string[];
+  targetDir: string;
+  pythonCmd: string;
+}): void {
+  const { requirements, targetDir, pythonCmd } = options;
+
+  const tmpDir = join(homedir(), ".mpak", "tmp");
+  mkdirSync(tmpDir, { recursive: true });
+  const reqFile = join(tmpDir, `requirements-${Date.now()}.txt`);
+
+  try {
+    writeFileSync(reqFile, requirements.join("\n"));
+
+    // Try uv first
+    const uvResult = spawnSync(
+      "uv",
+      ["pip", "install", "--target", targetDir, "--python", pythonCmd, "-r", reqFile],
+      { stdio: "pipe", encoding: "utf8", timeout: 300000 },
+    );
+    if (uvResult.status === 0) return;
+
+    const uvErr = uvResult.stderr || uvResult.error?.message || "unknown error";
+
+    // Fall back to pip
+    const pipResult = spawnSync(
+      pythonCmd,
+      ["-m", "pip", "install", "--target", targetDir, "-r", reqFile],
+      { stdio: "pipe", encoding: "utf8", timeout: 300000 },
+    );
+    if (pipResult.status === 0) return;
+
+    const pipErr = pipResult.stderr || pipResult.error?.message || "unknown error";
+    throw new Error(
+      `Both uv and pip failed to install deps.\nuv: ${uvErr}\npip: ${pipErr}`,
+    );
+  } finally {
+    try {
+      rmSync(reqFile, { force: true });
+    } catch {
+      // ignore cleanup error
+    }
+  }
+}
+
+/**
+ * Ensure Python deps are compatible with the user's Python version.
+ * Returns the directory to use for PYTHONPATH.
+ */
+function ensureCompatiblePythonDeps(
+  depsDir: string,
+  cacheDir: string,
+  pythonCmd: string,
+): string {
+  try {
+    const bundleTag = scanNativeExtensions(depsDir);
+    if (!bundleTag) return depsDir; // No native extensions — pure Python
+
+    const userTag = getPythonCpythonTag(pythonCmd);
+    if (!userTag) return depsDir; // Can't detect — best effort
+
+    if (userTag === bundleTag) return depsDir; // Match — happy path
+
+    // Version mismatch — check for cached compatible deps
+    const versionedDir = join(cacheDir, `.deps-${userTag}`);
+    if (existsSync(versionedDir)) {
+      process.stderr.write(
+        `=> Using cached deps for ${formatTag(userTag)}\n`,
+      );
+      return versionedDir;
+    }
+
+    // Need to reinstall
+    const userVersion = formatTag(userTag);
+    const bundleVersion = formatTag(bundleTag);
+    process.stderr.write(
+      `=> Bundle deps built for ${bundleVersion}, you have ${userVersion}\n`,
+    );
+    process.stderr.write(
+      `=> Installing compatible native extensions...\n`,
+    );
+
+    const requirements = extractDepsRequirements(depsDir);
+    if (requirements.length === 0) return depsDir;
+
+    mkdirSync(versionedDir, { recursive: true });
+    try {
+      installCompatibleDeps({
+        requirements,
+        targetDir: versionedDir,
+        pythonCmd,
+      });
+      process.stderr.write(`=> Compatible deps installed and cached\n`);
+      return versionedDir;
+    } catch (error) {
+      // Clean up partial install and fall back
+      try {
+        rmSync(versionedDir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `=> Warning: Could not install compatible deps: ${message}\n`,
+      );
+      process.stderr.write(`=> Falling back to bundled deps\n`);
+      return depsDir;
+    }
+  } catch {
+    return depsDir; // Never crash — fall back to original
+  }
+}
+
+/**
+ * Format a cpython tag for display (e.g. "cpython313" -> "Python 3.13")
+ */
+function formatTag(tag: string): string {
+  const digits = tag.replace("cpython", "");
+  if (digits.length >= 2) {
+    return `Python ${digits[0]}.${digits.slice(1)}`;
+  }
+  return tag;
+}
+
+/**
  * Download a bundle to a file path
  */
 async function downloadBundle(
@@ -655,7 +843,9 @@ export async function handleRun(
       }
 
       // Set PYTHONPATH to deps/ directory for dependency resolution
-      const depsDir = join(cacheDir, "deps");
+      // If native extensions were built for a different Python version, reinstall into a versioned cache
+      const originalDepsDir = join(cacheDir, "deps");
+      const depsDir = ensureCompatiblePythonDeps(originalDepsDir, cacheDir, command);
       const existingPythonPath = process.env["PYTHONPATH"];
       env["PYTHONPATH"] = existingPythonPath
         ? `${depsDir}:${existingPythonPath}`

@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { homedir } from "os";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { spawnSync } from "child_process";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
 import {
   parsePackageSpec,
   getCacheDir,
@@ -10,6 +12,10 @@ import {
   substituteEnvVars,
   getLocalCacheDir,
   localBundleNeedsExtract,
+  scanNativeExtensions,
+  extractDepsRequirements,
+  getPythonCpythonTag,
+  installCompatibleDeps,
 } from "./run.js";
 
 describe("parsePackageSpec", () => {
@@ -331,5 +337,159 @@ describe("resolveWorkspace", () => {
     expect(resolveWorkspace("", "/home/user/project")).toBe(
       join("/home/user/project", ".mpak"),
     );
+  });
+});
+
+describe("scanNativeExtensions", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mpak-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns null for nonexistent directory", () => {
+    expect(scanNativeExtensions("/nonexistent/path")).toBeNull();
+  });
+
+  it("returns null for empty directory", () => {
+    expect(scanNativeExtensions(tmpDir)).toBeNull();
+  });
+
+  it("returns null when no native extensions present", () => {
+    mkdirSync(join(tmpDir, "pydantic"), { recursive: true });
+    writeFileSync(join(tmpDir, "pydantic", "__init__.py"), "");
+    expect(scanNativeExtensions(tmpDir)).toBeNull();
+  });
+
+  it("extracts cpython tag from .so files", () => {
+    const subDir = join(tmpDir, "pydantic_core");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(
+      join(subDir, "_pydantic_core.cpython-313-x86_64-linux-gnu.so"),
+      "",
+    );
+    expect(scanNativeExtensions(tmpDir)).toBe("cpython313");
+  });
+
+  it("extracts cpython tag from .pyd files", () => {
+    const subDir = join(tmpDir, "pydantic_core");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(
+      join(subDir, "_pydantic_core.cpython-312-win_amd64.pyd"),
+      "",
+    );
+    expect(scanNativeExtensions(tmpDir)).toBe("cpython312");
+  });
+
+  it("returns tag from first match when multiple extensions exist", () => {
+    const dir1 = join(tmpDir, "aaa_pkg");
+    const dir2 = join(tmpDir, "zzz_pkg");
+    mkdirSync(dir1, { recursive: true });
+    mkdirSync(dir2, { recursive: true });
+    writeFileSync(join(dir1, "mod.cpython-310-x86_64-linux-gnu.so"), "");
+    writeFileSync(join(dir2, "mod.cpython-313-x86_64-linux-gnu.so"), "");
+    const result = scanNativeExtensions(tmpDir);
+    // Should return one of them (first found via recursive readdir)
+    expect(result).toMatch(/^cpython3\d+$/);
+  });
+});
+
+describe("extractDepsRequirements", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mpak-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns empty array for nonexistent directory", () => {
+    expect(extractDepsRequirements("/nonexistent/path")).toEqual([]);
+  });
+
+  it("returns empty array when no dist-info directories exist", () => {
+    mkdirSync(join(tmpDir, "pydantic"), { recursive: true });
+    expect(extractDepsRequirements(tmpDir)).toEqual([]);
+  });
+
+  it("extracts name==version from dist-info directories", () => {
+    mkdirSync(join(tmpDir, "pydantic_core-2.27.0.dist-info"), {
+      recursive: true,
+    });
+    mkdirSync(join(tmpDir, "aiohttp-3.9.1.dist-info"), {
+      recursive: true,
+    });
+    const reqs = extractDepsRequirements(tmpDir);
+    expect(reqs).toContain("pydantic_core==2.27.0");
+    expect(reqs).toContain("aiohttp==3.9.1");
+    expect(reqs).toHaveLength(2);
+  });
+
+  it("handles versions with multiple dots", () => {
+    mkdirSync(join(tmpDir, "cryptography-41.0.7.dist-info"), {
+      recursive: true,
+    });
+    const reqs = extractDepsRequirements(tmpDir);
+    expect(reqs).toContain("cryptography==41.0.7");
+  });
+
+  it("ignores non-dist-info directories", () => {
+    mkdirSync(join(tmpDir, "pydantic"), { recursive: true });
+    mkdirSync(join(tmpDir, "pydantic_core-2.27.0.dist-info"), {
+      recursive: true,
+    });
+    const reqs = extractDepsRequirements(tmpDir);
+    expect(reqs).toEqual(["pydantic_core==2.27.0"]);
+  });
+});
+
+describe("getPythonCpythonTag", () => {
+  // These tests use the real python on the system
+  it("returns a valid cpython tag for real python", () => {
+    // Try python3, fall back to python — skip if neither available
+    const py3 = spawnSync("python3", ["--version"], { stdio: "pipe" });
+    const cmd = py3.status === 0 ? "python3" : "python";
+
+    const tag = getPythonCpythonTag(cmd);
+    if (tag === null) {
+      // No python available — skip
+      return;
+    }
+    expect(tag).toMatch(/^cpython\d\d+$/);
+  });
+
+  it("returns null for nonexistent command", () => {
+    expect(getPythonCpythonTag("nonexistent-python-xyz")).toBeNull();
+  });
+});
+
+describe("installCompatibleDeps", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mpak-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("throws when both uv and pip fail", () => {
+    const targetDir = join(tmpDir, "deps");
+    mkdirSync(targetDir, { recursive: true });
+
+    expect(() =>
+      installCompatibleDeps({
+        requirements: ["nonexistent-package-xyz==99.99.99"],
+        targetDir,
+        pythonCmd: "nonexistent-python-xyz",
+      }),
+    ).toThrow("Both uv and pip failed");
   });
 });
