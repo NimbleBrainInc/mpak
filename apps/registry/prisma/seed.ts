@@ -17,6 +17,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import { createHash, randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
+import { dirname, join } from 'path';
 
 // ---------------------------------------------------------------------------
 // Database setup (standalone, doesn't use the app's singleton)
@@ -377,6 +379,13 @@ The skill follows a structured thinking process:
 // Seed data: Packages (bundles)
 // ---------------------------------------------------------------------------
 
+interface SeedArtifact {
+  os: string;
+  arch: string;
+  sizeBytes: number;
+  sourceUrl: string;
+}
+
 interface SeedPackageVersion {
   version: string;
   prerelease?: boolean;
@@ -388,6 +397,7 @@ interface SeedPackageVersion {
   provenanceSha: string;
   releaseTag?: string;
   releaseUrl?: string;
+  artifacts?: SeedArtifact[];
 }
 
 interface SeedPackage {
@@ -458,6 +468,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.0',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.0',
         manifest: echoManifest('0.1.0'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.0', 14_200),
       },
       {
         version: '0.1.1-beta.1',
@@ -470,6 +481,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.1-beta.1',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1-beta.1',
         manifest: echoManifest('0.1.1-beta.1'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.1-beta.1', 14_350),
       },
       {
         version: '0.1.1',
@@ -481,6 +493,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.1',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1',
         manifest: echoManifest('0.1.1'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.1', 14_500),
       },
       {
         version: '0.1.2',
@@ -492,6 +505,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.2',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.2',
         manifest: echoManifest('0.1.2'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.2', 14_600),
       },
       {
         version: '0.1.3',
@@ -503,6 +517,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.3',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.3',
         manifest: echoManifest('0.1.3'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.3', 14_700),
       },
       {
         version: '0.1.4-rc.1',
@@ -515,6 +530,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.4-rc.1',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.1',
         manifest: echoManifest('0.1.4-rc.1'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4-rc.1', 15_000),
       },
       {
         version: '0.1.4-rc.4',
@@ -527,6 +543,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.4-rc.4',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.4',
         manifest: echoManifest('0.1.4-rc.4'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4-rc.4', 15_100),
       },
       {
         version: '0.1.4',
@@ -538,6 +555,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.4',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4',
         manifest: echoManifest('0.1.4'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4', 15_200),
       },
       {
         version: '0.1.5',
@@ -549,6 +567,7 @@ const PACKAGES: SeedPackage[] = [
         releaseTag: 'v0.1.5',
         releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.5',
         manifest: echoManifest('0.1.5'),
+        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.5', 15_400),
       },
     ],
   },
@@ -571,6 +590,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.1',
         manifest: nationalparksManifest('0.1.1'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.1.1', 82_000),
       },
       {
         version: '0.1.2',
@@ -583,6 +603,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.2',
         manifest: nationalparksManifest('0.1.2'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.1.2', 83_000),
       },
       {
         version: '0.1.3',
@@ -595,6 +616,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.3',
         manifest: nationalparksManifest('0.1.3'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.1.3', 83_500),
       },
       {
         version: '0.1.4',
@@ -607,6 +629,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.4',
         manifest: nationalparksManifest('0.1.4'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.1.4', 84_000),
       },
       {
         version: '0.1.5',
@@ -619,6 +642,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.5',
         manifest: nationalparksManifest('0.1.5'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.1.5', 84_500),
       },
       {
         version: '0.2.0',
@@ -631,6 +655,7 @@ const PACKAGES: SeedPackage[] = [
         releaseUrl:
           'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.2.0',
         manifest: nationalparksManifest('0.2.0'),
+        artifacts: multiPlatformArtifacts('NimbleBrainInc/mcp-server-nationalparks', '0.2.0', 86_000),
       },
     ],
   },
@@ -643,6 +668,26 @@ const PACKAGES: SeedPackage[] = [
 /** Generate a deterministic fake digest from a string */
 function fakeDigest(input: string): string {
   return 'sha256:' + createHash('sha256').update(input).digest('hex');
+}
+
+/** Universal artifact for python/any-platform bundles */
+function universalArtifact(repo: string, version: string, sizeBytes: number): SeedArtifact[] {
+  return [{
+    os: 'any',
+    arch: 'any',
+    sizeBytes,
+    sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${repo.split('/')[1]}-${version}.mcpb`,
+  }];
+}
+
+/** Multi-platform artifacts for node bundles */
+function multiPlatformArtifacts(repo: string, version: string, sizeBytes: number): SeedArtifact[] {
+  const name = repo.split('/')[1];
+  return [
+    { os: 'darwin', arch: 'arm64', sizeBytes, sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-darwin-arm64.mcpb` },
+    { os: 'darwin', arch: 'x64', sizeBytes: sizeBytes + 1024, sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-darwin-x64.mcpb` },
+    { os: 'linux', arch: 'x64', sizeBytes: sizeBytes + 2048, sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-linux-x64.mcpb` },
+  ];
 }
 
 /** Generate a deterministic fake storage path */
@@ -771,7 +816,7 @@ async function seed() {
     console.log(`  Package: ${p.name} (${pkg.id})`);
 
     for (const v of p.versions) {
-      await prisma.packageVersion.upsert({
+      const pkgVersion = await prisma.packageVersion.upsert({
         where: {
           packageId_version: { packageId: pkg.id, version: v.version },
         },
@@ -794,7 +839,40 @@ async function seed() {
         },
       });
 
-      console.log(`    v${v.version} (${v.downloads} downloads)`);
+      // Upsert artifacts for this version
+      for (const a of v.artifacts ?? []) {
+        const digest = fakeDigest(`${p.name}@${v.version}-${a.os}-${a.arch}`);
+        const artifactPath = `${p.name}/${v.version}/${a.os}-${a.arch}.mcpb`;
+
+        await prisma.artifact.upsert({
+          where: {
+            versionId_os_arch: { versionId: pkgVersion.id, os: a.os, arch: a.arch },
+          },
+          create: {
+            versionId: pkgVersion.id,
+            os: a.os,
+            arch: a.arch,
+            digest,
+            sizeBytes: BigInt(a.sizeBytes),
+            storagePath: artifactPath,
+            sourceUrl: a.sourceUrl,
+          },
+          update: {
+            digest,
+            sizeBytes: BigInt(a.sizeBytes),
+            sourceUrl: a.sourceUrl,
+          },
+        });
+
+        // Create placeholder file on disk so local storage can serve it
+        const storagePath = process.env['STORAGE_PATH'] || './packages';
+        const fullPath = join(storagePath, artifactPath);
+        await mkdir(dirname(fullPath), { recursive: true });
+        await writeFile(fullPath, `placeholder:${p.name}@${v.version}:${a.os}-${a.arch}`);
+      }
+
+      const artifactCount = v.artifacts?.length ?? 0;
+      console.log(`    v${v.version} (${v.downloads} downloads, ${artifactCount} artifacts)`);
     }
   }
 

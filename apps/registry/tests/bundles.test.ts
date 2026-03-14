@@ -71,6 +71,7 @@ import {
   mockVersionWithScans,
 } from './helpers.js';
 import { verifyGitHubOIDC } from '../src/lib/oidc.js';
+import { errorHandler } from '../src/errors/middleware.js';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -90,6 +91,7 @@ describe('Bundle Routes', () => {
     app = Fastify({ logger: false });
     app.setReplySerializer((payload) => JSON.stringify(payload));
     await app.register(sensible);
+    app.setErrorHandler(errorHandler);
 
     // Decorate with mocks
     app.decorate('repositories', {
@@ -143,16 +145,11 @@ describe('Bundle Routes', () => {
       expect(body.total).toBe(0);
     });
 
-    it('clamps pagination limits to safe ranges', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+    it('rejects invalid pagination values', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
 
-      // limit=0 should be clamped to 1, offset=-5 should be clamped to 0
-      await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
-
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ take: 1, skip: 0 }),
-      );
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
     it('supports sort parameter', async () => {
@@ -164,6 +161,68 @@ describe('Bundle Routes', () => {
         expect.any(Object),
         expect.objectContaining({ orderBy: { name: 'asc' } }),
       );
+    });
+
+    it('applies defaults when no params provided', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({
+          skip: 0,
+          take: 20,
+          orderBy: { totalDownloads: 'desc' },
+        }),
+      );
+    });
+
+    it('passes type filter to search', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search?type=node' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ serverType: 'node' }),
+        expect.any(Object),
+      );
+    });
+
+    it('rejects invalid type and sort enum values', async () => {
+      const typeRes = await app.inject({ method: 'GET', url: '/search?type=invalid' });
+      const sortRes = await app.inject({ method: 'GET', url: '/search?sort=bogus' });
+
+      expect(typeRes.statusCode).toBe(422);
+      expect(sortRes.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects q longer than 200 characters', async () => {
+      const res = await app.inject({ method: 'GET', url: `/search?q=${'a'.repeat(201)}` });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects limit above 100', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?limit=101' });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('sets has_more when total exceeds returned results', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [mockPackage], total: 50 });
+      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
+
+      const res = await app.inject({ method: 'GET', url: '/search?limit=1&offset=0' });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.pagination).toEqual({ limit: 1, offset: 0, has_more: true });
     });
   });
 
