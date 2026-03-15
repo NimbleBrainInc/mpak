@@ -14,6 +14,11 @@ import { homedir } from "os";
 import { join, dirname, resolve, basename } from "path";
 import { MpakClient } from "@nimblebrain/mpak-sdk";
 import { createClient } from "../../utils/client.js";
+import {
+  getCacheDir,
+  getCacheMetadata,
+  writeCacheMetadata,
+} from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
 
 export interface RunOptions {
@@ -52,12 +57,6 @@ interface McpbManifest {
   };
 }
 
-interface CacheMetadata {
-  version: string;
-  pulledAt: string;
-  platform: { os: string; arch: string };
-}
-
 /**
  * Parse package specification into name and version
  * @example parsePackageSpec('@scope/name') => { name: '@scope/name' }
@@ -81,43 +80,6 @@ export function parsePackageSpec(spec: string): {
   }
 
   return { name, version };
-}
-
-/**
- * Get cache directory for a package
- * @example getCacheDir('@scope/name') => '~/.mpak/cache/scope-name'
- */
-export function getCacheDir(packageName: string): string {
-  const cacheBase = join(homedir(), ".mpak", "cache");
-  // @scope/name -> scope/name
-  const safeName = packageName.replace("@", "").replace("/", "-");
-  return join(cacheBase, safeName);
-}
-
-/**
- * Read cache metadata
- */
-function getCacheMetadata(cacheDir: string): CacheMetadata | null {
-  const metaPath = join(cacheDir, ".mpak-meta.json");
-  if (!existsSync(metaPath)) {
-    return null;
-  }
-  try {
-    return JSON.parse(readFileSync(metaPath, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Write cache metadata
- */
-function writeCacheMetadata(
-  cacheDir: string,
-  metadata: CacheMetadata,
-): void {
-  const metaPath = join(cacheDir, ".mpak-meta.json");
-  writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 }
 
 /**
