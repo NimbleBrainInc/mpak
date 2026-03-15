@@ -5,6 +5,8 @@ import { handleSearch } from "./commands/packages/search.js";
 import { handleShow } from "./commands/packages/show.js";
 import { handlePull } from "./commands/packages/pull.js";
 import { handleRun } from "./commands/packages/run.js";
+import { handleOutdated } from "./commands/packages/outdated.js";
+import { handleUpdate } from "./commands/packages/update.js";
 import {
   handleConfigSet,
   handleConfigGet,
@@ -69,6 +71,26 @@ export function createProgram(): Command {
     });
 
   // ==========================================================================
+  // Top-level outdated / update aliases
+  // ==========================================================================
+
+  program
+    .command("outdated")
+    .description('Check cached bundles for updates (alias for "bundle outdated")')
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      await handleOutdated(options);
+    });
+
+  program
+    .command("update [package]")
+    .description('Update cached bundles (alias for "bundle update")')
+    .option("--json", "Output as JSON")
+    .action(async (packageName, options) => {
+      await handleUpdate(packageName, options);
+    });
+
+  // ==========================================================================
   // Bundle namespace (MCP bundles)
   // ==========================================================================
 
@@ -112,6 +134,22 @@ export function createProgram(): Command {
     .option("-l, --local <path>", "Run a local .mcpb bundle file")
     .action(async (packageSpec, options) => {
       await handleRun(packageSpec || "", options);
+    });
+
+  bundle
+    .command("outdated")
+    .description("Check cached bundles for available updates")
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      await handleOutdated(options);
+    });
+
+  bundle
+    .command("update [package]")
+    .description("Update cached bundles to latest versions")
+    .option("--json", "Output as JSON")
+    .action(async (packageName, options) => {
+      await handleUpdate(packageName, options);
     });
 
   // ==========================================================================

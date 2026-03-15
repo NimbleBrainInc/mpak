@@ -1,7 +1,15 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import { execFileSync } from "child_process";
 import { homedir } from "os";
-import { join } from "path";
-import type { MpakClient } from "@nimblebrain/mpak-sdk";
+import { dirname, join } from "path";
+import { MpakClient } from "@nimblebrain/mpak-sdk";
 
 export interface CacheMetadata {
   version: string;
@@ -86,4 +94,135 @@ export async function checkForUpdateAsync(
   } catch {
     // Silently swallow all errors (network down, registry unreachable, etc.)
   }
+}
+
+export interface CachedBundle {
+  name: string;
+  version: string;
+  pulledAt: string;
+  cacheDir: string;
+}
+
+/**
+ * Scan ~/.mpak/cache/ and return metadata for every cached registry bundle.
+ * Skips the _local/ directory (local dev bundles).
+ */
+export function listCachedBundles(): CachedBundle[] {
+  const cacheBase = join(homedir(), ".mpak", "cache");
+  if (!existsSync(cacheBase)) return [];
+
+  const entries = readdirSync(cacheBase, { withFileTypes: true });
+  const bundles: CachedBundle[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === "_local") continue;
+
+    const dir = join(cacheBase, entry.name);
+    const meta = getCacheMetadata(dir);
+    if (!meta) continue;
+
+    const manifestPath = join(dir, "manifest.json");
+    if (!existsSync(manifestPath)) continue;
+
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      bundles.push({
+        name: manifest.name,
+        version: meta.version,
+        pulledAt: meta.pulledAt,
+        cacheDir: dir,
+      });
+    } catch {
+      // Skip corrupt bundles
+    }
+  }
+
+  return bundles;
+}
+
+/**
+ * Maximum allowed uncompressed size for a bundle (500MB).
+ */
+const MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
+
+/**
+ * Download a bundle from the registry, extract it into the cache, and write metadata.
+ * Returns the cache directory path.
+ */
+export async function downloadAndExtract(
+  name: string,
+  client: MpakClient,
+  requestedVersion?: string,
+): Promise<{ cacheDir: string; version: string }> {
+  const platform = MpakClient.detectPlatform();
+  const downloadInfo = await client.getBundleDownload(
+    name,
+    requestedVersion || "latest",
+    platform,
+  );
+  const bundle = downloadInfo.bundle;
+  const cacheDir = getCacheDir(name);
+
+  // Download to temp file
+  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}.mcpb`);
+  mkdirSync(dirname(tempPath), { recursive: true });
+
+  process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);
+
+  const response = await fetch(downloadInfo.url);
+  if (!response.ok) {
+    throw new Error(`Failed to download bundle: ${response.statusText}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  writeFileSync(tempPath, Buffer.from(arrayBuffer));
+
+  // Clear old cache and extract
+  if (existsSync(cacheDir)) {
+    rmSync(cacheDir, { recursive: true, force: true });
+  }
+  mkdirSync(cacheDir, { recursive: true });
+
+  // Check uncompressed size before extraction
+  try {
+    const listOutput = execFileSync("unzip", ["-l", tempPath], {
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+    const totalMatch = listOutput.match(/^\s*(\d+)\s+\d+\s+files?$/m);
+    if (totalMatch) {
+      const totalSize = parseInt(totalMatch[1]!, 10);
+      if (totalSize > MAX_UNCOMPRESSED_SIZE) {
+        throw new Error(
+          `Bundle uncompressed size (${Math.round(totalSize / 1024 / 1024)}MB) exceeds maximum allowed (${MAX_UNCOMPRESSED_SIZE / (1024 * 1024)}MB)`,
+        );
+      }
+    }
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      error.message.includes("exceeds maximum allowed")
+    ) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot verify bundle size before extraction: ${message}`);
+  }
+
+  execFileSync("unzip", ["-o", "-q", tempPath, "-d", cacheDir], {
+    stdio: "pipe",
+  });
+
+  // Write metadata
+  writeCacheMetadata(cacheDir, {
+    version: bundle.version,
+    pulledAt: new Date().toISOString(),
+    platform: bundle.platform,
+  });
+
+  // Cleanup temp file
+  rmSync(tempPath, { force: true });
+
+  process.stderr.write(`=> Cached ${name}@${bundle.version}\n`);
+
+  return { cacheDir, version: bundle.version };
 }

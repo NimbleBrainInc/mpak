@@ -1,0 +1,68 @@
+import { downloadAndExtract } from "../../utils/cache.js";
+import { createClient } from "../../utils/client.js";
+import { fmtError } from "../../utils/format.js";
+import { getOutdatedBundles } from "./outdated.js";
+
+export interface UpdateOptions {
+  json?: boolean;
+}
+
+export async function handleUpdate(
+  packageName: string | undefined,
+  options: UpdateOptions = {},
+): Promise<void> {
+  const client = createClient();
+
+  if (packageName) {
+    // Update a single bundle
+    const { version } = await downloadAndExtract(packageName, client);
+    if (options.json) {
+      console.log(JSON.stringify({ name: packageName, version }, null, 2));
+    } else {
+      console.log(`Updated ${packageName} to ${version}`);
+    }
+    return;
+  }
+
+  // No name given — find and update all outdated bundles
+  process.stderr.write("=> Checking for updates...\n");
+  const outdated = await getOutdatedBundles();
+
+  if (outdated.length === 0) {
+    if (options.json) {
+      console.log(JSON.stringify([], null, 2));
+    } else {
+      console.log("All cached bundles are up to date.");
+    }
+    return;
+  }
+
+  process.stderr.write(
+    `=> ${outdated.length} bundle(s) to update\n`,
+  );
+
+  const updated: Array<{ name: string; from: string; to: string }> = [];
+
+  for (const entry of outdated) {
+    try {
+      const { version } = await downloadAndExtract(entry.name, client);
+      updated.push({ name: entry.name, from: entry.current, to: version });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`=> Failed to update ${entry.name}: ${message}\n`);
+    }
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify(updated, null, 2));
+    return;
+  }
+
+  if (updated.length === 0) {
+    fmtError("All updates failed.");
+  }
+
+  for (const u of updated) {
+    console.log(`Updated ${u.name}: ${u.from} -> ${u.to}`);
+  }
+}
