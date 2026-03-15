@@ -18,7 +18,9 @@ import {
   getCacheDir,
   getCacheMetadata,
   writeCacheMetadata,
+  checkForUpdateAsync,
 } from "../../utils/cache.js";
+import type { CacheMetadata } from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
 
 export interface RunOptions {
@@ -411,6 +413,8 @@ export async function handleRun(
 
   let cacheDir: string;
   let packageName: string;
+  let registryClient: ReturnType<typeof createClient> | null = null;
+  let cachedMeta: CacheMetadata | null = null;
 
   if (options.local) {
     // === LOCAL BUNDLE MODE ===
@@ -468,12 +472,12 @@ export async function handleRun(
     const { name, version: requestedVersion } =
       parsePackageSpec(packageSpec);
     packageName = name;
-    const client = createClient();
+    registryClient = createClient();
     const platform = MpakClient.detectPlatform();
     cacheDir = getCacheDir(name);
 
     let needsPull = true;
-    const cachedMeta = getCacheMetadata(cacheDir);
+    cachedMeta = getCacheMetadata(cacheDir);
 
     // Check if we have a cached version
     if (cachedMeta && !options.update) {
@@ -488,7 +492,7 @@ export async function handleRun(
 
     if (needsPull) {
       // Fetch download info
-      const downloadInfo = await client.getBundleDownload(
+      const downloadInfo = await registryClient.getBundleDownload(
         name,
         requestedVersion || "latest",
         platform,
@@ -640,12 +644,22 @@ export async function handleRun(
     cwd: cacheDir,
   });
 
+  // Fire-and-forget update check for registry bundles
+  let updateCheckPromise: Promise<void> | null = null;
+  if (!options.local && registryClient && cachedMeta) {
+    updateCheckPromise = checkForUpdateAsync(packageName, cachedMeta, cacheDir, registryClient);
+  }
+
   // Forward signals
   process.on("SIGINT", () => child.kill("SIGINT"));
   process.on("SIGTERM", () => child.kill("SIGTERM"));
 
   // Wait for exit
-  child.on("exit", (code) => {
+  child.on("exit", async (code) => {
+    // Let the update check finish before exiting (but don't block indefinitely)
+    if (updateCheckPromise) {
+      await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
+    }
     process.exit(code ?? 0);
   });
 
