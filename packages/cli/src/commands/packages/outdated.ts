@@ -1,6 +1,6 @@
 import { listCachedBundles } from "../../utils/cache.js";
 import { createClient } from "../../utils/client.js";
-import { fmtError, table } from "../../utils/format.js";
+import { table } from "../../utils/format.js";
 
 export interface OutdatedEntry {
   name: string;
@@ -46,11 +46,6 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
 }
 
 export async function handleOutdated(options: OutdatedOptions = {}): Promise<void> {
-  const cached = listCachedBundles();
-  if (cached.length === 0) {
-    fmtError("No cached bundles found. Run 'mpak run <package>' first.");
-  }
-
   process.stderr.write("=> Checking for updates...\n");
 
   const outdated = await getOutdatedBundles();

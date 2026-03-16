@@ -1,8 +1,7 @@
-import { execFileSync, spawn, spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { createInterface } from "readline";
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
   writeFileSync,
   chmodSync,
@@ -11,14 +10,15 @@ import {
 } from "fs";
 import { createHash } from "crypto";
 import { homedir } from "os";
-import { join, dirname, resolve, basename } from "path";
-import { MpakClient } from "@nimblebrain/mpak-sdk";
+import { join, resolve, basename } from "path";
 import { createClient } from "../../utils/client.js";
 import {
   getCacheDir,
   getCacheMetadata,
-  writeCacheMetadata,
   checkForUpdateAsync,
+  extractZip,
+  resolveBundle,
+  downloadAndExtract,
 } from "../../utils/cache.js";
 import type { CacheMetadata } from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
@@ -82,61 +82,6 @@ export function parsePackageSpec(spec: string): {
   }
 
   return { name, version };
-}
-
-/**
- * Maximum allowed uncompressed size for a bundle (500MB).
- * Protects against zip bombs that could exhaust disk space.
- */
-const MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
-
-/**
- * Extract ZIP file to directory (simple implementation without external deps)
- */
-async function extractZip(
-  zipPath: string,
-  destDir: string,
-): Promise<void> {
-  // Use native unzip command (available on macOS, Linux, and Windows with WSL)
-  // Check uncompressed size before extraction to prevent zip bombs
-  try {
-    const listOutput = execFileSync('unzip', ['-l', zipPath], {
-      stdio: "pipe",
-      encoding: "utf8",
-    });
-    const totalMatch = listOutput.match(/^\s*(\d+)\s+\d+\s+files?$/m);
-    if (totalMatch) {
-      const totalSize = parseInt(totalMatch[1]!, 10);
-      if (totalSize > MAX_UNCOMPRESSED_SIZE) {
-        throw new Error(
-          `Bundle uncompressed size (${Math.round(totalSize / 1024 / 1024)}MB) exceeds maximum allowed (${MAX_UNCOMPRESSED_SIZE / (1024 * 1024)}MB)`,
-        );
-      }
-    }
-  } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      error.message.includes("exceeds maximum allowed")
-    ) {
-      throw error;
-    }
-    // Fail closed: if we can't verify the size, don't extract
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Cannot verify bundle size before extraction: ${message}`);
-  }
-
-  // Ensure destination exists
-  mkdirSync(destDir, { recursive: true });
-
-  try {
-    execFileSync('unzip', ['-o', '-q', zipPath, '-d', destDir], {
-      stdio: "pipe",
-    });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to extract bundle: ${message}`);
-  }
 }
 
 /**
@@ -380,23 +325,6 @@ function findPythonCommand(): string {
 }
 
 /**
- * Download a bundle to a file path
- */
-async function downloadBundle(
-  downloadUrl: string,
-  outputPath: string,
-): Promise<void> {
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download bundle: ${response.statusText}`,
-    );
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  writeFileSync(outputPath, Buffer.from(arrayBuffer));
-}
-
-/**
  * Run a package from the registry or a local bundle file
  */
 export async function handleRun(
@@ -446,12 +374,11 @@ export async function handleRun(
       if (existsSync(cacheDir)) {
         rmSync(cacheDir, { recursive: true, force: true });
       }
-      mkdirSync(cacheDir, { recursive: true });
 
       process.stderr.write(
         `=> Extracting ${basename(bundlePath)}...\n`,
       );
-      await extractZip(bundlePath, cacheDir);
+      extractZip(bundlePath, cacheDir);
 
       // Write local metadata
       writeFileSync(
@@ -473,7 +400,6 @@ export async function handleRun(
       parsePackageSpec(packageSpec);
     packageName = name;
     registryClient = createClient();
-    const platform = MpakClient.detectPlatform();
     cacheDir = getCacheDir(name);
 
     let needsPull = true;
@@ -491,59 +417,19 @@ export async function handleRun(
     }
 
     if (needsPull) {
-      // Fetch download info
-      const downloadInfo = await registryClient.getBundleDownload(
-        name,
-        requestedVersion || "latest",
-        platform,
-      );
-      const bundle = downloadInfo.bundle;
+      const downloadInfo = await resolveBundle(name, registryClient, requestedVersion);
 
       // Check if cached version is already the latest
       if (
         cachedMeta &&
-        cachedMeta.version === bundle.version &&
+        cachedMeta.version === downloadInfo.bundle.version &&
         !options.update
       ) {
         needsPull = false;
       }
 
       if (needsPull) {
-        // Download to temp file
-        const tempPath = join(
-          homedir(),
-          ".mpak",
-          "tmp",
-          `${Date.now()}.mcpb`,
-        );
-        mkdirSync(dirname(tempPath), { recursive: true });
-
-        process.stderr.write(
-          `=> Pulling ${name}@${bundle.version}...\n`,
-        );
-        await downloadBundle(downloadInfo.url, tempPath);
-
-        // Clear old cache and extract
-        if (existsSync(cacheDir)) {
-          rmSync(cacheDir, { recursive: true, force: true });
-        }
-        mkdirSync(cacheDir, { recursive: true });
-
-        await extractZip(tempPath, cacheDir);
-
-        // Write metadata
-        writeCacheMetadata(cacheDir, {
-          version: bundle.version,
-          pulledAt: new Date().toISOString(),
-          platform: bundle.platform,
-        });
-
-        // Cleanup temp file
-        rmSync(tempPath, { force: true });
-
-        process.stderr.write(
-          `=> Cached ${name}@${bundle.version}\n`,
-        );
+        ({ cacheDir } = await downloadAndExtract(name, downloadInfo));
       }
     }
   }

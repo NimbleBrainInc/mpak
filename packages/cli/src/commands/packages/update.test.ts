@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { handleUpdate } from "./update.js";
 
 vi.mock("../../utils/cache.js", () => ({
+  resolveBundle: vi.fn(),
   downloadAndExtract: vi.fn(),
 }));
 
@@ -13,11 +14,17 @@ vi.mock("./outdated.js", () => ({
   getOutdatedBundles: vi.fn(),
 }));
 
-import { downloadAndExtract } from "../../utils/cache.js";
+import { resolveBundle, downloadAndExtract } from "../../utils/cache.js";
 import { getOutdatedBundles } from "./outdated.js";
 
+const mockResolveBundle = vi.mocked(resolveBundle);
 const mockDownloadAndExtract = vi.mocked(downloadAndExtract);
 const mockGetOutdatedBundles = vi.mocked(getOutdatedBundles);
+
+const fakeDownloadInfo = {
+  url: "https://example.com/bundle.mcpb",
+  bundle: { version: "2.0.0", platform: { os: "darwin", arch: "arm64" } },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -27,17 +34,20 @@ beforeEach(() => {
 
 describe("handleUpdate", () => {
   describe("single bundle", () => {
-    it("downloads and reports the updated version", async () => {
+    it("resolves then downloads and reports the updated version", async () => {
+      mockResolveBundle.mockResolvedValue(fakeDownloadInfo);
       mockDownloadAndExtract.mockResolvedValue({ cacheDir: "/cache/a", version: "2.0.0" });
 
       await handleUpdate("@scope/a", {});
 
-      expect(mockDownloadAndExtract).toHaveBeenCalledTimes(1);
-      expect(mockDownloadAndExtract.mock.calls[0]![0]).toBe("@scope/a");
+      expect(mockResolveBundle).toHaveBeenCalledTimes(1);
+      expect(mockResolveBundle.mock.calls[0]![0]).toBe("@scope/a");
+      expect(mockDownloadAndExtract).toHaveBeenCalledWith("@scope/a", fakeDownloadInfo);
       expect(console.log).toHaveBeenCalledWith("Updated @scope/a to 2.0.0");
     });
 
     it("outputs JSON when --json flag is set", async () => {
+      mockResolveBundle.mockResolvedValue(fakeDownloadInfo);
       mockDownloadAndExtract.mockResolvedValue({ cacheDir: "/cache/a", version: "2.0.0" });
 
       await handleUpdate("@scope/a", { json: true });
@@ -48,6 +58,7 @@ describe("handleUpdate", () => {
     });
 
     it("does not call getOutdatedBundles", async () => {
+      mockResolveBundle.mockResolvedValue(fakeDownloadInfo);
       mockDownloadAndExtract.mockResolvedValue({ cacheDir: "/cache/a", version: "2.0.0" });
 
       await handleUpdate("@scope/a", {});
@@ -71,6 +82,11 @@ describe("handleUpdate", () => {
         { name: "@scope/a", current: "1.0.0", latest: "2.0.0", pulledAt: "2025-01-01T00:00:00.000Z" },
         { name: "@scope/b", current: "1.0.0", latest: "1.1.0", pulledAt: "2025-01-01T00:00:00.000Z" },
       ]);
+      const infoA = { ...fakeDownloadInfo, bundle: { ...fakeDownloadInfo.bundle, version: "2.0.0" } };
+      const infoB = { ...fakeDownloadInfo, bundle: { ...fakeDownloadInfo.bundle, version: "1.1.0" } };
+      mockResolveBundle
+        .mockResolvedValueOnce(infoA)
+        .mockResolvedValueOnce(infoB);
       mockDownloadAndExtract
         .mockResolvedValueOnce({ cacheDir: "/cache/a", version: "2.0.0" })
         .mockResolvedValueOnce({ cacheDir: "/cache/b", version: "1.1.0" });
@@ -87,13 +103,14 @@ describe("handleUpdate", () => {
         { name: "@scope/a", current: "1.0.0", latest: "2.0.0", pulledAt: "2025-01-01T00:00:00.000Z" },
         { name: "@scope/b", current: "1.0.0", latest: "1.1.0", pulledAt: "2025-01-01T00:00:00.000Z" },
       ]);
-      mockDownloadAndExtract
+      mockResolveBundle
         .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce(fakeDownloadInfo);
+      mockDownloadAndExtract
         .mockResolvedValueOnce({ cacheDir: "/cache/b", version: "1.1.0" });
 
       await handleUpdate(undefined, {});
 
-      expect(mockDownloadAndExtract).toHaveBeenCalledTimes(2);
       expect(process.stderr.write).toHaveBeenCalledWith(
         expect.stringContaining("Failed to update @scope/a"),
       );
@@ -104,6 +121,7 @@ describe("handleUpdate", () => {
       mockGetOutdatedBundles.mockResolvedValue([
         { name: "@scope/a", current: "1.0.0", latest: "2.0.0", pulledAt: "2025-01-01T00:00:00.000Z" },
       ]);
+      mockResolveBundle.mockResolvedValue(fakeDownloadInfo);
       mockDownloadAndExtract.mockResolvedValue({ cacheDir: "/cache/a", version: "2.0.0" });
 
       await handleUpdate(undefined, { json: true });

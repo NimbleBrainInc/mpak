@@ -1,4 +1,4 @@
-import { downloadAndExtract } from "../../utils/cache.js";
+import { downloadAndExtract, resolveBundle } from "../../utils/cache.js";
 import { createClient } from "../../utils/client.js";
 import { fmtError } from "../../utils/format.js";
 import { getOutdatedBundles } from "./outdated.js";
@@ -15,7 +15,8 @@ export async function handleUpdate(
 
   if (packageName) {
     // Update a single bundle
-    const { version } = await downloadAndExtract(packageName, client);
+    const downloadInfo = await resolveBundle(packageName, client);
+    const { version } = await downloadAndExtract(packageName, downloadInfo);
     if (options.json) {
       console.log(JSON.stringify({ name: packageName, version }, null, 2));
     } else {
@@ -45,7 +46,8 @@ export async function handleUpdate(
 
   for (const entry of outdated) {
     try {
-      const { version } = await downloadAndExtract(entry.name, client);
+      const downloadInfo = await resolveBundle(entry.name, client);
+      const { version } = await downloadAndExtract(entry.name, downloadInfo);
       updated.push({ name: entry.name, from: entry.current, to: version });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
