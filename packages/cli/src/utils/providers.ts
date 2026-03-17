@@ -12,7 +12,7 @@ const PROVIDERS = {
   copilot: () => join(homedir(), ".copilot", "skills"),
   codex: () => join(homedir(), ".codex", "skills"),
   gemini: () => join(homedir(), ".gemini", "skills"),
-  goose: () => join(homedir(), ".config", "agents", "skills"),
+  goose: () => join(homedir(), ".config", "goose", "skills"),
   opencode: () => join(homedir(), ".config", "opencode", "skills"),
 } as const;
 
