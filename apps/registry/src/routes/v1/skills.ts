@@ -19,7 +19,7 @@ import {
   SkillDownloadInfoSchema,
   SkillAnnounceRequestSchema,
   SkillAnnounceResponseSchema,
-} from '../../schemas/generated/skill.js';
+} from '@nimblebrain/mpak-schemas';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { extractSkillContent } from '../../utils/skill-content.js';

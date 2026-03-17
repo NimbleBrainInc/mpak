@@ -65,12 +65,14 @@ import {
   createMockPackageRepo,
   createMockStorage,
   createMockPrisma,
+  mockArtifact,
   mockPackage,
   mockVersion,
   mockVersionWithArtifacts,
   mockVersionWithScans,
 } from './helpers.js';
 import { verifyGitHubOIDC } from '../src/lib/oidc.js';
+import { errorHandler } from '../src/errors/middleware.js';
 
 // ---------------------------------------------------------------------------
 // Test setup
@@ -90,6 +92,7 @@ describe('Bundle Routes', () => {
     app = Fastify({ logger: false });
     app.setReplySerializer((payload) => JSON.stringify(payload));
     await app.register(sensible);
+    app.setErrorHandler(errorHandler);
 
     // Decorate with mocks
     app.decorate('repositories', {
@@ -143,16 +146,11 @@ describe('Bundle Routes', () => {
       expect(body.total).toBe(0);
     });
 
-    it('clamps pagination limits to safe ranges', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+    it('rejects invalid pagination values', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
 
-      // limit=0 should be clamped to 1, offset=-5 should be clamped to 0
-      await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
-
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ take: 1, skip: 0 }),
-      );
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
     });
 
     it('supports sort parameter', async () => {
@@ -164,6 +162,68 @@ describe('Bundle Routes', () => {
         expect.any(Object),
         expect.objectContaining({ orderBy: { name: 'asc' } }),
       );
+    });
+
+    it('applies defaults when no params provided', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({
+          skip: 0,
+          take: 20,
+          orderBy: { totalDownloads: 'desc' },
+        }),
+      );
+    });
+
+    it('passes type filter to search', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
+
+      const res = await app.inject({ method: 'GET', url: '/search?type=node' });
+
+      expect(res.statusCode).toBe(200);
+      expect(packageRepo.search).toHaveBeenCalledWith(
+        expect.objectContaining({ serverType: 'node' }),
+        expect.any(Object),
+      );
+    });
+
+    it('rejects invalid type and sort enum values', async () => {
+      const typeRes = await app.inject({ method: 'GET', url: '/search?type=invalid' });
+      const sortRes = await app.inject({ method: 'GET', url: '/search?sort=bogus' });
+
+      expect(typeRes.statusCode).toBe(422);
+      expect(sortRes.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects q longer than 200 characters', async () => {
+      const res = await app.inject({ method: 'GET', url: `/search?q=${'a'.repeat(201)}` });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('rejects limit above 100', async () => {
+      const res = await app.inject({ method: 'GET', url: '/search?limit=101' });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.search).not.toHaveBeenCalled();
+    });
+
+    it('sets has_more when total exceeds returned results', async () => {
+      packageRepo.search.mockResolvedValue({ packages: [mockPackage], total: 50 });
+      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
+
+      const res = await app.inject({ method: 'GET', url: '/search?limit=1&offset=0' });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.pagination).toEqual({ limit: 1, offset: 0, has_more: true });
     });
   });
 
@@ -264,7 +324,7 @@ describe('Bundle Routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
         headers: { accept: 'application/json' },
       });
 
@@ -282,7 +342,7 @@ describe('Bundle Routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/@test/mcp-server/versions/latest/download',
+        url: '/@test/mcp-server/versions/latest/download?os=linux&arch=x64',
         headers: { accept: 'application/json' },
       });
 
@@ -312,6 +372,109 @@ describe('Bundle Routes', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/@test/nope/versions/1.0.0/download',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 400 when only os is provided without arch', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=linux',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when only arch is provided without os', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?arch=x64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 422 when os and arch are invalid enum values', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=foo&arch=bar',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(422);
+      expect(packageRepo.findVersionWithArtifacts).not.toHaveBeenCalled();
+    });
+
+    it('returns 200 when both os and arch match an artifact', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.bundle.platform).toEqual({ os: 'linux', arch: 'x64' });
+    });
+
+    it('returns 404 when both os and arch provided but no matching artifact', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=darwin&arch=arm64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 200 with any/any artifact when no platform params provided', async () => {
+      const anyArtifact = {
+        ...mockArtifact,
+        id: 'art-any',
+        os: 'any',
+        arch: 'any',
+        storagePath: '@test/mcp-server/1.0.0/any-any.mcpb',
+      };
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue({
+        ...mockVersion,
+        artifacts: [anyArtifact],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.bundle.platform).toEqual({ os: 'any', arch: 'any' });
+    });
+
+    it('returns 404 when no platform params and no any/any artifact', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download',
         headers: { accept: 'application/json' },
       });
 
