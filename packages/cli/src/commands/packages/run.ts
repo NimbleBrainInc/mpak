@@ -1,8 +1,7 @@
-import { execFileSync, spawn, spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { createInterface } from "readline";
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
   writeFileSync,
   chmodSync,
@@ -11,9 +10,17 @@ import {
 } from "fs";
 import { createHash } from "crypto";
 import { homedir } from "os";
-import { join, dirname, resolve, basename } from "path";
-import { MpakClient } from "@nimblebrain/mpak-sdk";
+import { join, resolve, basename } from "path";
 import { createClient } from "../../utils/client.js";
+import {
+  getCacheDir,
+  getCacheMetadata,
+  checkForUpdateAsync,
+  extractZip,
+  resolveBundle,
+  downloadAndExtract,
+} from "../../utils/cache.js";
+import type { CacheMetadata } from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
 
 export interface RunOptions {
@@ -52,12 +59,6 @@ interface McpbManifest {
   };
 }
 
-interface CacheMetadata {
-  version: string;
-  pulledAt: string;
-  platform: { os: string; arch: string };
-}
-
 /**
  * Parse package specification into name and version
  * @example parsePackageSpec('@scope/name') => { name: '@scope/name' }
@@ -81,98 +82,6 @@ export function parsePackageSpec(spec: string): {
   }
 
   return { name, version };
-}
-
-/**
- * Get cache directory for a package
- * @example getCacheDir('@scope/name') => '~/.mpak/cache/scope-name'
- */
-export function getCacheDir(packageName: string): string {
-  const cacheBase = join(homedir(), ".mpak", "cache");
-  // @scope/name -> scope/name
-  const safeName = packageName.replace("@", "").replace("/", "-");
-  return join(cacheBase, safeName);
-}
-
-/**
- * Read cache metadata
- */
-function getCacheMetadata(cacheDir: string): CacheMetadata | null {
-  const metaPath = join(cacheDir, ".mpak-meta.json");
-  if (!existsSync(metaPath)) {
-    return null;
-  }
-  try {
-    return JSON.parse(readFileSync(metaPath, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Write cache metadata
- */
-function writeCacheMetadata(
-  cacheDir: string,
-  metadata: CacheMetadata,
-): void {
-  const metaPath = join(cacheDir, ".mpak-meta.json");
-  writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
-}
-
-/**
- * Maximum allowed uncompressed size for a bundle (500MB).
- * Protects against zip bombs that could exhaust disk space.
- */
-const MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
-
-/**
- * Extract ZIP file to directory (simple implementation without external deps)
- */
-async function extractZip(
-  zipPath: string,
-  destDir: string,
-): Promise<void> {
-  // Use native unzip command (available on macOS, Linux, and Windows with WSL)
-  // Check uncompressed size before extraction to prevent zip bombs
-  try {
-    const listOutput = execFileSync('unzip', ['-l', zipPath], {
-      stdio: "pipe",
-      encoding: "utf8",
-    });
-    const totalMatch = listOutput.match(/^\s*(\d+)\s+\d+\s+files?$/m);
-    if (totalMatch) {
-      const totalSize = parseInt(totalMatch[1]!, 10);
-      if (totalSize > MAX_UNCOMPRESSED_SIZE) {
-        throw new Error(
-          `Bundle uncompressed size (${Math.round(totalSize / 1024 / 1024)}MB) exceeds maximum allowed (${MAX_UNCOMPRESSED_SIZE / (1024 * 1024)}MB)`,
-        );
-      }
-    }
-  } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      error.message.includes("exceeds maximum allowed")
-    ) {
-      throw error;
-    }
-    // Fail closed: if we can't verify the size, don't extract
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Cannot verify bundle size before extraction: ${message}`);
-  }
-
-  // Ensure destination exists
-  mkdirSync(destDir, { recursive: true });
-
-  try {
-    execFileSync('unzip', ['-o', '-q', zipPath, '-d', destDir], {
-      stdio: "pipe",
-    });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to extract bundle: ${message}`);
-  }
 }
 
 /**
@@ -416,23 +325,6 @@ function findPythonCommand(): string {
 }
 
 /**
- * Download a bundle to a file path
- */
-async function downloadBundle(
-  downloadUrl: string,
-  outputPath: string,
-): Promise<void> {
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download bundle: ${response.statusText}`,
-    );
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  writeFileSync(outputPath, Buffer.from(arrayBuffer));
-}
-
-/**
  * Run a package from the registry or a local bundle file
  */
 export async function handleRun(
@@ -449,6 +341,8 @@ export async function handleRun(
 
   let cacheDir: string;
   let packageName: string;
+  let registryClient: ReturnType<typeof createClient> | null = null;
+  let cachedMeta: CacheMetadata | null = null;
 
   if (options.local) {
     // === LOCAL BUNDLE MODE ===
@@ -480,12 +374,11 @@ export async function handleRun(
       if (existsSync(cacheDir)) {
         rmSync(cacheDir, { recursive: true, force: true });
       }
-      mkdirSync(cacheDir, { recursive: true });
 
       process.stderr.write(
         `=> Extracting ${basename(bundlePath)}...\n`,
       );
-      await extractZip(bundlePath, cacheDir);
+      extractZip(bundlePath, cacheDir);
 
       // Write local metadata
       writeFileSync(
@@ -506,12 +399,11 @@ export async function handleRun(
     const { name, version: requestedVersion } =
       parsePackageSpec(packageSpec);
     packageName = name;
-    const client = createClient();
-    const platform = MpakClient.detectPlatform();
+    registryClient = createClient();
     cacheDir = getCacheDir(name);
 
     let needsPull = true;
-    const cachedMeta = getCacheMetadata(cacheDir);
+    cachedMeta = getCacheMetadata(cacheDir);
 
     // Check if we have a cached version
     if (cachedMeta && !options.update) {
@@ -525,59 +417,19 @@ export async function handleRun(
     }
 
     if (needsPull) {
-      // Fetch download info
-      const downloadInfo = await client.getBundleDownload(
-        name,
-        requestedVersion || "latest",
-        platform,
-      );
-      const bundle = downloadInfo.bundle;
+      const downloadInfo = await resolveBundle(name, registryClient, requestedVersion);
 
       // Check if cached version is already the latest
       if (
         cachedMeta &&
-        cachedMeta.version === bundle.version &&
+        cachedMeta.version === downloadInfo.bundle.version &&
         !options.update
       ) {
         needsPull = false;
       }
 
       if (needsPull) {
-        // Download to temp file
-        const tempPath = join(
-          homedir(),
-          ".mpak",
-          "tmp",
-          `${Date.now()}.mcpb`,
-        );
-        mkdirSync(dirname(tempPath), { recursive: true });
-
-        process.stderr.write(
-          `=> Pulling ${name}@${bundle.version}...\n`,
-        );
-        await downloadBundle(downloadInfo.url, tempPath);
-
-        // Clear old cache and extract
-        if (existsSync(cacheDir)) {
-          rmSync(cacheDir, { recursive: true, force: true });
-        }
-        mkdirSync(cacheDir, { recursive: true });
-
-        await extractZip(tempPath, cacheDir);
-
-        // Write metadata
-        writeCacheMetadata(cacheDir, {
-          version: bundle.version,
-          pulledAt: new Date().toISOString(),
-          platform: bundle.platform,
-        });
-
-        // Cleanup temp file
-        rmSync(tempPath, { force: true });
-
-        process.stderr.write(
-          `=> Cached ${name}@${bundle.version}\n`,
-        );
+        ({ cacheDir } = await downloadAndExtract(name, downloadInfo));
       }
     }
   }
@@ -678,12 +530,22 @@ export async function handleRun(
     cwd: cacheDir,
   });
 
+  // Fire-and-forget update check for registry bundles
+  let updateCheckPromise: Promise<void> | null = null;
+  if (!options.local && registryClient && cachedMeta) {
+    updateCheckPromise = checkForUpdateAsync(packageName, cachedMeta, cacheDir, registryClient);
+  }
+
   // Forward signals
   process.on("SIGINT", () => child.kill("SIGINT"));
   process.on("SIGTERM", () => child.kill("SIGTERM"));
 
   // Wait for exit
-  child.on("exit", (code) => {
+  child.on("exit", async (code) => {
+    // Let the update check finish before exiting (but don't block indefinitely)
+    if (updateCheckPromise) {
+      await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
+    }
     process.exit(code ?? 0);
   });
 

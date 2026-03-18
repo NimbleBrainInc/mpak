@@ -3,7 +3,6 @@ import { homedir } from "os";
 import { join } from "path";
 import {
   parsePackageSpec,
-  getCacheDir,
   resolveArgs,
   resolveWorkspace,
   substituteUserConfig,
@@ -11,6 +10,7 @@ import {
   getLocalCacheDir,
   localBundleNeedsExtract,
 } from "./run.js";
+import { getCacheDir } from "../../utils/cache.js";
 
 describe("parsePackageSpec", () => {
   describe("scoped packages", () => {
