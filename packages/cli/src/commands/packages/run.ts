@@ -544,7 +544,11 @@ export async function handleRun(
   child.on("exit", async (code) => {
     // Let the update check finish before exiting (but don't block indefinitely)
     if (updateCheckPromise) {
-      await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
+      try {
+        await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
+      } catch {
+        process.stderr.write(`=> Warning: update check failed\n`);
+      }
     }
     process.exit(code ?? 0);
   });
