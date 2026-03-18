@@ -216,7 +216,7 @@ export async function downloadAndExtract(
   const cacheDir = getCacheDir(name);
 
   // Download to temp file
-  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}.mcpb`);
+  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mcpb`);
   mkdirSync(dirname(tempPath), { recursive: true });
 
   process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);
