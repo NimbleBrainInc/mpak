@@ -488,7 +488,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
           throw new UnauthorizedError(`Invalid OIDC token: ${message}`);
         }
 
-        const { name, version, skill: frontmatter, release_tag, prerelease = false, artifact } =
+        const { name: rawName, version, skill: frontmatter, release_tag, prerelease = false, artifact } =
           request.body as {
             name: string;
             version: string;
@@ -502,10 +502,13 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             };
           };
 
+        // Normalise to lowercase so @Foo/bar and @foo/bar are the same skill
+        const name = rawName.toLowerCase();
+
         // Validate name
         if (!isValidScopedName(name)) {
           throw new BadRequestError(
-            `Invalid skill name: "${name}". Must be scoped (@scope/name) with lowercase alphanumeric characters and hyphens.`
+            `Invalid skill name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
           );
         }
 

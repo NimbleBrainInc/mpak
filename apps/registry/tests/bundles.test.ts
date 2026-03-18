@@ -666,6 +666,51 @@ describe('Bundle Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('normalises uppercase package name to lowercase before validation', async () => {
+      (verifyGitHubOIDC as Mock).mockResolvedValue({
+        ...validOIDCClaims,
+        repository_owner: 'TestOrg',
+        repository: 'TestOrg/mcp-server',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/announce',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          ...validPayload,
+          name: '@TestOrg/mcp-server',
+        },
+      });
+
+      // Should NOT fail with "Invalid package name" — the name is normalised
+      // to lowercase before the regex check. It will fail later (GitHub fetch),
+      // but the validation gate must pass.
+      const body = JSON.parse(res.payload);
+      expect(body.error?.message ?? '').not.toContain('Invalid package name');
+    });
+
+    it('normalises mixed-case scope for OIDC owner matching', async () => {
+      (verifyGitHubOIDC as Mock).mockResolvedValue({
+        ...validOIDCClaims,
+        repository_owner: 'MyOrg',
+        repository: 'MyOrg/cool-server',
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/announce',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          ...validPayload,
+          name: '@MyOrg/cool-server',
+        },
+      });
+
+      const body = JSON.parse(res.payload);
+      expect(body.error?.message ?? '').not.toContain('Scope mismatch');
+    });
+
     it('rejects manifest without server type', async () => {
       (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
 
