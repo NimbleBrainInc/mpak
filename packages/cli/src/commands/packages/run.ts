@@ -548,7 +548,7 @@ export async function handleRun(
       try {
         await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
       } catch {
-        process.stderr.write(`=> Warning: update check failed\n`);
+        // Silently swallow — update check is best-effort and should not affect UX
       }
     }
     process.exit(code ?? 0);

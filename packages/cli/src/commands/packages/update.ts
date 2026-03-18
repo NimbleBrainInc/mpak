@@ -68,6 +68,7 @@ export async function handleUpdate(
 
   if (updated.length === 0) {
     fmtError("All updates failed.");
+    process.exit(1);
   }
 
   for (const u of updated) {

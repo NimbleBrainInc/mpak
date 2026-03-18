@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from "fs";
 import { execFileSync } from "child_process";
+import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { dirname, join } from "path";
 import { MpakClient } from "@nimblebrain/mpak-sdk";
@@ -223,7 +224,7 @@ export async function downloadAndExtract(
   const cacheDir = getCacheDir(name);
 
   // Download to temp file
-  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mcpb`);
+  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
   mkdirSync(dirname(tempPath), { recursive: true });
 
   process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);
