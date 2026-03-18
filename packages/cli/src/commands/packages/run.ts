@@ -19,6 +19,7 @@ import {
   extractZip,
   resolveBundle,
   downloadAndExtract,
+  isSemverEqual,
 } from "../../utils/cache.js";
 import type { CacheMetadata } from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
@@ -409,7 +410,7 @@ export async function handleRun(
     if (cachedMeta && !options.update) {
       if (requestedVersion) {
         // Specific version requested - check if cached version matches
-        needsPull = cachedMeta.version !== requestedVersion;
+        needsPull = !isSemverEqual(cachedMeta.version, requestedVersion);
       } else {
         // Latest requested - use cache (user can --update to refresh)
         needsPull = false;
@@ -422,7 +423,7 @@ export async function handleRun(
       // Check if cached version is already the latest
       if (
         cachedMeta &&
-        cachedMeta.version === downloadInfo.bundle.version &&
+        isSemverEqual(cachedMeta.version, downloadInfo.bundle.version) &&
         !options.update
       ) {
         needsPull = false;

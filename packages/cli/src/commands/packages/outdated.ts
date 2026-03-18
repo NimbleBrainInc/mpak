@@ -1,4 +1,4 @@
-import { listCachedBundles } from "../../utils/cache.js";
+import { isSemverEqual, listCachedBundles } from "../../utils/cache.js";
 import { createClient } from "../../utils/client.js";
 import { table } from "../../utils/format.js";
 
@@ -28,7 +28,7 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
     cached.map(async (bundle) => {
       try {
         const detail = await client.getBundle(bundle.name);
-        if (detail.latest_version !== bundle.version) {
+        if (!isSemverEqual(detail.latest_version, bundle.version)) {
           results.push({
             name: bundle.name,
             current: bundle.version,

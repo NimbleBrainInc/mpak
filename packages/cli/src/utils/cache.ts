@@ -11,6 +11,13 @@ import { homedir } from "os";
 import { dirname, join } from "path";
 import { MpakClient } from "@nimblebrain/mpak-sdk";
 
+/**
+ * Compare two semver strings for equality, ignoring leading 'v' prefix.
+ */
+export function isSemverEqual(a: string, b: string): boolean {
+  return a.replace(/^v/, "") === b.replace(/^v/, "");
+}
+
 export interface CacheMetadata {
   version: string;
   pulledAt: string;
@@ -85,7 +92,7 @@ export async function checkForUpdateAsync(
       lastCheckedAt: new Date().toISOString(),
     });
 
-    if (detail.latest_version !== cachedMeta.version) {
+    if (!isSemverEqual(detail.latest_version, cachedMeta.version)) {
       process.stderr.write(
         `\n=> Update available: ${packageName} ${cachedMeta.version} -> ${detail.latest_version}\n` +
         `   Run 'mpak run ${packageName} --update' to update\n`,
