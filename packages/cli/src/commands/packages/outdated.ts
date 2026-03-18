@@ -37,7 +37,7 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
           });
         }
       } catch {
-        // Skip bundles that fail to resolve (e.g. deleted from registry)
+        process.stderr.write(`=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`);
       }
     }),
   );
