@@ -493,27 +493,42 @@ export class PackageRepository {
       },
     });
 
-    if (existing) {
-      const updated = await client.packageVersion.update({
-        where: { id: existing.id },
-        data: {
-          manifest: data.manifest as Prisma.InputJsonValue,
-          prerelease: data.prerelease ?? false,
-          ...(data.publishMethod ? { publishMethod: data.publishMethod } : {}),
-          ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
-          ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),
-          ...(data.provenance ? { provenance: data.provenance as Prisma.InputJsonValue } : {}),
-          ...(data.releaseTag && !existing.releaseTag ? { releaseTag: data.releaseTag } : {}),
-          ...(data.releaseUrl && !existing.releaseUrl ? { releaseUrl: data.releaseUrl } : {}),
-          ...(data.readme && !existing.readme ? { readme: data.readme } : {}),
-          ...(data.serverJson !== undefined ? { serverJson: data.serverJson as Prisma.InputJsonValue } : {}),
+    const version = await client.packageVersion.upsert({
+      where: {
+        packageId_version: {
+          packageId,
+          version: data.version,
         },
-      });
-      return { version: updated, created: false };
-    }
+      },
+      create: {
+        packageId: data.packageId,
+        version: data.version,
+        manifest: data.manifest as Prisma.InputJsonValue,
+        prerelease: data.prerelease ?? false,
+        publishedBy: data.publishedBy,
+        publishedByEmail: data.publishedByEmail,
+        releaseTag: data.releaseTag,
+        releaseUrl: data.releaseUrl,
+        sourceIndex: data.sourceIndex as Prisma.InputJsonValue,
+        readme: data.readme,
+        publishMethod: data.publishMethod,
+        provenanceRepository: data.provenanceRepository,
+        provenanceSha: data.provenanceSha,
+        provenance: data.provenance as Prisma.InputJsonValue,
+        serverJson: data.serverJson as Prisma.InputJsonValue,
+      },
+      update: {
+        manifest: data.manifest as Prisma.InputJsonValue,
+        prerelease: data.prerelease ?? false,
+        ...(data.publishMethod ? { publishMethod: data.publishMethod } : {}),
+        ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
+        ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),
+        ...(data.provenance ? { provenance: data.provenance as Prisma.InputJsonValue } : {}),
+        ...(data.serverJson !== undefined ? { serverJson: data.serverJson as Prisma.InputJsonValue } : {}),
+      },
+    });
 
-    const created = await this.createVersion(data, tx);
-    return { version: created, created: true };
+    return { version, created: !existing };
   }
 
   /**
@@ -673,24 +688,38 @@ export class PackageRepository {
       },
     });
 
-    if (existing) {
-      const oldStoragePath = existing.storagePath !== data.storagePath ? existing.storagePath : null;
+    const oldStoragePath = existing && existing.storagePath !== data.storagePath
+      ? existing.storagePath
+      : null;
 
-      const updated = await client.artifact.update({
-        where: { id: existing.id },
-        data: {
-          mimeType: data.mimeType ?? 'application/vnd.mcp.bundle.v0.3+gzip',
-          digest: data.digest,
-          sizeBytes: data.sizeBytes,
-          storagePath: data.storagePath,
-          sourceUrl: data.sourceUrl,
+    const artifact = await client.artifact.upsert({
+      where: {
+        versionId_os_arch: {
+          versionId: data.versionId,
+          os: data.os,
+          arch: data.arch,
         },
-      });
-      return { artifact: updated, created: false, oldStoragePath };
-    }
+      },
+      create: {
+        versionId: data.versionId,
+        os: data.os,
+        arch: data.arch,
+        mimeType: data.mimeType ?? 'application/vnd.mcp.bundle.v0.3+gzip',
+        digest: data.digest,
+        sizeBytes: data.sizeBytes,
+        storagePath: data.storagePath,
+        sourceUrl: data.sourceUrl,
+      },
+      update: {
+        mimeType: data.mimeType ?? 'application/vnd.mcp.bundle.v0.3+gzip',
+        digest: data.digest,
+        sizeBytes: data.sizeBytes,
+        storagePath: data.storagePath,
+        sourceUrl: data.sourceUrl,
+      },
+    });
 
-    const created = await this.createArtifact(data, tx);
-    return { artifact: created, created: true, oldStoragePath: null };
+    return { artifact, created: !existing, oldStoragePath };
   }
 
   /**
