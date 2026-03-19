@@ -7,9 +7,17 @@ import {
   writeFileSync,
 } from "fs";
 import { execFileSync } from "child_process";
+import { randomUUID } from "crypto";
 import { homedir } from "os";
 import { dirname, join } from "path";
 import { MpakClient } from "@nimblebrain/mpak-sdk";
+
+/**
+ * Compare two semver strings for equality, ignoring leading 'v' prefix.
+ */
+export function isSemverEqual(a: string, b: string): boolean {
+  return a.replace(/^v/, "") === b.replace(/^v/, "");
+}
 
 export interface CacheMetadata {
   version: string;
@@ -85,7 +93,7 @@ export async function checkForUpdateAsync(
       lastCheckedAt: new Date().toISOString(),
     });
 
-    if (detail.latest_version !== cachedMeta.version) {
+    if (!isSemverEqual(detail.latest_version, cachedMeta.version)) {
       process.stderr.write(
         `\n=> Update available: ${packageName} ${cachedMeta.version} -> ${detail.latest_version}\n` +
         `   Run 'mpak run ${packageName} --update' to update\n`,
@@ -216,7 +224,7 @@ export async function downloadAndExtract(
   const cacheDir = getCacheDir(name);
 
   // Download to temp file
-  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}.mcpb`);
+  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
   mkdirSync(dirname(tempPath), { recursive: true });
 
   process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);

@@ -26,6 +26,8 @@ const fakeDownloadInfo = {
   bundle: { version: "2.0.0", platform: { os: "darwin", arch: "arm64" } },
 };
 
+const mockExit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -129,6 +131,20 @@ describe("handleUpdate", () => {
       expect(console.log).toHaveBeenCalledWith(
         JSON.stringify([{ name: "@scope/a", from: "1.0.0", to: "2.0.0" }], null, 2),
       );
+    });
+
+    it("exits non-zero when all updates fail", async () => {
+      mockGetOutdatedBundles.mockResolvedValue([
+        { name: "@scope/a", current: "1.0.0", latest: "2.0.0", pulledAt: "2025-01-01T00:00:00.000Z" },
+      ]);
+      mockResolveBundle.mockRejectedValueOnce(new Error("Network error"));
+
+      await handleUpdate(undefined, {});
+
+      expect(process.stderr.write).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to update @scope/a"),
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
     });
 
     it("outputs empty JSON array when nothing is outdated with --json", async () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getOutdatedBundles } from "./outdated.js";
 
-vi.mock("../../utils/cache.js", () => ({
+vi.mock("../../utils/cache.js", async (importOriginal) => ({
+  ...((await importOriginal()) as Record<string, unknown>),
   listCachedBundles: vi.fn(),
 }));
 

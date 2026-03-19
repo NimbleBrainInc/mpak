@@ -44,14 +44,20 @@ export async function handleUpdate(
 
   const updated: Array<{ name: string; from: string; to: string }> = [];
 
-  for (const entry of outdated) {
-    try {
+  const results = await Promise.allSettled(
+    outdated.map(async (entry) => {
       const downloadInfo = await resolveBundle(entry.name, client);
       const { version } = await downloadAndExtract(entry.name, downloadInfo);
-      updated.push({ name: entry.name, from: entry.current, to: version });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`=> Failed to update ${entry.name}: ${message}\n`);
+      return { name: entry.name, from: entry.current, to: version };
+    }),
+  );
+
+  for (const [i, result] of results.entries()) {
+    if (result.status === "fulfilled") {
+      updated.push(result.value);
+    } else {
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      process.stderr.write(`=> Failed to update ${outdated[i]!.name}: ${message}\n`);
     }
   }
 
@@ -62,6 +68,7 @@ export async function handleUpdate(
 
   if (updated.length === 0) {
     fmtError("All updates failed.");
+    process.exit(1);
   }
 
   for (const u of updated) {
