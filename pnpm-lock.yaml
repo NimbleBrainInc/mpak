@@ -291,6 +291,9 @@ importers:
       '@nimblebrain/mpak-schemas':
         specifier: workspace:*
         version: link:../schemas
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

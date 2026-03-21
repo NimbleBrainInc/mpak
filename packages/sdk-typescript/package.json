@@ -61,7 +61,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@nimblebrain/mpak-schemas": "workspace:*"
+    "@nimblebrain/mpak-schemas": "workspace:*",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
