@@ -203,15 +203,6 @@ export class BundleCache {
 		// Download and extract
 		await this.downloadAndExtract(name, downloadInfo);
 
-		// Stamp lastCheckedAt — we just verified with the registry.
-		const freshMeta = this.getCacheMetadata(name);
-		if (freshMeta) {
-			this.writeCacheMetadata(name, {
-				...freshMeta,
-				lastCheckedAt: new Date().toISOString(),
-			});
-		}
-
 		return { cacheDir, version: downloadInfo.bundle.version, pulled: true };
 	}
 

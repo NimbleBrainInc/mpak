@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { ConfigManager, ConfigCorruptedError, CONFIG_VERSION } from '../src/config-manager.js';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MpakSDK } from '../src/MpakSDK.js';
+import { CONFIG_VERSION, ConfigCorruptedError, ConfigManager } from '../src/config-manager.js';
 
 describe('ConfigManager', () => {
   let testDir: string;
@@ -234,6 +234,40 @@ describe('ConfigManager', () => {
       expect(packages).toContain('@scope/pkg1');
       expect(packages).toContain('@scope/pkg2');
       expect(packages).toHaveLength(2);
+    });
+  });
+
+  // ===========================================================================
+  // Via MpakSDK facade
+  // ===========================================================================
+
+  describe('via MpakSDK facade', () => {
+    it('config persists and reloads through a new facade instance', () => {
+      const sdk = new MpakSDK({ mpakHome: testDir });
+      sdk.config.setPackageConfigValue('@scope/pkg', 'api_key', 'sk-test');
+
+      const sdk2 = new MpakSDK({ mpakHome: testDir });
+      expect(sdk2.config.getPackageConfigValue('@scope/pkg', 'api_key')).toBe('sk-test');
+    });
+
+    it('registry URL persists across facade instances', () => {
+      new MpakSDK({
+        mpakHome: testDir,
+        registryUrl: 'https://custom.registry.dev',
+      });
+
+      const sdk2 = new MpakSDK({ mpakHome: testDir });
+      expect(sdk2.config.getRegistryUrl()).toBe('https://custom.registry.dev');
+    });
+
+    it('multiple packages persist independently through facade', () => {
+      const sdk = new MpakSDK({ mpakHome: testDir });
+      sdk.config.setPackageConfigValue('@scope/pkg-a', 'key', 'value-a');
+      sdk.config.setPackageConfigValue('@scope/pkg-b', 'key', 'value-b');
+
+      const sdk2 = new MpakSDK({ mpakHome: testDir });
+      expect(sdk2.config.getPackageConfigValue('@scope/pkg-a', 'key')).toBe('value-a');
+      expect(sdk2.config.getPackageConfigValue('@scope/pkg-b', 'key')).toBe('value-b');
     });
   });
 

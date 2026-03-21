@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MpakSDK } from '../src/MpakSDK.js';
 import { BundleCache } from '../src/cache.js';
 import type { MpakClient } from '../src/client.js';
 
@@ -321,7 +322,8 @@ describe('BundleCache', () => {
 
       const meta = cache.getCacheMetadata('@scope/pkg');
       expect(meta).not.toBeNull();
-      expect(meta?.lastCheckedAt).toBeDefined();
+      // Fresh downloads should NOT stamp lastCheckedAt — that's for update checks
+      expect(meta?.lastCheckedAt).toBeUndefined();
 
       fetchSpy.mockRestore();
     });
@@ -577,6 +579,216 @@ describe('BundleCache', () => {
 
     it('returns false for different versions with v prefix', () => {
       expect(BundleCache.isSemverEqual('v1.0.0', 'v2.0.0')).toBe(false);
+    });
+  });
+
+  // ===========================================================================
+  // Via MpakSDK facade
+  // ===========================================================================
+
+  describe('via MpakSDK facade', () => {
+    function createTestZip(dir: string): string {
+      const srcDir = join(dir, 'zip-src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(join(srcDir, 'manifest.json'), JSON.stringify({ name: '@scope/pkg' }));
+      const zipPath = join(dir, 'bundle.zip');
+      execFileSync('zip', ['-j', zipPath, join(srcDir, 'manifest.json')], { stdio: 'pipe' });
+      return zipPath;
+    }
+
+    it('local-only metadata operations work through facade', () => {
+      const sdk = new MpakSDK({ mpakHome: testDir });
+
+      mkdirSync(sdk.cache.getPackageCachePath('@scope/pkg'), { recursive: true });
+      sdk.cache.writeCacheMetadata('@scope/pkg', {
+        version: '1.0.0',
+        pulledAt: '2026-03-21T00:00:00.000Z',
+        platform: { os: 'darwin', arch: 'arm64' },
+      });
+
+      const meta = sdk.cache.getCacheMetadata('@scope/pkg');
+      expect(meta).toEqual({
+        version: '1.0.0',
+        pulledAt: '2026-03-21T00:00:00.000Z',
+        platform: { os: 'darwin', arch: 'arm64' },
+      });
+    });
+
+    it('listCachedBundles works with multiple bundles through facade', () => {
+      const sdk = new MpakSDK({ mpakHome: testDir });
+
+      for (const name of ['@scope/alpha', '@scope/beta']) {
+        const dir = sdk.cache.getPackageCachePath(name);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, '.mpak-meta.json'), JSON.stringify({
+          version: '1.0.0',
+          pulledAt: '2026-03-21T00:00:00.000Z',
+          platform: { os: 'darwin', arch: 'arm64' },
+        }));
+        writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ name }));
+      }
+
+      const bundles = sdk.cache.listCachedBundles();
+      expect(bundles).toHaveLength(2);
+      const names = bundles.map((b) => b.name).sort();
+      expect(names).toEqual(['@scope/alpha', '@scope/beta']);
+    });
+
+    it('loadBundle downloads through the wired client', async () => {
+      const zipPath = createTestZip(testDir);
+      const zipData = readFileSync(zipPath);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://example.com/bundle.zip',
+            bundle: {
+              name: '@scope/pkg',
+              version: '1.0.0',
+              platform: { os: 'darwin', arch: 'arm64' },
+              sha256: 'abc',
+              size: 100,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(zipData, { status: 200 }),
+      );
+
+      const logs: string[] = [];
+      const sdk = new MpakSDK({
+        mpakHome: testDir,
+        registryUrl: 'https://test.registry.dev',
+        logger: (msg) => logs.push(msg),
+      });
+
+      const result = await sdk.cache.loadBundle('@scope/pkg');
+
+      expect(result.pulled).toBe(true);
+      expect(result.version).toBe('1.0.0');
+      expect(existsSync(join(result.cacheDir, 'manifest.json'))).toBe(true);
+      expect(logs.some((l) => l.includes('Pulling @scope/pkg@1.0.0'))).toBe(true);
+      expect(logs.some((l) => l.includes('Cached @scope/pkg@1.0.0'))).toBe(true);
+
+      fetchSpy.mockRestore();
+    });
+
+    it('loadBundle returns from cache on second call', async () => {
+      const zipPath = createTestZip(testDir);
+      const zipData = readFileSync(zipPath);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://example.com/bundle.zip',
+            bundle: {
+              name: '@scope/pkg',
+              version: '1.0.0',
+              platform: { os: 'darwin', arch: 'arm64' },
+              sha256: 'abc',
+              size: 100,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      fetchSpy.mockResolvedValueOnce(
+        new Response(zipData, { status: 200 }),
+      );
+
+      const sdk = new MpakSDK({ mpakHome: testDir, registryUrl: 'https://test.registry.dev' });
+
+      const first = await sdk.cache.loadBundle('@scope/pkg');
+      expect(first.pulled).toBe(true);
+
+      const second = await sdk.cache.loadBundle('@scope/pkg');
+      expect(second.pulled).toBe(false);
+      expect(second.version).toBe('1.0.0');
+
+      // Only 2 fetch calls total (download info + zip), not 4
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      fetchSpy.mockRestore();
+    });
+
+    it('checkForUpdateAsync works through facade', async () => {
+      const logs: string[] = [];
+      const sdk = new MpakSDK({
+        mpakHome: testDir,
+        registryUrl: 'https://test.registry.dev',
+        logger: (msg) => logs.push(msg),
+      });
+
+      mkdirSync(sdk.cache.getPackageCachePath('@scope/pkg'), { recursive: true });
+      sdk.cache.writeCacheMetadata('@scope/pkg', {
+        version: '1.0.0',
+        pulledAt: '2026-03-21T00:00:00.000Z',
+        platform: { os: 'darwin', arch: 'arm64' },
+      });
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ latest_version: '2.0.0', name: '@scope/pkg' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+      await sdk.cache.checkForUpdateAsync('@scope/pkg');
+
+      expect(logs.some((l) => l.includes('Update available'))).toBe(true);
+      expect(logs.some((l) => l.includes('1.0.0 -> 2.0.0'))).toBe(true);
+
+      const meta = sdk.cache.getCacheMetadata('@scope/pkg');
+      expect(meta?.lastCheckedAt).toBeDefined();
+
+      fetchSpy.mockRestore();
+    });
+
+    it('loadBundle uses the same registry URL as config', async () => {
+      const zipPath = createTestZip(testDir);
+      const zipData = readFileSync(zipPath);
+
+      const customUrl = 'https://my-custom.registry.dev';
+      const sdk = new MpakSDK({
+        mpakHome: testDir,
+        registryUrl: customUrl,
+      });
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            url: 'https://example.com/bundle.zip',
+            bundle: {
+              name: '@scope/pkg',
+              version: '1.0.0',
+              platform: { os: 'darwin', arch: 'arm64' },
+              sha256: 'abc',
+              size: 100,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+
+      fetchSpy.mockResolvedValueOnce(
+        new Response(zipData, { status: 200 }),
+      );
+
+      await sdk.cache.loadBundle('@scope/pkg');
+
+      const downloadInfoUrl = fetchSpy.mock.calls[0]?.[0] as string;
+      expect(downloadInfoUrl).toContain(customUrl);
+
+      fetchSpy.mockRestore();
     });
   });
 });
