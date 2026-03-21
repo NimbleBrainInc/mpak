@@ -269,7 +269,6 @@ describe('MpakClient', () => {
         q: 'crm',
         tags: 'sales,contacts',
         category: 'development',
-        surface: 'claude-code',
         sort: 'recent',
         limit: 10,
         offset: 5,
@@ -279,7 +278,6 @@ describe('MpakClient', () => {
       expect(calledUrl).toContain('q=crm');
       expect(calledUrl).toContain('tags=sales%2Ccontacts');
       expect(calledUrl).toContain('category=development');
-      expect(calledUrl).toContain('surface=claude-code');
       expect(calledUrl).toContain('sort=recent');
     });
 

@@ -1,18 +1,17 @@
-import type { BundleSearchResponse, SkillSearchResponse } from '@nimblebrain/mpak-schemas';
-import { createHash } from 'crypto';
-import { MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
 import type {
-  BundleDetailResponse,
-  BundleDownloadResponse,
-  BundleSearchParams,
-  BundleVersionResponse,
-  BundleVersionsResponse,
-  MpakClientConfig,
-  Platform,
-  SkillDetailResponse,
-  SkillDownloadResponse,
-  SkillSearchParams,
-} from './types.js';
+  BundleDetail,
+  BundleSearchResponse,
+  DownloadInfo,
+  PlatformInfo,
+  SkillDetail,
+  SkillDownloadInfo,
+  SkillSearchResponse,
+  VersionDetail,
+  VersionsResponse,
+} from '@nimblebrain/mpak-schemas';
+import { createHash } from 'node:crypto';
+import { MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
+import type { BundleSearchParams, MpakClientConfig, SkillSearchParams } from './types.js';
 
 const DEFAULT_REGISTRY_URL = 'https://registry.mpak.dev';
 const DEFAULT_TIMEOUT = 30000;
@@ -67,7 +66,7 @@ export class MpakClient {
   /**
    * Get bundle details
    */
-  async getBundle(name: string): Promise<BundleDetailResponse> {
+  async getBundle(name: string): Promise<BundleDetail> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/bundles/${name}`;
@@ -81,13 +80,13 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get bundle: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<BundleDetailResponse>;
+    return response.json() as Promise<BundleDetail>;
   }
 
   /**
    * Get all versions of a bundle
    */
-  async getBundleVersions(name: string): Promise<BundleVersionsResponse> {
+  async getBundleVersions(name: string): Promise<VersionsResponse> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/bundles/${name}/versions`;
@@ -101,13 +100,13 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get bundle versions: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<BundleVersionsResponse>;
+    return response.json() as Promise<VersionsResponse>;
   }
 
   /**
    * Get a specific version of a bundle
    */
-  async getBundleVersion(name: string, version: string): Promise<BundleVersionResponse> {
+  async getBundleVersion(name: string, version: string): Promise<VersionDetail> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}`;
@@ -121,7 +120,7 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get bundle version: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<BundleVersionResponse>;
+    return response.json() as Promise<VersionDetail>;
   }
 
   /**
@@ -130,8 +129,8 @@ export class MpakClient {
   async getBundleDownload(
     name: string,
     version: string,
-    platform?: Platform,
-  ): Promise<BundleDownloadResponse> {
+    platform?: PlatformInfo,
+  ): Promise<DownloadInfo> {
     this.validateScopedName(name);
 
     const params = new URLSearchParams();
@@ -155,7 +154,7 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get bundle download: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<BundleDownloadResponse>;
+    return response.json() as Promise<DownloadInfo>;
   }
 
   // ===========================================================================
@@ -170,7 +169,6 @@ export class MpakClient {
     if (params.q) searchParams.set('q', params.q);
     if (params.tags) searchParams.set('tags', params.tags);
     if (params.category) searchParams.set('category', params.category);
-    if (params.surface) searchParams.set('surface', params.surface);
     if (params.sort) searchParams.set('sort', params.sort);
     if (params.limit) searchParams.set('limit', String(params.limit));
     if (params.offset) searchParams.set('offset', String(params.offset));
@@ -194,7 +192,7 @@ export class MpakClient {
   /**
    * Get skill details
    */
-  async getSkill(name: string): Promise<SkillDetailResponse> {
+  async getSkill(name: string): Promise<SkillDetail> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/skills/${name}`;
@@ -208,13 +206,13 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get skill: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<SkillDetailResponse>;
+    return response.json() as Promise<SkillDetail>;
   }
 
   /**
    * Get download info for a skill (latest version)
    */
-  async getSkillDownload(name: string): Promise<SkillDownloadResponse> {
+  async getSkillDownload(name: string): Promise<SkillDownloadInfo> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/skills/${name}/download`;
@@ -231,13 +229,13 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<SkillDownloadResponse>;
+    return response.json() as Promise<SkillDownloadInfo>;
   }
 
   /**
    * Get download info for a specific skill version
    */
-  async getSkillVersionDownload(name: string, version: string): Promise<SkillDownloadResponse> {
+  async getSkillVersionDownload(name: string, version: string): Promise<SkillDownloadInfo> {
     this.validateScopedName(name);
 
     const url = `${this.registryUrl}/v1/skills/${name}/versions/${version}/download`;
@@ -254,7 +252,7 @@ export class MpakClient {
       throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
     }
 
-    return response.json() as Promise<SkillDownloadResponse>;
+    return response.json() as Promise<SkillDownloadInfo>;
   }
 
   // ===========================================================================
@@ -295,10 +293,10 @@ export class MpakClient {
   async downloadBundle(
     name: string,
     version?: string,
-    platform?: Platform,
+    platform?: PlatformInfo,
   ): Promise<{
     data: Uint8Array;
-    metadata: BundleDownloadResponse['bundle'];
+    metadata: DownloadInfo['bundle'];
   }> {
     const resolvedPlatform = platform ?? MpakClient.detectPlatform();
     const resolvedVersion = version ?? 'latest';
@@ -322,7 +320,7 @@ export class MpakClient {
     version?: string,
   ): Promise<{
     data: Uint8Array;
-    metadata: SkillDownloadResponse['skill'];
+    metadata: SkillDownloadInfo['skill'];
   }> {
     const resolvedVersion = version ?? 'latest';
 
@@ -339,7 +337,7 @@ export class MpakClient {
   /**
    * Detect the current platform
    */
-  static detectPlatform(): Platform {
+  static detectPlatform(): PlatformInfo {
     const nodePlatform = process.platform;
     const nodeArch = process.arch;
 
