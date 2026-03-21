@@ -51,6 +51,9 @@ ENV/
 # Bundle data (stored in S3, not in git)
 apps/registry/data/
 
+# Implementation tasks
+.tasks/
+
 # Misc
 *.bak
 *.tmp
