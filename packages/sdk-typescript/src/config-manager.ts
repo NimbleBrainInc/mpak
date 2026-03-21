@@ -76,15 +76,13 @@ export class ConfigCorruptedError extends Error {
  * All writes update the `lastUpdated` timestamp and flush to disk
  * with `0o600` permissions (owner read/write only).
  *
- * @param configDir - Directory for the config file. Defaults to `~/.mpak`.
- *
  * @example
  * ```ts
  * // Default: ~/.mpak/config.json
  * const config = new ConfigManager();
  *
- * // Custom directory: /tmp/test-mpak/config.json
- * const config = new ConfigManager('/tmp/test-mpak');
+ * // Custom home and registry URL
+ * const config = new ConfigManager({ mpakHome: '/tmp/test-mpak', registryUrl: 'https://custom.registry.dev' });
  *
  * // Registry URL (config > env var > default)
  * config.getRegistryUrl();
@@ -95,14 +93,24 @@ export class ConfigCorruptedError extends Error {
  * ```
  */
 export class ConfigManager {
-  private configDir: string;
+  private readonly _mpakHome: string;
   private configFile: string;
   private config: MpakConfig | null = null;
 
-  constructor(configDir?: string) {
-    this.configDir = configDir ?? join(homedir(), '.mpak');
-    this.configFile = join(this.configDir, 'config.json');
+  constructor(options?: { mpakHome?: string; registryUrl?: string }) {
+    this._mpakHome = options?.mpakHome ?? join(homedir(), '.mpak');
+    this.configFile = join(this._mpakHome, 'config.json');
     this.ensureConfigDir();
+    if (options?.registryUrl !== undefined) {
+      this.setRegistryUrl(options.registryUrl);
+    }
+  }
+
+  /**
+   * The root directory for all mpak state (config, cache, etc.).
+   */
+  get mpakHome(): string {
+    return this._mpakHome;
   }
 
   // ===========================================================================
@@ -294,8 +302,8 @@ export class ConfigManager {
    * Create the config directory if it doesn't exist (mode `0o700`).
    */
   private ensureConfigDir(): void {
-    if (!existsSync(this.configDir)) {
-      mkdirSync(this.configDir, { recursive: true, mode: 0o700 });
+    if (!existsSync(this._mpakHome)) {
+      mkdirSync(this._mpakHome, { recursive: true, mode: 0o700 });
     }
   }
 

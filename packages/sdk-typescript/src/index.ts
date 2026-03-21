@@ -23,11 +23,12 @@
  */
 
 export { MpakClient } from './client.js';
-
-// Configuration
 export type { MpakClientConfig } from './types.js';
-export { ConfigManager, ConfigCorruptedError, CONFIG_VERSION } from './config-manager.js';
-export type { MpakConfig, PackageConfig } from './config-manager.js';
+
+
+// Facade
+export { MpakSDK } from './MpakSDK.js';
+export type { MpakSDKOptions } from './MpakSDK.js';
 
 // Errors
 export { MpakError, MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from './errors.js';

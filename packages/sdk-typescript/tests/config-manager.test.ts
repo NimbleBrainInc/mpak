@@ -19,7 +19,7 @@ describe('ConfigManager', () => {
   describe('construction', () => {
     it('creates the config directory if it does not exist', () => {
       const configDir = join(testDir, 'nested', '.mpak');
-      new ConfigManager(configDir);
+      new ConfigManager({ mpakHome: configDir });
 
       expect(existsSync(configDir)).toBe(true);
     });
@@ -27,13 +27,20 @@ describe('ConfigManager', () => {
     it('does not throw if the config directory already exists', () => {
       mkdirSync(join(testDir, '.mpak'), { recursive: true });
 
-      expect(() => new ConfigManager(join(testDir, '.mpak'))).not.toThrow();
+      expect(() => new ConfigManager({ mpakHome: join(testDir, '.mpak') })).not.toThrow();
+    });
+
+    it('exposes mpakHome as the resolved base directory', () => {
+      const customDir = join(testDir, 'custom');
+      const manager = new ConfigManager({ mpakHome: customDir });
+
+      expect(manager.mpakHome).toBe(customDir);
     });
   });
 
   describe('loadConfig', () => {
     it('creates a new config file if none exists', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       const config = manager.loadConfig();
 
       expect(config.version).toBe(CONFIG_VERSION);
@@ -42,7 +49,7 @@ describe('ConfigManager', () => {
     });
 
     it('returns cached config on subsequent calls', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       const first = manager.loadConfig();
       const second = manager.loadConfig();
 
@@ -56,7 +63,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       const config = manager.loadConfig();
 
       expect(config.version).toBe('1.0.0');
@@ -77,7 +84,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       const config = manager.loadConfig();
 
       expect(config.registryUrl).toBe('https://custom.registry.com');
@@ -87,7 +94,7 @@ describe('ConfigManager', () => {
 
   describe('config file permissions', () => {
     it('writes config with 0o600 permissions', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.loadConfig();
 
       const stats = statSync(join(testDir, 'config.json'));
@@ -99,13 +106,13 @@ describe('ConfigManager', () => {
 
   describe('registry URL', () => {
     it('returns default registry URL when nothing is configured', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
 
       expect(manager.getRegistryUrl()).toBe('https://registry.mpak.dev');
     });
 
     it('returns saved registry URL after setRegistryUrl', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setRegistryUrl('https://custom.example.com');
 
       expect(manager.getRegistryUrl()).toBe('https://custom.example.com');
@@ -115,7 +122,7 @@ describe('ConfigManager', () => {
       const original = process.env['MPAK_REGISTRY_URL'];
       try {
         process.env['MPAK_REGISTRY_URL'] = 'https://env.example.com';
-        const manager = new ConfigManager(testDir);
+        const manager = new ConfigManager({ mpakHome: testDir });
 
         expect(manager.getRegistryUrl()).toBe('https://env.example.com');
       } finally {
@@ -131,7 +138,7 @@ describe('ConfigManager', () => {
       const original = process.env['MPAK_REGISTRY_URL'];
       try {
         process.env['MPAK_REGISTRY_URL'] = 'https://env.example.com';
-        const manager = new ConfigManager(testDir);
+        const manager = new ConfigManager({ mpakHome: testDir });
         manager.setRegistryUrl('https://saved.example.com');
 
         expect(manager.getRegistryUrl()).toBe('https://saved.example.com');
@@ -147,27 +154,27 @@ describe('ConfigManager', () => {
 
   describe('package config', () => {
     it('returns undefined for a package with no config', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
 
       expect(manager.getPackageConfig('@nonexistent/pkg')).toBeUndefined();
     });
 
     it('returns undefined for a non-existent key', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'existing', 'value');
 
       expect(manager.getPackageConfigValue('@scope/name', 'nonexistent')).toBeUndefined();
     });
 
     it('sets and gets a single value', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'api_key', 'test-value');
 
       expect(manager.getPackageConfigValue('@scope/name', 'api_key')).toBe('test-value');
     });
 
     it('gets all config for a package', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
       manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
 
@@ -178,7 +185,7 @@ describe('ConfigManager', () => {
     });
 
     it('clears a specific key', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
       manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
 
@@ -188,14 +195,14 @@ describe('ConfigManager', () => {
     });
 
     it('returns false when clearing a non-existent key', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
 
       expect(manager.clearPackageConfigValue('@scope/name', 'nonexistent')).toBe(false);
     });
 
     it('clears all config for a package', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
       manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
 
@@ -204,13 +211,13 @@ describe('ConfigManager', () => {
     });
 
     it('returns false when clearing a non-existent package', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
 
       expect(manager.clearPackageConfig('@nonexistent/pkg')).toBe(false);
     });
 
     it('cleans up empty package entry after clearing last key', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/name', 'only_key', 'value');
       manager.clearPackageConfigValue('@scope/name', 'only_key');
 
@@ -219,7 +226,7 @@ describe('ConfigManager', () => {
     });
 
     it('lists all packages with config', () => {
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       manager.setPackageConfigValue('@scope/pkg1', 'key', 'value');
       manager.setPackageConfigValue('@scope/pkg2', 'key', 'value');
 
@@ -234,7 +241,7 @@ describe('ConfigManager', () => {
     it('throws ConfigCorruptedError for invalid JSON', () => {
       writeFileSync(join(testDir, 'config.json'), 'not valid json {{{', { mode: 0o600 });
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
       expect(() => manager.loadConfig()).toThrow(/invalid JSON/);
     });
@@ -246,7 +253,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
@@ -255,7 +262,7 @@ describe('ConfigManager', () => {
         mode: 0o600,
       });
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
@@ -270,7 +277,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
@@ -285,7 +292,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
@@ -300,7 +307,7 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
@@ -315,14 +322,14 @@ describe('ConfigManager', () => {
         { mode: 0o600 },
       );
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
     });
 
     it('includes config path in error', () => {
       writeFileSync(join(testDir, 'config.json'), 'invalid json', { mode: 0o600 });
 
-      const manager = new ConfigManager(testDir);
+      const manager = new ConfigManager({ mpakHome: testDir });
       try {
         manager.loadConfig();
         expect.fail('Should have thrown');

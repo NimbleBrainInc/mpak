@@ -13,5 +13,8 @@ export * from "./skill.js";
 // mpak.json schema and utilities
 export * from "./mpak-json.js";
 
+// Cache metadata
+export * from "./cache.js";
+
 // Validation helpers
 export * from "./validation.js";
