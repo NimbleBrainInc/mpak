@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
 
 /**
@@ -93,24 +93,17 @@ export class ConfigCorruptedError extends Error {
  * ```
  */
 export class ConfigManager {
-  private readonly _mpakHome: string;
+  readonly mpakHome: string;
   private configFile: string;
   private config: MpakConfig | null = null;
 
   constructor(options?: { mpakHome?: string; registryUrl?: string }) {
-    this._mpakHome = options?.mpakHome ?? join(homedir(), '.mpak');
-    this.configFile = join(this._mpakHome, 'config.json');
+    this.mpakHome = resolve(options?.mpakHome ?? join(homedir(), '.mpak'));
+    this.configFile = join(this.mpakHome, 'config.json');
     this.ensureConfigDir();
     if (options?.registryUrl !== undefined) {
       this.setRegistryUrl(options.registryUrl);
     }
-  }
-
-  /**
-   * The root directory for all mpak state (config, cache, etc.).
-   */
-  get mpakHome(): string {
-    return this._mpakHome;
   }
 
   // ===========================================================================
@@ -302,8 +295,8 @@ export class ConfigManager {
    * Create the config directory if it doesn't exist (mode `0o700`).
    */
   private ensureConfigDir(): void {
-    if (!existsSync(this._mpakHome)) {
-      mkdirSync(this._mpakHome, { recursive: true, mode: 0o700 });
+    if (!existsSync(this.mpakHome)) {
+      mkdirSync(this.mpakHome, { recursive: true, mode: 0o700 });
     }
   }
 
