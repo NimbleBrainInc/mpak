@@ -10,9 +10,45 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import type { CacheMetadata, DownloadInfo } from "@nimblebrain/mpak-schemas";
 import { CacheMetadataSchema } from "@nimblebrain/mpak-schemas";
 import { MpakClient } from "./client.js";
+
+// ---------------------------------------------------------------------------
+// Manifest schema (MCPB v0.3 spec)
+// ---------------------------------------------------------------------------
+
+const UserConfigFieldSchema = z.object({
+	type: z.enum(["string", "number", "boolean"]),
+	title: z.string().optional(),
+	description: z.string().optional(),
+	sensitive: z.boolean().optional(),
+	required: z.boolean().optional(),
+	default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+});
+
+const McpConfigSchema = z.object({
+	command: z.string(),
+	args: z.array(z.string()),
+	env: z.record(z.string(), z.string()).optional(),
+});
+
+const McpbManifestSchema = z.object({
+	manifest_version: z.string(),
+	name: z.string(),
+	version: z.string(),
+	description: z.string(),
+	user_config: z.record(z.string(), UserConfigFieldSchema).optional(),
+	server: z.object({
+		type: z.enum(["node", "python", "binary"]),
+		entry_point: z.string(),
+		mcp_config: McpConfigSchema,
+	}),
+});
+
+export type McpbManifest = z.infer<typeof McpbManifestSchema>;
+export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
 
 /**
  * Manages the local bundle cache (`~/.mpak/cache/`).
@@ -74,6 +110,25 @@ export class BundleCache {
 	 */
 	getCacheMetadata(packageName: string): CacheMetadata | null {
 		return this.readMetadataFromDir(this.getPackageCachePath(packageName));
+	}
+
+	/**
+	 * Read and validate the MCPB manifest from a cached package.
+	 * Returns `null` if the package is not cached or the manifest is
+	 * missing/corrupt/fails schema validation.
+	 */
+	readManifest(packageName: string): McpbManifest | null {
+		const dir = this.getPackageCachePath(packageName);
+		const manifestPath = join(dir, "manifest.json");
+		if (!existsSync(manifestPath)) return null;
+
+		try {
+			const raw = JSON.parse(readFileSync(manifestPath, "utf8"));
+			const result = McpbManifestSchema.safeParse(raw);
+			return result.success ? result.data : null;
+		} catch {
+			return null;
+		}
 	}
 
 	/**

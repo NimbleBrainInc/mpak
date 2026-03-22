@@ -126,6 +126,117 @@ describe('BundleCache', () => {
     });
   });
 
+  describe('readManifest', () => {
+    const pkg = '@scope/name';
+
+    const validManifest = {
+      manifest_version: '0.3',
+      name: '@scope/name',
+      version: '1.0.0',
+      description: 'Test bundle',
+      server: {
+        type: 'node' as const,
+        entry_point: 'index.js',
+        mcp_config: {
+          command: 'node',
+          args: ['${__dirname}/index.js'],
+        },
+      },
+    };
+
+    it('returns null when package is not cached', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+
+      expect(cache.readManifest(pkg)).toBeNull();
+    });
+
+    it('returns null when cache dir exists but manifest.json is missing', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
+
+      expect(cache.readManifest(pkg)).toBeNull();
+    });
+
+    it('returns parsed manifest for a valid manifest.json', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      const dir = cache.getPackageCachePath(pkg);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(validManifest));
+
+      const result = cache.readManifest(pkg);
+      expect(result).toEqual(validManifest);
+    });
+
+    it('returns null for corrupt JSON', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      const dir = cache.getPackageCachePath(pkg);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'manifest.json'), '{not valid json');
+
+      expect(cache.readManifest(pkg)).toBeNull();
+    });
+
+    it('returns null when manifest fails schema validation', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      const dir = cache.getPackageCachePath(pkg);
+      mkdirSync(dir, { recursive: true });
+      // Missing required fields like server
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ name: 'test' }));
+
+      expect(cache.readManifest(pkg)).toBeNull();
+    });
+
+    it('parses manifest with user_config fields', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      const dir = cache.getPackageCachePath(pkg);
+      mkdirSync(dir, { recursive: true });
+
+      const manifestWithConfig = {
+        ...validManifest,
+        user_config: {
+          api_key: {
+            type: 'string' as const,
+            title: 'API Key',
+            description: 'Your API key',
+            sensitive: true,
+            required: true,
+          },
+          port: {
+            type: 'number' as const,
+            default: 3000,
+          },
+        },
+      };
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestWithConfig));
+
+      const result = cache.readManifest(pkg);
+      expect(result).toEqual(manifestWithConfig);
+      expect(result?.user_config?.api_key?.sensitive).toBe(true);
+      expect(result?.user_config?.port?.default).toBe(3000);
+    });
+
+    it('parses manifest with env in mcp_config', () => {
+      const cache = new BundleCache({ mpakHome: testDir });
+      const dir = cache.getPackageCachePath(pkg);
+      mkdirSync(dir, { recursive: true });
+
+      const manifestWithEnv = {
+        ...validManifest,
+        server: {
+          ...validManifest.server,
+          mcp_config: {
+            ...validManifest.server.mcp_config,
+            env: { API_KEY: '${user_config.api_key}' },
+          },
+        },
+      };
+      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestWithEnv));
+
+      const result = cache.readManifest(pkg);
+      expect(result?.server.mcp_config.env).toEqual({ API_KEY: '${user_config.api_key}' });
+    });
+  });
+
   describe('listCachedBundles', () => {
     it('returns empty array when cache directory does not exist', () => {
       const cache = new BundleCache({ mpakHome: join(testDir, 'nonexistent') });
