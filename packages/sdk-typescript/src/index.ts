@@ -19,7 +19,7 @@
 
 // Facade — primary entry point
 export { MpakSDK } from './MpakSDK.js';
-export type { MpakSDKOptions } from './MpakSDK.js';
+export type { MpakSDKOptions, PrepareServerOptions, ServerCommand } from './MpakSDK.js';
 
 // Types consumers may need
 export type { MpakClientConfig } from './types.js';
