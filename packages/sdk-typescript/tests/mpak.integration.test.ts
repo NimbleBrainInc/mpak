@@ -143,6 +143,62 @@ describe('MpakSDK facade integration', () => {
     expect(sdk.config.getPackageConfig(KNOWN_BUNDLE)).toBeUndefined();
   });
 
+  it('readManifest returns parsed manifest for cached bundle', () => {
+    const manifest = sdk.cache.readManifest(KNOWN_BUNDLE);
+
+    expect(manifest).not.toBeNull();
+    expect(manifest!.name).toBe(KNOWN_BUNDLE);
+    expect(manifest!.manifest_version).toBeDefined();
+    expect(manifest!.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(manifest!.description).toBeDefined();
+    expect(manifest!.server).toBeDefined();
+    expect(manifest!.server.type).toMatch(/^(node|python|binary)$/);
+    expect(manifest!.server.entry_point).toBeDefined();
+    expect(manifest!.server.mcp_config).toBeDefined();
+    expect(manifest!.server.mcp_config.command).toBeDefined();
+    expect(Array.isArray(manifest!.server.mcp_config.args)).toBe(true);
+  });
+
+  it('readManifest returns null for uncached bundle', () => {
+    expect(sdk.cache.readManifest('@nonexistent/bundle')).toBeNull();
+  });
+
+  it('prepareServer resolves a runnable server command', async () => {
+    const result = await sdk.prepareServer(KNOWN_BUNDLE);
+
+    expect(result.name).toBe(KNOWN_BUNDLE);
+    expect(result.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.command).toBeDefined();
+    expect(typeof result.command).toBe('string');
+    expect(Array.isArray(result.args)).toBe(true);
+    expect(result.args.length).toBeGreaterThan(0);
+    expect(typeof result.env).toBe('object');
+    expect(result.env['MPAK_WORKSPACE']).toBeDefined();
+    expect(result.cwd).toContain('nimblebraininc-echo');
+
+    // The command should be resolvable (node, python3, or an absolute path)
+    expect(result.command).toMatch(/^(node|python3?|\/)/);
+  });
+
+  it('prepareServer respects workspaceDir option', async () => {
+    const result = await sdk.prepareServer(KNOWN_BUNDLE, {
+      workspaceDir: '/tmp/custom-workspace',
+    });
+
+    expect(result.env['MPAK_WORKSPACE']).toBe('/tmp/custom-workspace');
+  });
+
+  it('prepareServer with inline version', async () => {
+    // Get the current cached version to use as a known-good version
+    const meta = sdk.cache.getCacheMetadata(KNOWN_BUNDLE);
+    const version = meta!.version;
+
+    const result = await sdk.prepareServer(`${KNOWN_BUNDLE}@${version}`);
+
+    expect(result.name).toBe(KNOWN_BUNDLE);
+    expect(result.version).toBe(version);
+  });
+
   it('a fresh facade instance picks up existing cache and config', () => {
     // Write config via first SDK
     sdk.config.setPackageConfigValue(KNOWN_BUNDLE, 'test_key', 'test_value');
