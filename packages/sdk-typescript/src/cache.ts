@@ -55,7 +55,7 @@ export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
  *
  * Handles downloading, extracting, and tracking cached bundles.
  * The cache directory is derived from `mpakHome` — the root directory
- * for all mpak state. Consumers can wire this to `ConfigManager.mpakHome`
+ * for all mpak state. Consumers can wire this to `MpakConfigManager.mpakHome`
  * for a shared base, or pass any directory.
  *
  * @param mpakHome - Root directory for mpak state. Defaults to `~/.mpak`.

@@ -21,9 +21,23 @@
 export { MpakSDK } from './MpakSDK.js';
 export type { MpakSDKOptions, PrepareServerOptions, ServerCommand } from './MpakSDK.js';
 
+// Components (standalone use)
+// MpakConfigManager
+export { MpakConfigManager } from './config-manager.js';
+export type { MpakConfigManagerOptions } from './config-manager.js';
+//
+
 // Types consumers may need
 export type { MpakClientConfig } from './types.js';
 export type { McpbManifest, UserConfigField } from './cache.js';
+export type { MpakConfig, PackageConfig } from './config-manager.js';
 
 // Errors
-export { MpakError, MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from './errors.js';
+export {
+  MpakError,
+  MpakNotFoundError,
+  MpakIntegrityError,
+  MpakNetworkError,
+  MpakConfigCorruptedError,
+  MpakConfigError,
+} from './errors.js';

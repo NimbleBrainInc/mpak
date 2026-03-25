@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MpakSDK } from '../src/MpakSDK.js';
 import { BundleCache } from '../src/cache.js';
 import { MpakClient } from '../src/client.js';
-import { ConfigManager } from '../src/config-manager.js';
+import { MpakConfigManager } from '../src/config-manager.js';
 
 describe('MpakSDK facade', () => {
   let testDir: string;
@@ -26,7 +26,7 @@ describe('MpakSDK facade', () => {
     it('creates all components with defaults', () => {
       const sdk = new MpakSDK({ mpakHome: testDir });
 
-      expect(sdk.config).toBeInstanceOf(ConfigManager);
+      expect(sdk.config).toBeInstanceOf(MpakConfigManager);
       expect(sdk.client).toBeInstanceOf(MpakClient);
       expect(sdk.cache).toBeInstanceOf(BundleCache);
     });
@@ -46,16 +46,16 @@ describe('MpakSDK facade', () => {
     it('works with no options at all', () => {
       const noOptsSdk = new MpakSDK();
 
-      expect(noOptsSdk.config).toBeInstanceOf(ConfigManager);
+      expect(noOptsSdk.config).toBeInstanceOf(MpakConfigManager);
       expect(noOptsSdk.client).toBeInstanceOf(MpakClient);
       expect(noOptsSdk.cache).toBeInstanceOf(BundleCache);
     });
 
-    it('creates the mpakHome directory', () => {
+    it('does not create mpakHome directory on construction', () => {
       const nestedDir = join(testDir, 'nested', 'deep', '.mpak');
       const sdk = new MpakSDK({ mpakHome: nestedDir });
 
-      expect(existsSync(nestedDir)).toBe(true);
+      expect(existsSync(nestedDir)).toBe(false);
       expect(sdk.config.mpakHome).toBe(nestedDir);
     });
   });
@@ -175,8 +175,8 @@ describe('MpakSDK facade', () => {
       sdkA.config.setPackageConfigValue('@scope/pkg', 'key', 'a-value');
       sdkB.config.setPackageConfigValue('@scope/pkg', 'key', 'b-value');
 
-      expect(sdkA.config.getPackageConfigValue('@scope/pkg', 'key')).toBe('a-value');
-      expect(sdkB.config.getPackageConfigValue('@scope/pkg', 'key')).toBe('b-value');
+      expect(sdkA.config.getPackageConfig('@scope/pkg')).toEqual({ key: 'a-value' });
+      expect(sdkB.config.getPackageConfig('@scope/pkg')).toEqual({ key: 'b-value' });
     });
 
     it('registryUrl override flows through to client requests', async () => {

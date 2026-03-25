@@ -4,19 +4,19 @@ import { join } from "node:path";
 import type { McpbManifest } from "./cache.js";
 import { BundleCache } from "./cache.js";
 import { MpakClient } from "./client.js";
-import { ConfigManager } from "./config-manager.js";
+import { MpakConfigManager } from "./config-manager.js";
 import type { MpakClientConfig } from "./types.js";
 
 /**
  * Options for the {@link Mpak} facade.
  *
  * All fields are optional — sensible defaults are derived from
- * `ConfigManager` (registry URL, mpakHome) when omitted.
+ * `MpakConfigManager` (registry URL, mpakHome) when omitted.
  */
 export interface MpakSDKOptions {
 	/** Root directory for mpak state. Defaults to `~/.mpak`. */
 	mpakHome?: string;
-	/** Registry URL override. Defaults to `ConfigManager.getRegistryUrl()`. */
+	/** Registry URL override. Defaults to `MpakConfigManager.getRegistryUrl()`. */
 	registryUrl?: string;
 	/** Request timeout in milliseconds for the client. */
 	timeout?: number;
@@ -63,7 +63,7 @@ export interface ServerCommand {
 
 /**
  * Top-level facade that wires together the SDK's core components:
- * `ConfigManager`, `MpakClient`, and `BundleCache`.
+ * `MpakConfigManager`, `MpakClient`, and `BundleCache`.
  *
  * Provides a single entry point for the common setup pattern,
  * while still exposing each component for direct use.
@@ -89,7 +89,7 @@ export interface ServerCommand {
  */
 export class MpakSDK {
 	/** User configuration manager (`config.json`). */
-	readonly config: ConfigManager;
+	readonly config: MpakConfigManager;
 	/** Registry API client. */
 	readonly client: MpakClient;
 	/** Local bundle cache. */
@@ -102,7 +102,7 @@ export class MpakSDK {
 			configOptions.mpakHome = options.mpakHome;
 		if (options?.registryUrl !== undefined)
 			configOptions.registryUrl = options.registryUrl;
-		this.config = new ConfigManager(configOptions);
+		this.config = new MpakConfigManager(configOptions);
 
 		// initialize client
 		const clientConfig: MpakClientConfig = {
