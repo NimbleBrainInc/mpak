@@ -239,11 +239,11 @@ describe('MpakBundleCache', () => {
       const manifest2 = { ...validManifest, name: '@scope/other', version: '2.0.0' };
       const meta2 = { ...validMetadata, version: '2.0.0' };
 
-      const dir1 = seedCacheEntry(testDir, 'scope-name', {
+      seedCacheEntry(testDir, 'scope-name', {
         manifest: validManifest,
         metadata: validMetadata,
       });
-      const dir2 = seedCacheEntry(testDir, 'scope-other', {
+      seedCacheEntry(testDir, 'scope-other', {
         manifest: manifest2,
         metadata: meta2,
       });
