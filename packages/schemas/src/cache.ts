@@ -21,3 +21,19 @@ export const CacheMetadataSchema = z
   .strict();
 
 export type CacheMetadata = z.infer<typeof CacheMetadataSchema>;
+
+// =============================================================================
+// Cached Bundle Info
+// =============================================================================
+
+/**
+ * Summary of a bundle stored in the local cache.
+ * Returned by `BundleCache.listCachedBundles()` and consumed by CLI
+ * commands like `mpak outdated`.
+ */
+export interface CachedBundleInfo {
+  name: string;
+  version: string;
+  pulledAt: string;
+  cacheDir: string;
+}

@@ -1,54 +1,29 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import type {
+	CachedBundleInfo,
+	CacheMetadata,
+	DownloadInfo,
+	McpbManifest,
+} from "@nimblebrain/mpak-schemas";
 import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { z } from "zod";
-import type { CacheMetadata, DownloadInfo } from "@nimblebrain/mpak-schemas";
-import { CacheMetadataSchema } from "@nimblebrain/mpak-schemas";
+	CacheMetadataSchema,
+	McpbManifestSchema,
+} from "@nimblebrain/mpak-schemas";
 import { MpakClient } from "./client.js";
+import { MpakCacheCorruptedError } from "./errors.js";
+import {
+	extractZip,
+	isSemverEqual,
+	readJsonFromFile,
+	UPDATE_CHECK_TTL_MS,
+} from "./helpers.js";
 
-// ---------------------------------------------------------------------------
-// Manifest schema (MCPB v0.3 spec)
-// ---------------------------------------------------------------------------
-
-const UserConfigFieldSchema = z.object({
-	type: z.enum(["string", "number", "boolean"]),
-	title: z.string().optional(),
-	description: z.string().optional(),
-	sensitive: z.boolean().optional(),
-	required: z.boolean().optional(),
-	default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-});
-
-const McpConfigSchema = z.object({
-	command: z.string(),
-	args: z.array(z.string()),
-	env: z.record(z.string(), z.string()).optional(),
-});
-
-const McpbManifestSchema = z.object({
-	manifest_version: z.string(),
-	name: z.string(),
-	version: z.string(),
-	description: z.string(),
-	user_config: z.record(z.string(), UserConfigFieldSchema).optional(),
-	server: z.object({
-		type: z.enum(["node", "python", "binary"]),
-		entry_point: z.string(),
-		mcp_config: McpConfigSchema,
-	}),
-});
-
-export type McpbManifest = z.infer<typeof McpbManifestSchema>;
-export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
+export interface MpakBundleCacheOptions {
+	mpakHome?: string;
+}
 
 /**
  * Manages the local bundle cache (`~/.mpak/cache/`).
@@ -58,95 +33,92 @@ export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
  * for all mpak state. Consumers can wire this to `MpakConfigManager.mpakHome`
  * for a shared base, or pass any directory.
  *
- * @param mpakHome - Root directory for mpak state. Defaults to `~/.mpak`.
+ * Requires an `MpakClient` for registry operations (download, update checks).
  *
  * @example
  * ```ts
- * // Standalone usage (local-only operations)
- * const cache = new BundleCache();
+ * // Via MpakSDK facade (recommended)
+ * const mpak = new MpakSDK();
+ * await mpak.cache.loadBundle('@scope/name');
  *
- * // With client for registry operations
- * const cache = new BundleCache({ client: new MpakClient() });
- *
- * // Wired via Mpak facade (recommended)
- * const mpak = new Mpak();
- * mpak.cache.loadBundle('@scope/name');
+ * // Standalone
+ * const client = new MpakClient();
+ * const cache = new MpakBundleCache(client, { mpakHome: '/path/to/.mpak' });
+ * await cache.loadBundle('@scope/name');
  * ```
  */
-export class BundleCache {
-	private readonly cacheBase: string;
-	private readonly client: MpakClient | undefined;
-	private logger: ((msg: string) => void);
+export class MpakBundleCache {
+	public readonly cacheHome: string;
+	private readonly mpakClient: MpakClient;
 
-	constructor(options?: { mpakHome?: string; client?: MpakClient; logger?: (msg: string) => void }) {
-		this.cacheBase = join(options?.mpakHome ?? join(homedir(), ".mpak"), "cache");
-		this.client = options?.client;
-		this.logger = options?.logger ?? ((msg: string) => process.stderr.write(msg));
-	}
+	constructor(client: MpakClient, options?: MpakBundleCacheOptions) {
+		this.mpakClient = client;
 
-	/**
-	 * Get the client, throwing if not provided.
-	 * @throws If no client was provided at construction time.
-	 */
-	private requireClient(): MpakClient {
-		if (!this.client) {
-			throw new Error("MpakClient required for registry operations. Pass { client } in the BundleCache constructor.");
-		}
-		return this.client;
+		this.cacheHome = join(
+			options?.mpakHome ?? join(homedir(), ".mpak"),
+			"cache",
+		);
 	}
 
 	/**
 	 * Compute the cache path for a package. Does not create the directory.
 	 * @example getPackageCachePath('@scope/name') => '<cacheBase>/scope-name'
 	 */
-	getPackageCachePath(packageName: string): string {
+	getBundleCacheDirName(packageName: string): string {
 		const safeName = packageName.replace("@", "").replace("/", "-");
-		return join(this.cacheBase, safeName);
+		return join(this.cacheHome, safeName);
 	}
 
 	/**
 	 * Read and validate cache metadata for a package.
-	 * Returns `null` if the metadata file doesn't exist or fails validation.
+	 * Returns `null` if the package does not exist in the cache.
+	 * throws Error if metadata is corrupt
 	 */
-	getCacheMetadata(packageName: string): CacheMetadata | null {
-		return this.readMetadataFromDir(this.getPackageCachePath(packageName));
+	getBundleMetadata(packageName: string): CacheMetadata | null {
+		const packageCacheDir = this.getBundleCacheDirName(packageName);
+
+		if (!existsSync(packageCacheDir)) {
+			return null;
+		}
+
+		const metaPath = join(packageCacheDir, ".mpak-meta.json");
+
+		try {
+			return readJsonFromFile(metaPath, CacheMetadataSchema);
+		} catch (err) {
+			throw new MpakCacheCorruptedError(
+				err instanceof Error ? err.message : String(err),
+				metaPath,
+				err instanceof Error ? err : undefined,
+			);
+		}
 	}
 
 	/**
 	 * Read and validate the MCPB manifest from a cached package.
-	 * Returns `null` if the package is not cached or the manifest is
-	 * missing/corrupt/fails schema validation.
+	 * Returns `null` if the package is not cached (directory doesn't exist).
+	 *
+	 * @throws {MpakCacheCorruptedError} If the cache directory exists but
+	 *   `manifest.json` is missing, contains invalid JSON, or fails schema validation.
 	 */
-	readManifest(packageName: string): McpbManifest | null {
-		const dir = this.getPackageCachePath(packageName);
-		const manifestPath = join(dir, "manifest.json");
-		if (!existsSync(manifestPath)) return null;
+	getBundleManifest(packageName: string): McpbManifest | null {
+		const dir = this.getBundleCacheDirName(packageName);
 
-		try {
-			const raw = JSON.parse(readFileSync(manifestPath, "utf8"));
-			const result = McpbManifestSchema.safeParse(raw);
-			return result.success ? result.data : null;
-		} catch {
+		if (!existsSync(dir)) {
 			return null;
 		}
-	}
 
-	/**
-	 * Write cache metadata for a package.
-	 * @throws If the metadata fails schema validation.
-	 */
-	writeCacheMetadata(packageName: string, metadata: CacheMetadata): void {
-		const result = CacheMetadataSchema.safeParse(metadata);
-		if (!result.success) {
-			throw new Error(
-				`Invalid cache metadata: ${result.error.issues[0]?.message ?? "unknown error"}`,
+		const manifestPath = join(dir, "manifest.json");
+
+		try {
+			return readJsonFromFile(manifestPath, McpbManifestSchema);
+		} catch (err) {
+			throw new MpakCacheCorruptedError(
+				err instanceof Error ? err.message : String(err),
+				manifestPath,
+				err instanceof Error ? err : undefined,
 			);
 		}
-		const metaPath = join(
-			this.getPackageCachePath(packageName),
-			".mpak-meta.json",
-		);
-		writeFileSync(metaPath, JSON.stringify(result.data, null, 2));
 	}
 
 	/**
@@ -154,41 +126,47 @@ export class BundleCache {
 	 * Skips the `_local/` directory (local dev bundles) and entries with
 	 * missing/corrupt metadata or manifests.
 	 */
-	listCachedBundles(): CachedBundle[] {
-		if (!existsSync(this.cacheBase)) return [];
+	listCachedBundles(): CachedBundleInfo[] {
+		if (!existsSync(this.cacheHome)) return [];
 
-		const entries = readdirSync(this.cacheBase, { withFileTypes: true });
-		const bundles: CachedBundle[] = [];
+		const entries = readdirSync(this.cacheHome, { withFileTypes: true });
+		const bundles: CachedBundleInfo[] = [];
 
 		for (const entry of entries) {
 			if (!entry.isDirectory() || entry.name === "_local") continue;
 
-			const dir = join(this.cacheBase, entry.name);
-			const meta = this.readMetadataFromDir(dir);
-			if (!meta) continue;
-
-			const manifestPath = join(dir, "manifest.json");
-			if (!existsSync(manifestPath)) {
-				this.logger(`Skipping ${dir}: missing manifest.json`);
-				continue;
-			}
-
+			const cacheDir = join(this.cacheHome, entry.name);
 			try {
-				const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+				const manifest = readJsonFromFile(
+					join(cacheDir, "manifest.json"),
+					McpbManifestSchema,
+				);
+				const meta = this.getBundleMetadata(manifest.name);
+				if (!meta) continue;
+
 				bundles.push({
 					name: manifest.name,
 					version: meta.version,
 					pulledAt: meta.pulledAt,
-					cacheDir: dir,
+					cacheDir: cacheDir,
 				});
-			} catch (err) {
-				this.logger(
-					`Skipping ${dir}: corrupt manifest.json: ${err instanceof Error ? err.message : String(err)}`,
-				);
+			} catch {
+				// in case an entry is corrupted, it should not be listed
 			}
 		}
 
 		return bundles;
+	}
+
+	/**
+	 * Remove a cached bundle from disk.
+	 * @returns `true` if the bundle was cached and removed, `false` if it wasn't cached.
+	 */
+	removeCachedBundle(packageName: string): boolean {
+		const dir = this.getBundleCacheDirName(packageName);
+		if (!existsSync(dir)) return false;
+		rmSync(dir, { recursive: true, force: true });
+		return true;
 	}
 
 	/**
@@ -211,10 +189,15 @@ export class BundleCache {
 		name: string,
 		options?: { version?: string; force?: boolean },
 	): Promise<{ cacheDir: string; version: string; pulled: boolean }> {
-		const client = this.requireClient();
 		const { version: requestedVersion, force = false } = options ?? {};
-		const cacheDir = this.getPackageCachePath(name);
-		const cachedMeta = this.getCacheMetadata(name);
+		const cacheDir = this.getBundleCacheDirName(name);
+
+		let cachedMeta: CacheMetadata | null = null;
+		try {
+			cachedMeta = this.getBundleMetadata(name);
+		} catch {
+			// Treat cache as non existent if cache is corrupt
+		}
 
 		/*
     We immediately return from cache when
@@ -224,28 +207,27 @@ export class BundleCache {
     If any fails, we go to registry
     */
 
-		const isReturnedFromCache =
+		if (
 			!options?.force &&
 			!!cachedMeta &&
-			(!requestedVersion ||
-				BundleCache.isSemverEqual(cachedMeta.version, requestedVersion));
-
-		if (isReturnedFromCache) {
+			(!requestedVersion || isSemverEqual(cachedMeta.version, requestedVersion))
+		) {
 			return { cacheDir, version: cachedMeta.version, pulled: false };
 		}
 
 		// Get download info from registry
-		const downloadInfo = await this.resolveFromRegistry(
+		const platform = MpakClient.detectPlatform();
+		const downloadInfo = await this.mpakClient.getBundleDownload(
 			name,
-			client,
-			requestedVersion,
+			requestedVersion ?? "latest",
+			platform,
 		);
 
 		// Registry resolved to the same version we already have — skip download
 		if (
 			!force &&
 			cachedMeta &&
-			BundleCache.isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)
+			isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)
 		) {
 			// Update lastCheckedAt since we just verified with the registry
 			this.writeCacheMetadata(name, {
@@ -257,42 +239,27 @@ export class BundleCache {
 
 		// Download and extract
 		await this.downloadAndExtract(name, downloadInfo);
-
 		return { cacheDir, version: downloadInfo.bundle.version, pulled: true };
 	}
 
 	/**
-	 * TTL for update checks — skip if last check was within this window.
-	 */
-	static readonly UPDATE_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-	/**
 	 * Fire-and-forget background check for bundle updates.
-	 * Logs a notice via the logger if a newer version exists.
-	 *
-	 * Requires an `MpakClient` to be provided at construction time.
-	 *
+	 * Return the latest version string if an update is available, null otherwise (not cached, skipped, up-to-date, or error).
+	 * The caller can just check `if (result) { console.log("update available: " + result) }`
 	 * @param packageName - Scoped package name (e.g. `@scope/bundle`)
-	 * @throws If no `MpakClient` was provided at construction time.
 	 */
-	async checkForUpdateAsync(packageName: string): Promise<void> {
-		const client = this.requireClient();
-		const cachedMeta = this.getCacheMetadata(packageName);
-		if (!cachedMeta) return;
+	async checkForUpdate(packageName: string): Promise<string | null> {
+		const cachedMeta = this.getBundleMetadata(packageName);
+		if (!cachedMeta) return null;
 
 		// Skip if checked within the TTL
 		if (cachedMeta.lastCheckedAt) {
-			const elapsed =
-				Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
-			if (elapsed < BundleCache.UPDATE_CHECK_TTL_MS) {
-				const remainingMin = Math.ceil((BundleCache.UPDATE_CHECK_TTL_MS - elapsed) / 60000);
-				this.logger(`Skipping update check for ${packageName}, next check in ${remainingMin}m`);
-				return;
-			}
+			const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
+			if (elapsed < UPDATE_CHECK_TTL_MS) return null;
 		}
 
 		try {
-			const detail = await client.getBundle(packageName);
+			const detail = await this.mpakClient.getBundle(packageName);
 
 			// Update lastCheckedAt regardless of whether there's an update
 			this.writeCacheMetadata(packageName, {
@@ -300,75 +267,14 @@ export class BundleCache {
 				lastCheckedAt: new Date().toISOString(),
 			});
 
-			if (
-				!BundleCache.isSemverEqual(detail.latest_version, cachedMeta.version)
-			) {
-				this.logger(
-					`Update available: ${packageName} ${cachedMeta.version} -> ${detail.latest_version}`,
-				);
-			} else {
-				this.logger(`${packageName}@${cachedMeta.version} is up to date`);
+			if (!isSemverEqual(detail.latest_version, cachedMeta.version)) {
+				return detail.latest_version;
 			}
-		} catch (error) {
-			this.logger(
-				`Cannot check for updates: ${error instanceof Error ? error.message : String(error)}`,
-			);
+
+			return null;
+		} catch {
+			return null;
 		}
-	}
-
-	/**
-	 * Maximum allowed uncompressed size for a bundle (500MB).
-	 */
-	static readonly MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
-
-	/**
-	 * Check uncompressed size and extract a ZIP file to a directory.
-	 * Rejects bundles exceeding {@link MAX_UNCOMPRESSED_SIZE} (zip-bomb protection).
-	 *
-	 * Requires the `unzip` system command to be available on PATH.
-	 *
-	 * @throws If uncompressed size exceeds the limit or extraction fails.
-	 */
-	static extractZip(zipPath: string, destDir: string): void {
-		// Check uncompressed size before extraction
-		try {
-			const listOutput = execFileSync("unzip", ["-l", zipPath], {
-				stdio: "pipe",
-				encoding: "utf8",
-			});
-			const totalMatch = listOutput.match(/^\s*(\d+)\s+\d+\s+files?$/m);
-			if (totalMatch) {
-				const totalSize = parseInt(totalMatch[1] ?? "0", 10);
-				if (totalSize > BundleCache.MAX_UNCOMPRESSED_SIZE) {
-					throw new Error(
-						`Bundle uncompressed size (${Math.round(totalSize / 1024 / 1024)}MB) exceeds maximum allowed (${BundleCache.MAX_UNCOMPRESSED_SIZE / (1024 * 1024)}MB)`,
-					);
-				}
-			}
-		} catch (error: unknown) {
-			if (
-				error instanceof Error &&
-				error.message.includes("exceeds maximum allowed")
-			) {
-				throw error;
-			}
-			const message = error instanceof Error ? error.message : String(error);
-			throw new Error(
-				`Cannot verify bundle size before extraction: ${message}`,
-			);
-		}
-
-		mkdirSync(destDir, { recursive: true });
-		execFileSync("unzip", ["-o", "-q", zipPath, "-d", destDir], {
-			stdio: "pipe",
-		});
-	}
-
-	/**
-	 * Compare two semver strings for equality, ignoring leading 'v' prefix.
-	 */
-	static isSemverEqual(a: string, b: string): boolean {
-		return a.replace(/^v/, "") === b.replace(/^v/, "");
 	}
 
 	// ===========================================================================
@@ -376,15 +282,19 @@ export class BundleCache {
 	// ===========================================================================
 
 	/**
-	 * Resolve download info from the registry for a bundle.
+	 * Write cache metadata for a package.
+	 * @throws If the metadata fails schema validation.
 	 */
-	private async resolveFromRegistry(
-		name: string,
-		client: MpakClient,
-		version?: string,
-	): Promise<DownloadInfo> {
-		const platform = MpakClient.detectPlatform();
-		return client.getBundleDownload(name, version ?? "latest", platform);
+	private writeCacheMetadata(
+		packageName: string,
+		metadata: CacheMetadata,
+	): void {
+		const metaPath = join(
+			this.getBundleCacheDirName(packageName),
+			".mpak-meta.json",
+		);
+
+		writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 	}
 
 	/**
@@ -396,66 +306,36 @@ export class BundleCache {
 		downloadInfo: DownloadInfo,
 	): Promise<void> {
 		const bundle = downloadInfo.bundle;
-		const cacheDir = this.getPackageCachePath(name);
+		const cacheDir = this.getBundleCacheDirName(name);
 
-		// Download to temp file
-		const tmpDir = join(dirname(this.cacheBase), "tmp");
+		// Download to temp file (using OS temp dir, not inside cache)
 		const tempPath = join(
-			tmpDir,
-			`${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`,
+			tmpdir(),
+			`mpak-${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`,
 		);
-		mkdirSync(tmpDir, { recursive: true });
 
-		this.logger(`Pulling ${name}@${bundle.version}...`);
-
-		const response = await fetch(downloadInfo.url);
-		if (!response.ok) {
-			throw new Error(`Failed to download bundle: ${response.statusText}`);
-		}
-		const arrayBuffer = await response.arrayBuffer();
-		writeFileSync(tempPath, Buffer.from(arrayBuffer));
-
-		// Clear old cache and extract
-		if (existsSync(cacheDir)) {
-			rmSync(cacheDir, { recursive: true, force: true });
-		}
-
-		BundleCache.extractZip(tempPath, cacheDir);
-
-		// Write metadata
-		this.writeCacheMetadata(name, {
-			version: bundle.version,
-			pulledAt: new Date().toISOString(),
-			platform: bundle.platform,
-		});
-
-		// Cleanup temp file
-		rmSync(tempPath, { force: true });
-
-		this.logger(`Cached ${name}@${bundle.version}`);
-	}
-
-	/**
-	 * Read and validate `.mpak-meta.json` from a directory path.
-	 */
-	private readMetadataFromDir(dir: string): CacheMetadata | null {
-		const metaPath = join(dir, ".mpak-meta.json");
-		if (!existsSync(metaPath)) {
-			return null;
-		}
 		try {
-			const raw = JSON.parse(readFileSync(metaPath, "utf8"));
-			const result = CacheMetadataSchema.safeParse(raw);
-			return result.success ? result.data : null;
-		} catch {
-			return null;
+			const data = await this.mpakClient.downloadContent(
+				downloadInfo.url,
+				bundle.sha256,
+			);
+			writeFileSync(tempPath, data);
+
+			// Clear old cache and extract
+			if (existsSync(cacheDir)) {
+				rmSync(cacheDir, { recursive: true, force: true });
+			}
+
+			extractZip(tempPath, cacheDir);
+
+			// Write metadata
+			this.writeCacheMetadata(name, {
+				version: bundle.version,
+				pulledAt: new Date().toISOString(),
+				platform: bundle.platform,
+			});
+		} finally {
+			rmSync(tempPath, { force: true });
 		}
 	}
-}
-
-interface CachedBundle {
-	name: string;
-	version: string;
-	pulledAt: string;
-	cacheDir: string;
 }

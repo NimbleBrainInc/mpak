@@ -29,7 +29,7 @@ export type { MpakConfigManagerOptions } from './config-manager.js';
 
 // Types consumers may need
 export type { MpakClientConfig } from './types.js';
-export type { McpbManifest, UserConfigField } from './cache.js';
+export type { McpbManifest, UserConfigField, CachedBundleInfo } from '@nimblebrain/mpak-schemas';
 export type { MpakConfig, PackageConfig } from './config-manager.js';
 
 // Errors
@@ -38,6 +38,7 @@ export {
   MpakNotFoundError,
   MpakIntegrityError,
   MpakNetworkError,
+  MpakCacheCorruptedError,
   MpakConfigCorruptedError,
   MpakConfigError,
 } from './errors.js';

@@ -73,6 +73,24 @@ export class MpakConfigCorruptedError extends MpakError {
  * @param packageName - The package that requires config
  * @param missingFields - Structured list of missing fields
  */
+/**
+ * Thrown when cache metadata or manifest is missing, corrupt, or fails validation.
+ *
+ * @param message - Human-readable description of what went wrong
+ * @param filePath - Absolute path to the file that failed
+ * @param cause - The underlying error (parse failure, validation error, etc.)
+ */
+export class MpakCacheCorruptedError extends MpakError {
+  constructor(
+    message: string,
+    public readonly filePath: string,
+    public override readonly cause?: Error,
+  ) {
+    super(message, 'CACHE_CORRUPTED');
+    this.name = 'MpakCacheCorruptedError';
+  }
+}
+
 export class MpakConfigError extends MpakError {
   constructor(
     public readonly packageName: string,

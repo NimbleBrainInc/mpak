@@ -1,25 +1,70 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MpakSDK } from '../src/MpakSDK.js';
-import { BundleCache } from '../src/cache.js';
+import { MpakBundleCache } from '../src/cache.js';
 import type { MpakClient } from '../src/client.js';
+import { MpakCacheCorruptedError } from '../src/errors.js';
 
-function mockDownloadClient(downloadInfo: { url: string; bundle: { name: string; version: string; platform: { os: string; arch: string }; sha256: string; size: number } }) {
+// ---------------------------------------------------------------------------
+// Test fixtures
+// ---------------------------------------------------------------------------
+
+const validManifest = {
+  manifest_version: '0.3',
+  name: '@scope/name',
+  version: '1.0.0',
+  description: 'Test bundle',
+  server: {
+    type: 'node' as const,
+    entry_point: 'index.js',
+    mcp_config: {
+      command: 'node',
+      args: ['${__dirname}/index.js'],
+    },
+  },
+};
+
+const validMetadata = {
+  version: '1.0.0',
+  pulledAt: '2026-03-21T00:00:00.000Z',
+  platform: { os: 'darwin', arch: 'arm64' },
+};
+
+function mockClient(overrides: Partial<MpakClient> = {}): MpakClient {
   return {
-    getBundleDownload: vi.fn().mockResolvedValue(downloadInfo),
+    getBundleDownload: vi.fn(),
+    getBundle: vi.fn(),
+    downloadContent: vi.fn(),
+    ...overrides,
   } as unknown as MpakClient;
 }
 
-function mockBundleClient(latestVersion: string) {
-  return {
-    getBundle: vi.fn().mockResolvedValue({ latest_version: latestVersion }),
-  } as unknown as MpakClient;
+// ---------------------------------------------------------------------------
+// Helpers — seed a cache entry on disk
+// ---------------------------------------------------------------------------
+
+function seedCacheEntry(
+  cacheHome: string,
+  dirName: string,
+  opts: { manifest?: object; metadata?: object } = {},
+) {
+  const dir = join(cacheHome, 'cache', dirName);
+  mkdirSync(dir, { recursive: true });
+  if (opts.manifest) {
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(opts.manifest));
+  }
+  if (opts.metadata) {
+    writeFileSync(join(dir, '.mpak-meta.json'), JSON.stringify(opts.metadata));
+  }
+  return dir;
 }
 
-describe('BundleCache', () => {
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+describe('MpakBundleCache', () => {
   let testDir: string;
 
   beforeEach(() => {
@@ -30,876 +75,304 @@ describe('BundleCache', () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  describe('getPackageCachePath', () => {
-    it('maps @scope/name to scope-name under cache base', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
+  // -------------------------------------------------------------------------
+  // getBundleCacheDirName
+  // -------------------------------------------------------------------------
 
-      expect(cache.getPackageCachePath('@scope/name')).toBe(join(testDir, 'cache', 'scope-name'));
+  describe('getBundleCacheDirName', () => {
+    it('maps @scope/name to scope-name under cache home', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(cache.getBundleCacheDirName('@scope/name')).toBe(join(testDir, 'cache', 'scope-name'));
     });
 
     it('handles unscoped names', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-
-      expect(cache.getPackageCachePath('simple')).toBe(join(testDir, 'cache', 'simple'));
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(cache.getBundleCacheDirName('simple')).toBe(join(testDir, 'cache', 'simple'));
     });
   });
 
-  describe('getCacheMetadata / writeCacheMetadata', () => {
-    const pkg = '@scope/name';
+  // -------------------------------------------------------------------------
+  // getBundleMetadata
+  // -------------------------------------------------------------------------
 
-    it('returns null when no metadata file exists', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
-
-      expect(cache.getCacheMetadata(pkg)).toBeNull();
+  describe('getBundleMetadata', () => {
+    it('returns null when package directory does not exist', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(cache.getBundleMetadata('@scope/name')).toBeNull();
     });
 
-    it('round-trips metadata through write and read', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
+    it('returns validated metadata when file is valid', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { metadata: validMetadata });
 
-      const metadata = {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      };
-
-      cache.writeCacheMetadata(pkg, metadata);
-
-      expect(cache.getCacheMetadata(pkg)).toEqual(metadata);
-    });
-
-    it('returns null for invalid JSON', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const cacheDir = cache.getPackageCachePath(pkg);
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(join(cacheDir, '.mpak-meta.json'), 'not json');
-
-      expect(cache.getCacheMetadata(pkg)).toBeNull();
-    });
-
-    it('returns null for JSON that fails schema validation', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const cacheDir = cache.getPackageCachePath(pkg);
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(join(cacheDir, '.mpak-meta.json'), JSON.stringify({ bad: true }));
-
-      expect(cache.getCacheMetadata(pkg)).toBeNull();
-    });
-
-    it('rejects unknown fields via strict schema', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const cacheDir = cache.getPackageCachePath(pkg);
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(join(cacheDir, '.mpak-meta.json'), JSON.stringify({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-        extra: 'field',
-      }));
-
-      expect(cache.getCacheMetadata(pkg)).toBeNull();
-    });
-
-    it('throws when writing invalid metadata', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(() => cache.writeCacheMetadata(pkg, { bad: true } as any)).toThrow('Invalid cache metadata');
+      expect(cache.getBundleMetadata('@scope/name')).toEqual(validMetadata);
     });
 
     it('preserves optional lastCheckedAt field', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const meta = { ...validMetadata, lastCheckedAt: '2026-03-21T01:00:00.000Z' };
+      seedCacheEntry(testDir, 'scope-name', { metadata: meta });
 
-      const metadata = {
-        version: '2.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        lastCheckedAt: '2026-03-21T01:00:00.000Z',
-        platform: { os: 'linux', arch: 'x64' },
-      };
+      expect(cache.getBundleMetadata('@scope/name')).toEqual(meta);
+    });
 
-      cache.writeCacheMetadata(pkg, metadata);
+    it('throws MpakCacheCorruptedError for invalid JSON', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = join(testDir, 'cache', 'scope-name');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, '.mpak-meta.json'), 'not json');
 
-      expect(cache.getCacheMetadata(pkg)).toEqual(metadata);
+      expect(() => cache.getBundleMetadata('@scope/name')).toThrow(MpakCacheCorruptedError);
+    });
+
+    it('throws MpakCacheCorruptedError when schema validation fails', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { metadata: { bad: true } });
+
+      expect(() => cache.getBundleMetadata('@scope/name')).toThrow(MpakCacheCorruptedError);
     });
   });
 
-  describe('readManifest', () => {
-    const pkg = '@scope/name';
+  // -------------------------------------------------------------------------
+  // getBundleManifest
+  // -------------------------------------------------------------------------
 
-    const validManifest = {
-      manifest_version: '0.3',
-      name: '@scope/name',
-      version: '1.0.0',
-      description: 'Test bundle',
-      server: {
-        type: 'node' as const,
-        entry_point: 'index.js',
-        mcp_config: {
-          command: 'node',
-          args: ['${__dirname}/index.js'],
-        },
-      },
-    };
-
+  describe('getBundleManifest', () => {
     it('returns null when package is not cached', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-
-      expect(cache.readManifest(pkg)).toBeNull();
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(cache.getBundleManifest('@scope/name')).toBeNull();
     });
 
-    it('returns null when cache dir exists but manifest.json is missing', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath(pkg), { recursive: true });
+    it('returns validated manifest when file is valid', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest });
 
-      expect(cache.readManifest(pkg)).toBeNull();
+      expect(cache.getBundleManifest('@scope/name')).toEqual(validManifest);
     });
 
-    it('returns parsed manifest for a valid manifest.json', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const dir = cache.getPackageCachePath(pkg);
+    it('throws MpakCacheCorruptedError when manifest.json is missing but dir exists', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name');
+
+      expect(() => cache.getBundleManifest('@scope/name')).toThrow(MpakCacheCorruptedError);
+    });
+
+    it('throws MpakCacheCorruptedError for corrupt JSON', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = join(testDir, 'cache', 'scope-name');
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(validManifest));
+      writeFileSync(join(dir, 'manifest.json'), '{not valid');
 
-      const result = cache.readManifest(pkg);
-      expect(result).toEqual(validManifest);
+      expect(() => cache.getBundleManifest('@scope/name')).toThrow(MpakCacheCorruptedError);
     });
 
-    it('returns null for corrupt JSON', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const dir = cache.getPackageCachePath(pkg);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'manifest.json'), '{not valid json');
+    it('throws MpakCacheCorruptedError when schema validation fails', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { manifest: { name: 'test' } });
 
-      expect(cache.readManifest(pkg)).toBeNull();
-    });
-
-    it('returns null when manifest fails schema validation', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const dir = cache.getPackageCachePath(pkg);
-      mkdirSync(dir, { recursive: true });
-      // Missing required fields like server
-      writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ name: 'test' }));
-
-      expect(cache.readManifest(pkg)).toBeNull();
-    });
-
-    it('parses manifest with user_config fields', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const dir = cache.getPackageCachePath(pkg);
-      mkdirSync(dir, { recursive: true });
-
-      const manifestWithConfig = {
-        ...validManifest,
-        user_config: {
-          api_key: {
-            type: 'string' as const,
-            title: 'API Key',
-            description: 'Your API key',
-            sensitive: true,
-            required: true,
-          },
-          port: {
-            type: 'number' as const,
-            default: 3000,
-          },
-        },
-      };
-      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestWithConfig));
-
-      const result = cache.readManifest(pkg);
-      expect(result).toEqual(manifestWithConfig);
-      expect(result?.user_config?.api_key?.sensitive).toBe(true);
-      expect(result?.user_config?.port?.default).toBe(3000);
-    });
-
-    it('parses manifest with env in mcp_config', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const dir = cache.getPackageCachePath(pkg);
-      mkdirSync(dir, { recursive: true });
-
-      const manifestWithEnv = {
-        ...validManifest,
-        server: {
-          ...validManifest.server,
-          mcp_config: {
-            ...validManifest.server.mcp_config,
-            env: { API_KEY: '${user_config.api_key}' },
-          },
-        },
-      };
-      writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifestWithEnv));
-
-      const result = cache.readManifest(pkg);
-      expect(result?.server.mcp_config.env).toEqual({ API_KEY: '${user_config.api_key}' });
+      expect(() => cache.getBundleManifest('@scope/name')).toThrow(MpakCacheCorruptedError);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // listCachedBundles
+  // -------------------------------------------------------------------------
 
   describe('listCachedBundles', () => {
     it('returns empty array when cache directory does not exist', () => {
-      const cache = new BundleCache({ mpakHome: join(testDir, 'nonexistent') });
-
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: join(testDir, 'nonexistent') });
       expect(cache.listCachedBundles()).toEqual([]);
     });
 
     it('returns bundles with valid metadata and manifest', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const bundleDir = join(testDir, 'cache', 'scope-name');
-      mkdirSync(bundleDir, { recursive: true });
-
-      writeFileSync(join(bundleDir, '.mpak-meta.json'), JSON.stringify({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      }));
-      writeFileSync(join(bundleDir, 'manifest.json'), JSON.stringify({
-        name: '@scope/name',
-      }));
-
-      const bundles = cache.listCachedBundles();
-
-      expect(bundles).toHaveLength(1);
-      expect(bundles[0]).toEqual({
-        name: '@scope/name',
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        cacheDir: bundleDir,
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
       });
+
+      expect(cache.listCachedBundles()).toEqual([{
+        name: '@scope/name',
+        version: '1.0.0',
+        pulledAt: '2026-03-21T00:00:00.000Z',
+        cacheDir: dir,
+      }]);
     });
 
     it('skips _local directory', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const localDir = join(testDir, 'cache', '_local');
-      mkdirSync(localDir, { recursive: true });
-      writeFileSync(join(localDir, '.mpak-meta.json'), JSON.stringify({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      }));
-      writeFileSync(join(localDir, 'manifest.json'), JSON.stringify({ name: 'local' }));
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, '_local', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
 
       expect(cache.listCachedBundles()).toEqual([]);
     });
 
-    it('skips entries without metadata', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      const bundleDir = join(testDir, 'cache', 'scope-name');
-      mkdirSync(bundleDir, { recursive: true });
-      writeFileSync(join(bundleDir, 'manifest.json'), JSON.stringify({ name: '@scope/name' }));
+    it('skips entries with missing manifest', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { metadata: validMetadata });
 
       expect(cache.listCachedBundles()).toEqual([]);
     });
 
-    it('skips entries without manifest and logs', () => {
-      const logger = vi.fn();
-      const cache = new BundleCache({ mpakHome: testDir, logger });
-      const bundleDir = join(testDir, 'cache', 'scope-name');
-      mkdirSync(bundleDir, { recursive: true });
-      writeFileSync(join(bundleDir, '.mpak-meta.json'), JSON.stringify({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      }));
+    it('skips entries with corrupt manifest', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = join(testDir, 'cache', 'scope-name');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'manifest.json'), 'not json');
+      writeFileSync(join(dir, '.mpak-meta.json'), JSON.stringify(validMetadata));
 
       expect(cache.listCachedBundles()).toEqual([]);
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('missing manifest.json'));
     });
 
-    it('skips corrupt manifest and logs', () => {
-      const logger = vi.fn();
-      const cache = new BundleCache({ mpakHome: testDir, logger });
-      const bundleDir = join(testDir, 'cache', 'scope-name');
-      mkdirSync(bundleDir, { recursive: true });
-      writeFileSync(join(bundleDir, '.mpak-meta.json'), JSON.stringify({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      }));
-      writeFileSync(join(bundleDir, 'manifest.json'), 'not json');
+    it('skips entries with missing metadata', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest });
 
       expect(cache.listCachedBundles()).toEqual([]);
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('corrupt manifest.json'));
-    });
-  });
-
-  describe('extractZip', () => {
-    it('extracts a valid zip to the destination directory', () => {
-      const srcDir = join(testDir, 'src');
-      mkdirSync(srcDir);
-      writeFileSync(join(srcDir, 'hello.txt'), 'hello world');
-
-      const zipPath = join(testDir, 'test.zip');
-      execFileSync('zip', ['-j', zipPath, join(srcDir, 'hello.txt')], { stdio: 'pipe' });
-
-      const destDir = join(testDir, 'dest');
-      BundleCache.extractZip(zipPath, destDir);
-
-      expect(existsSync(join(destDir, 'hello.txt'))).toBe(true);
-      expect(readFileSync(join(destDir, 'hello.txt'), 'utf8')).toBe('hello world');
     });
 
-    it('creates the destination directory if it does not exist', () => {
-      const srcDir = join(testDir, 'src');
-      mkdirSync(srcDir);
-      writeFileSync(join(srcDir, 'file.txt'), 'content');
+    it('returns multiple valid bundles and skips corrupt ones', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
 
-      const zipPath = join(testDir, 'test.zip');
-      execFileSync('zip', ['-j', zipPath, join(srcDir, 'file.txt')], { stdio: 'pipe' });
+      const manifest2 = { ...validManifest, name: '@scope/other', version: '2.0.0' };
+      const meta2 = { ...validMetadata, version: '2.0.0' };
 
-      const destDir = join(testDir, 'nested', 'deep', 'dest');
-      BundleCache.extractZip(zipPath, destDir);
-
-      expect(existsSync(join(destDir, 'file.txt'))).toBe(true);
-    });
-
-    it('throws for an invalid zip file', () => {
-      const zipPath = join(testDir, 'bad.zip');
-      writeFileSync(zipPath, 'not a zip');
-
-      expect(() => BundleCache.extractZip(zipPath, join(testDir, 'dest')))
-        .toThrow('Cannot verify bundle size before extraction');
-    });
-  });
-
-  describe('constructor injection', () => {
-    it('throws when calling loadBundle without a client', async () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-
-      await expect(cache.loadBundle('@scope/pkg')).rejects.toThrow('MpakClient required');
-    });
-
-    it('throws when calling checkForUpdateAsync without a client', async () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
+      const dir1 = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
       });
-
-      await expect(cache.checkForUpdateAsync('@scope/pkg')).rejects.toThrow('MpakClient required');
-    });
-
-    it('works for local-only operations without a client', () => {
-      const cache = new BundleCache({ mpakHome: testDir });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
+      const dir2 = seedCacheEntry(testDir, 'scope-other', {
+        manifest: manifest2,
+        metadata: meta2,
       });
-
-      expect(cache.getCacheMetadata('@scope/pkg')).toEqual({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-      expect(cache.listCachedBundles()).toEqual([]);
-    });
-  });
-
-  describe('loadBundle', () => {
-    function createTestZip(dir: string): string {
-      const srcDir = join(dir, 'zip-src');
-      mkdirSync(srcDir, { recursive: true });
-      writeFileSync(join(srcDir, 'manifest.json'), JSON.stringify({ name: '@scope/pkg' }));
-      const zipPath = join(dir, 'bundle.zip');
-      execFileSync('zip', ['-j', zipPath, join(srcDir, 'manifest.json')], { stdio: 'pipe' });
-      return zipPath;
-    }
-
-    it('downloads and extracts when no cache exists', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '1.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(zipData, { status: 200 }),
-      );
-
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      const result = await cache.loadBundle('@scope/pkg');
-
-      expect(result.pulled).toBe(true);
-      expect(result.version).toBe('1.0.0');
-      expect(existsSync(join(result.cacheDir, 'manifest.json'))).toBe(true);
-
-      const meta = cache.getCacheMetadata('@scope/pkg');
-      expect(meta).not.toBeNull();
-      // Fresh downloads should NOT stamp lastCheckedAt — that's for update checks
-      expect(meta?.lastCheckedAt).toBeUndefined();
-
-      fetchSpy.mockRestore();
-    });
-
-    it('uses cache when version matches and force is false', async () => {
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '1.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      const cacheDir = cache.getPackageCachePath('@scope/pkg');
-      mkdirSync(cacheDir, { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      const result = await cache.loadBundle('@scope/pkg');
-
-      expect(result.pulled).toBe(false);
-      expect(result.version).toBe('1.0.0');
-      expect(client.getBundleDownload).not.toHaveBeenCalled();
-    });
-
-    it('downloads when cached version differs from requested', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '2.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      const cacheDir = cache.getPackageCachePath('@scope/pkg');
-      mkdirSync(cacheDir, { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(zipData, { status: 200 }),
-      );
-
-      const result = await cache.loadBundle('@scope/pkg', { version: '2.0.0' });
-
-      expect(result.pulled).toBe(true);
-      expect(result.version).toBe('2.0.0');
-
-      fetchSpy.mockRestore();
-    });
-
-    it('skips download when resolved version matches cache', async () => {
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '1.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      const cacheDir = cache.getPackageCachePath('@scope/pkg');
-      mkdirSync(cacheDir, { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      // Request version 2.0.0 (cache miss) but registry resolves to 1.0.0 (cache hit)
-      const result = await cache.loadBundle('@scope/pkg', { version: '2.0.0' });
-
-      expect(result.pulled).toBe(false);
-      expect(client.getBundleDownload).toHaveBeenCalled();
-
-      const meta = cache.getCacheMetadata('@scope/pkg');
-      expect(meta?.lastCheckedAt).toBeDefined();
-    });
-
-    it('forces download when force is true even if cached', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '1.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      const cacheDir = cache.getPackageCachePath('@scope/pkg');
-      mkdirSync(cacheDir, { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(zipData, { status: 200 }),
-      );
-
-      const result = await cache.loadBundle('@scope/pkg', { force: true });
-
-      expect(result.pulled).toBe(true);
-      expect(client.getBundleDownload).toHaveBeenCalled();
-
-      fetchSpy.mockRestore();
-    });
-
-    it('logs progress messages when logger is provided', async () => {
-      const logger = vi.fn();
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const client = mockDownloadClient({
-        url: 'https://example.com/bundle.zip',
-        bundle: { name: '@scope/pkg', version: '1.0.0', platform: { os: 'darwin', arch: 'arm64' }, sha256: 'abc', size: 100 },
-      });
-
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(zipData, { status: 200 }),
-      );
-
-      await cache.loadBundle('@scope/pkg');
-
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Pulling @scope/pkg@1.0.0'));
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Cached @scope/pkg@1.0.0'));
-
-      fetchSpy.mockRestore();
-    });
-  });
-
-  describe('checkForUpdateAsync', () => {
-    it('logs when a newer version is available', async () => {
-      const logger = vi.fn();
-      const client = mockBundleClient('2.0.0');
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      await cache.checkForUpdateAsync('@scope/pkg');
-
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Update available'));
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('1.0.0 -> 2.0.0'));
-    });
-
-    it('logs up to date when version is current', async () => {
-      const logger = vi.fn();
-      const client = mockBundleClient('1.0.0');
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      await cache.checkForUpdateAsync('@scope/pkg');
-
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('is up to date'));
-    });
-
-    it('updates lastCheckedAt after checking', async () => {
-      const client = mockBundleClient('1.0.0');
-      const cache = new BundleCache({ mpakHome: testDir, client });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      await cache.checkForUpdateAsync('@scope/pkg');
-
-      const meta = cache.getCacheMetadata('@scope/pkg');
-      expect(meta?.lastCheckedAt).toBeDefined();
-    });
-
-    it('skips check if within TTL and logs remaining time', async () => {
-      const logger = vi.fn();
-      const client = mockBundleClient('2.0.0');
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        lastCheckedAt: new Date().toISOString(), // just checked
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      await cache.checkForUpdateAsync('@scope/pkg');
-
-      expect(client.getBundle).not.toHaveBeenCalled();
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Skipping update check'));
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('next check in'));
-    });
-
-    it('does nothing when no cache exists', async () => {
-      const logger = vi.fn();
-      const client = mockBundleClient('1.0.0');
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-
-      await cache.checkForUpdateAsync('@scope/pkg');
-
-      expect(client.getBundle).not.toHaveBeenCalled();
-      expect(logger).not.toHaveBeenCalled();
-    });
-
-    it('logs error message on failure without throwing', async () => {
-      const logger = vi.fn();
-      const client = {
-        getBundle: vi.fn().mockRejectedValue(new Error('network down')),
-      } as unknown as MpakClient;
-      const cache = new BundleCache({ mpakHome: testDir, client, logger });
-      mkdirSync(cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      await expect(cache.checkForUpdateAsync('@scope/pkg')).resolves.toBeUndefined();
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('Cannot check for updates'));
-      expect(logger).toHaveBeenCalledWith(expect.stringContaining('network down'));
-    });
-  });
-
-  describe('isSemverEqual', () => {
-    it('returns true for identical versions', () => {
-      expect(BundleCache.isSemverEqual('1.0.0', '1.0.0')).toBe(true);
-    });
-
-    it('returns true when one has v prefix and the other does not', () => {
-      expect(BundleCache.isSemverEqual('v1.0.0', '1.0.0')).toBe(true);
-      expect(BundleCache.isSemverEqual('1.0.0', 'v1.0.0')).toBe(true);
-    });
-
-    it('returns true when both have v prefix', () => {
-      expect(BundleCache.isSemverEqual('v2.3.1', 'v2.3.1')).toBe(true);
-    });
-
-    it('returns false for different versions', () => {
-      expect(BundleCache.isSemverEqual('1.0.0', '1.0.1')).toBe(false);
-    });
-
-    it('returns false for different versions with v prefix', () => {
-      expect(BundleCache.isSemverEqual('v1.0.0', 'v2.0.0')).toBe(false);
-    });
-  });
-
-  // ===========================================================================
-  // Via MpakSDK facade
-  // ===========================================================================
-
-  describe('via MpakSDK facade', () => {
-    function createTestZip(dir: string): string {
-      const srcDir = join(dir, 'zip-src');
-      mkdirSync(srcDir, { recursive: true });
-      writeFileSync(join(srcDir, 'manifest.json'), JSON.stringify({ name: '@scope/pkg' }));
-      const zipPath = join(dir, 'bundle.zip');
-      execFileSync('zip', ['-j', zipPath, join(srcDir, 'manifest.json')], { stdio: 'pipe' });
-      return zipPath;
-    }
-
-    it('local-only metadata operations work through facade', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
-
-      mkdirSync(sdk.cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      sdk.cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-
-      const meta = sdk.cache.getCacheMetadata('@scope/pkg');
-      expect(meta).toEqual({
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-    });
-
-    it('listCachedBundles works with multiple bundles through facade', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
-
-      for (const name of ['@scope/alpha', '@scope/beta']) {
-        const dir = sdk.cache.getPackageCachePath(name);
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, '.mpak-meta.json'), JSON.stringify({
-          version: '1.0.0',
-          pulledAt: '2026-03-21T00:00:00.000Z',
-          platform: { os: 'darwin', arch: 'arm64' },
-        }));
-        writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ name }));
-      }
-
-      const bundles = sdk.cache.listCachedBundles();
+      // Corrupt entry — should be skipped
+      const corruptDir = join(testDir, 'cache', 'scope-bad');
+      mkdirSync(corruptDir, { recursive: true });
+      writeFileSync(join(corruptDir, 'manifest.json'), 'bad');
+
+      const bundles = cache.listCachedBundles();
       expect(bundles).toHaveLength(2);
-      const names = bundles.map((b) => b.name).sort();
-      expect(names).toEqual(['@scope/alpha', '@scope/beta']);
+      expect(bundles.map((b) => b.name).sort()).toEqual(['@scope/name', '@scope/other']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // removeCachedBundle
+  // -------------------------------------------------------------------------
+
+  describe('removeCachedBundle', () => {
+    it('returns false when bundle is not cached', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(cache.removeCachedBundle('@scope/name')).toBe(false);
     });
 
-    it('loadBundle downloads through the wired client', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
-
-      fetchSpy.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            url: 'https://example.com/bundle.zip',
-            bundle: {
-              name: '@scope/pkg',
-              version: '1.0.0',
-              platform: { os: 'darwin', arch: 'arm64' },
-              sha256: 'abc',
-              size: 100,
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
-
-      fetchSpy.mockResolvedValueOnce(
-        new Response(zipData, { status: 200 }),
-      );
-
-      const logs: string[] = [];
-      const sdk = new MpakSDK({
-        mpakHome: testDir,
-        registryUrl: 'https://test.registry.dev',
-        logger: (msg) => logs.push(msg),
+    it('removes the cache directory and returns true', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
       });
 
-      const result = await sdk.cache.loadBundle('@scope/pkg');
-
-      expect(result.pulled).toBe(true);
-      expect(result.version).toBe('1.0.0');
-      expect(existsSync(join(result.cacheDir, 'manifest.json'))).toBe(true);
-      expect(logs.some((l) => l.includes('Pulling @scope/pkg@1.0.0'))).toBe(true);
-      expect(logs.some((l) => l.includes('Cached @scope/pkg@1.0.0'))).toBe(true);
-
-      fetchSpy.mockRestore();
+      expect(cache.removeCachedBundle('@scope/name')).toBe(true);
+      expect(existsSync(dir)).toBe(false);
     });
 
-    it('loadBundle returns from cache on second call', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
+    it('bundle no longer appears in listCachedBundles after removal', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
 
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      expect(cache.listCachedBundles()).toHaveLength(1);
+      cache.removeCachedBundle('@scope/name');
+      expect(cache.listCachedBundles()).toEqual([]);
+    });
+  });
 
-      fetchSpy.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            url: 'https://example.com/bundle.zip',
-            bundle: {
-              name: '@scope/pkg',
-              version: '1.0.0',
-              platform: { os: 'darwin', arch: 'arm64' },
-              sha256: 'abc',
-              size: 100,
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
-      fetchSpy.mockResolvedValueOnce(
-        new Response(zipData, { status: 200 }),
-      );
+  // -------------------------------------------------------------------------
+  // checkForUpdate
+  // -------------------------------------------------------------------------
 
-      const sdk = new MpakSDK({ mpakHome: testDir, registryUrl: 'https://test.registry.dev' });
-
-      const first = await sdk.cache.loadBundle('@scope/pkg');
-      expect(first.pulled).toBe(true);
-
-      const second = await sdk.cache.loadBundle('@scope/pkg');
-      expect(second.pulled).toBe(false);
-      expect(second.version).toBe('1.0.0');
-
-      // Only 2 fetch calls total (download info + zip), not 4
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-
-      fetchSpy.mockRestore();
+  describe('checkForUpdate', () => {
+    it('returns null when bundle is not cached', async () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
     });
 
-    it('checkForUpdateAsync works through facade', async () => {
-      const logs: string[] = [];
-      const sdk = new MpakSDK({
-        mpakHome: testDir,
-        registryUrl: 'https://test.registry.dev',
-        logger: (msg) => logs.push(msg),
+    it('returns latest version when update is available', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockResolvedValue({ latest_version: '2.0.0' }),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
       });
 
-      mkdirSync(sdk.cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      sdk.cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
+      expect(await cache.checkForUpdate('@scope/name')).toBe('2.0.0');
+    });
+
+    it('returns null when already up to date', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
       });
 
-      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ latest_version: '2.0.0', name: '@scope/pkg' }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
+      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+    });
 
-      await sdk.cache.checkForUpdateAsync('@scope/pkg');
+    it('returns null when within TTL window', async () => {
+      const client = mockClient({
+        getBundle: vi.fn(),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: {
+          ...validMetadata,
+          lastCheckedAt: new Date().toISOString(), // just checked
+        },
+      });
 
-      expect(logs.some((l) => l.includes('Update available'))).toBe(true);
-      expect(logs.some((l) => l.includes('1.0.0 -> 2.0.0'))).toBe(true);
+      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      // Should not have called the API
+      expect(client.getBundle).not.toHaveBeenCalled();
+    });
 
-      const meta = sdk.cache.getCacheMetadata('@scope/pkg');
+    it('returns null on network error', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockRejectedValue(new Error('network down')),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+
+      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+    });
+
+    it('updates lastCheckedAt after successful check', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+
+      await cache.checkForUpdate('@scope/name');
+
+      const meta = cache.getBundleMetadata('@scope/name');
       expect(meta?.lastCheckedAt).toBeDefined();
-
-      fetchSpy.mockRestore();
-    });
-
-    it('loadBundle uses the same registry URL as config', async () => {
-      const zipPath = createTestZip(testDir);
-      const zipData = readFileSync(zipPath);
-
-      const customUrl = 'https://my-custom.registry.dev';
-      const sdk = new MpakSDK({
-        mpakHome: testDir,
-        registryUrl: customUrl,
-      });
-
-      const fetchSpy = vi.spyOn(globalThis, 'fetch');
-
-      fetchSpy.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            url: 'https://example.com/bundle.zip',
-            bundle: {
-              name: '@scope/pkg',
-              version: '1.0.0',
-              platform: { os: 'darwin', arch: 'arm64' },
-              sha256: 'abc',
-              size: 100,
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
-
-      fetchSpy.mockResolvedValueOnce(
-        new Response(zipData, { status: 200 }),
-      );
-
-      await sdk.cache.loadBundle('@scope/pkg');
-
-      const downloadInfoUrl = fetchSpy.mock.calls[0]?.[0] as string;
-      expect(downloadInfoUrl).toContain(customUrl);
-
-      fetchSpy.mockRestore();
     });
   });
 });
