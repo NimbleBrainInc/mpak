@@ -191,12 +191,14 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(cache.listCachedBundles()).toEqual([{
-        name: '@scope/name',
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        cacheDir: dir,
-      }]);
+      expect(cache.listCachedBundles()).toEqual([
+        {
+          name: '@scope/name',
+          version: '1.0.0',
+          pulledAt: '2026-03-21T00:00:00.000Z',
+          cacheDir: dir,
+        },
+      ]);
     });
 
     it('skips _local directory', () => {

@@ -109,10 +109,13 @@ describe('Mpak facade', () => {
       });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
       );
 
       await sdk.client.searchBundles({ q: 'test' });
@@ -164,10 +167,13 @@ describe('Mpak facade', () => {
       });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
       );
 
       await sdk.client.searchBundles({ q: 'test' });
@@ -192,10 +198,13 @@ describe('Mpak facade', () => {
       });
 
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response(JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({ bundles: [], pagination: { total: 0, limit: 20, offset: 0 } }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
       );
 
       const result = await client.searchBundles({ q: 'test' });
@@ -369,9 +378,7 @@ describe('Mpak facade', () => {
 
       const result = await sdk.prepareServer('@scope/echo');
 
-      expect(result.env['MPAK_WORKSPACE']).toBe(
-        join(process.cwd(), '.mpak'),
-      );
+      expect(result.env['MPAK_WORKSPACE']).toBe(join(process.cwd(), '.mpak'));
     });
 
     it('caller env overrides MPAK_WORKSPACE default', async () => {

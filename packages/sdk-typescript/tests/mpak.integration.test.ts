@@ -92,7 +92,9 @@ describe('Mpak facade integration', () => {
   it('config stores and retrieves package config alongside cache', () => {
     sdk.configManager.setPackageConfigValue(KNOWN_BUNDLE, 'api_key', 'sk-integration-test');
 
-    expect(sdk.configManager.getPackageConfig(KNOWN_BUNDLE)?.['api_key']).toBe('sk-integration-test');
+    expect(sdk.configManager.getPackageConfig(KNOWN_BUNDLE)?.['api_key']).toBe(
+      'sk-integration-test',
+    );
 
     // Config file and cache coexist under the same mpakHome
     expect(existsSync(join(testDir, 'config.json'))).toBe(true);

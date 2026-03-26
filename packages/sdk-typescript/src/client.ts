@@ -383,7 +383,10 @@ export class MpakClient {
    */
   private validateScopedName(name: string): void {
     if (!name.startsWith('@')) {
-      throw new MpakError('Package name must be scoped (e.g., @scope/package-name)', 'INVALID_SPEC');
+      throw new MpakError(
+        'Package name must be scoped (e.g., @scope/package-name)',
+        'INVALID_SPEC',
+      );
     }
   }
 

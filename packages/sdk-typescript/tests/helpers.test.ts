@@ -83,8 +83,9 @@ describe('extractZip', () => {
     const zipPath = join(testDir, 'bad.zip');
     writeFileSync(zipPath, 'not a zip');
 
-    expect(() => extractZip(zipPath, join(testDir, 'dest')))
-      .toThrow('Cannot verify bundle size before extraction');
+    expect(() => extractZip(zipPath, join(testDir, 'dest'))).toThrow(
+      'Cannot verify bundle size before extraction',
+    );
   });
 });
 
@@ -112,23 +113,22 @@ describe('readJsonFromFile', () => {
   });
 
   it('throws when file does not exist', () => {
-    expect(() => readJsonFromFile(join(testDir, 'missing.json'), TestSchema))
-      .toThrow('File does not exist');
+    expect(() => readJsonFromFile(join(testDir, 'missing.json'), TestSchema)).toThrow(
+      'File does not exist',
+    );
   });
 
   it('throws for invalid JSON', () => {
     const filePath = join(testDir, 'bad.json');
     writeFileSync(filePath, '{not valid json');
 
-    expect(() => readJsonFromFile(filePath, TestSchema))
-      .toThrow('File is not valid JSON');
+    expect(() => readJsonFromFile(filePath, TestSchema)).toThrow('File is not valid JSON');
   });
 
   it('throws when JSON fails schema validation', () => {
     const filePath = join(testDir, 'wrong-shape.json');
     writeFileSync(filePath, JSON.stringify({ name: 'test', value: 'not a number' }));
 
-    expect(() => readJsonFromFile(filePath, TestSchema))
-      .toThrow('File failed validation');
+    expect(() => readJsonFromFile(filePath, TestSchema)).toThrow('File failed validation');
   });
 });
