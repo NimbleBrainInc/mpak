@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync } from "node:fs";
 import { join } from "node:path";
-import type { McpbManifest } from "./cache.js";
-import { BundleCache } from "./cache.js";
+import type { McpbManifest } from "@nimblebrain/mpak-schemas";
+import { MpakBundleCache } from "./cache.js";
 import { MpakClient } from "./client.js";
 import { MpakConfigManager } from "./config-manager.js";
+import { MpakCacheCorruptedError, MpakConfigError } from "./errors.js";
 import type { MpakClientConfig } from "./types.js";
+import { parsePackageSpec } from "./utils.js";
 
 /**
  * Options for the {@link Mpak} facade.
@@ -13,7 +15,7 @@ import type { MpakClientConfig } from "./types.js";
  * All fields are optional — sensible defaults are derived from
  * `MpakConfigManager` (registry URL, mpakHome) when omitted.
  */
-export interface MpakSDKOptions {
+export interface MpakOptions {
 	/** Root directory for mpak state. Defaults to `~/.mpak`. */
 	mpakHome?: string;
 	/** Registry URL override. Defaults to `MpakConfigManager.getRegistryUrl()`. */
@@ -22,12 +24,10 @@ export interface MpakSDKOptions {
 	timeout?: number;
 	/** User-Agent string sent with every request. */
 	userAgent?: string;
-	/** Logger callback for cache operations. Defaults to `process.stderr.write`. */
-	logger?: (msg: string) => void;
 }
 
 /**
- * Options for {@link MpakSDK.prepareServer}.
+ * Options for {@link Mpak.prepareServer}.
  */
 export interface PrepareServerOptions {
 	/** Pin to a specific version. Omit for "latest". */
@@ -87,26 +87,26 @@ export interface ServerCommand {
  * const bundles = await mpak.client.searchBundles({ q: 'mcp' });
  * ```
  */
-export class MpakSDK {
+export class Mpak {
 	/** User configuration manager (`config.json`). */
-	readonly config: MpakConfigManager;
+	readonly configManager: MpakConfigManager;
 	/** Registry API client. */
 	readonly client: MpakClient;
 	/** Local bundle cache. */
-	readonly cache: BundleCache;
+	readonly bundleCache: MpakBundleCache;
 
-	constructor(options?: MpakSDKOptions) {
+	constructor(options?: MpakOptions) {
 		// initialize config
 		const configOptions: { mpakHome?: string; registryUrl?: string } = {};
 		if (options?.mpakHome !== undefined)
 			configOptions.mpakHome = options.mpakHome;
 		if (options?.registryUrl !== undefined)
 			configOptions.registryUrl = options.registryUrl;
-		this.config = new MpakConfigManager(configOptions);
+		this.configManager = new MpakConfigManager(configOptions);
 
 		// initialize client
 		const clientConfig: MpakClientConfig = {
-			registryUrl: this.config.getRegistryUrl(),
+			registryUrl: this.configManager.getRegistryUrl(),
 		};
 		if (options?.timeout !== undefined) clientConfig.timeout = options.timeout;
 		if (options?.userAgent !== undefined)
@@ -114,17 +114,9 @@ export class MpakSDK {
 		this.client = new MpakClient(clientConfig);
 
 		// initialize cache
-		const cacheOptions: {
-			mpakHome: string;
-			client: MpakClient;
-			logger?: (msg: string) => void;
-		} = {
-			mpakHome: this.config.mpakHome,
-			client: this.client,
-		};
-
-		if (options?.logger !== undefined) cacheOptions.logger = options.logger;
-		this.cache = new BundleCache(cacheOptions);
+		this.bundleCache = new MpakBundleCache(this.client, {
+			mpakHome: this.configManager.mpakHome,
+		});
 	}
 
 	/**
@@ -146,21 +138,21 @@ export class MpakSDK {
 		packageName: string,
 		options?: PrepareServerOptions,
 	): Promise<ServerCommand> {
-		const { name, version: parsedVersion } =
-			MpakSDK.parsePackageSpec(packageName);
+		const { name, version: parsedVersion } = parsePackageSpec(packageName);
 		const resolvedVersion = options?.version ?? parsedVersion;
 
 		// Ensure bundle is cached
 		const loadOptions: { version?: string; force?: boolean } = {};
 		if (resolvedVersion !== undefined) loadOptions.version = resolvedVersion;
 		if (options?.force !== undefined) loadOptions.force = options.force;
-		const loadResult = await this.cache.loadBundle(name, loadOptions);
+		const loadResult = await this.bundleCache.loadBundle(name, loadOptions);
 
 		// Read manifest
-		const manifest = this.cache.readManifest(name);
+		const manifest = this.bundleCache.getBundleManifest(name);
 		if (!manifest) {
-			throw new Error(
-				`Manifest missing or corrupt for ${name} after download`,
+			throw new MpakCacheCorruptedError(
+				`Manifest file missing for ${name}`,
+				join(this.bundleCache.cacheHome, name),
 			);
 		}
 
@@ -168,68 +160,29 @@ export class MpakSDK {
 		const userConfigValues = this.gatherUserConfig(name, manifest);
 
 		// Build command/args/env
-		const cacheDir = loadResult.cacheDir;
 		const { command, args, env } = this.resolveCommand(
 			manifest,
-			cacheDir,
+			loadResult.cacheDir,
 			userConfigValues,
 		);
-
-		// Merge caller-provided env
-		if (options?.env) {
-			Object.assign(env, options.env);
-		}
 
 		// Set MPAK_WORKSPACE
 		env["MPAK_WORKSPACE"] =
 			options?.workspaceDir ?? join(process.cwd(), ".mpak");
 
+		// Merge caller-provided env (wins over defaults)
+		if (options?.env) {
+			Object.assign(env, options.env);
+		}
+
 		return {
 			command,
 			args,
 			env,
-			cwd: cacheDir,
+			cwd: loadResult.cacheDir,
 			name,
 			version: loadResult.version,
 		};
-	}
-
-	// ===========================================================================
-	// Static helpers
-	// ===========================================================================
-
-	/**
-	 * Parse and validate a package spec string.
-	 *
-	 * Accepts `@scope/name` or `@scope/name@version`. Validates that the
-	 * name is a scoped package (`@scope/name` format).
-	 *
-	 * @throws If the package spec is not a valid scoped name.
-	 *
-	 * @example
-	 * MpakSDK.parsePackageSpec('@scope/name')        // { name: '@scope/name' }
-	 * MpakSDK.parsePackageSpec('@scope/name@1.0.0')  // { name: '@scope/name', version: '1.0.0' }
-	 */
-	static parsePackageSpec(spec: string): { name: string; version?: string } {
-		const lastAtIndex = spec.lastIndexOf("@");
-
-		let name: string;
-		let version: string | undefined;
-
-		if (lastAtIndex > 0) {
-			name = spec.substring(0, lastAtIndex);
-			version = spec.substring(lastAtIndex + 1);
-		} else {
-			name = spec;
-		}
-
-		if (!name.startsWith("@") || !name.includes("/")) {
-			throw new Error(
-				`Invalid package spec: "${spec}". Expected scoped format: @scope/name`,
-			);
-		}
-
-		return version ? { name, version } : { name };
 	}
 
 	// ===========================================================================
@@ -251,34 +204,51 @@ export class MpakSDK {
 			return {};
 		}
 
-		const storedConfig = this.config.getPackageConfig(packageName) ?? {};
+		const storedConfig = this.configManager.getPackageConfig(packageName) ?? {};
 		const result: Record<string, string> = {};
-		const missingRequired: string[] = [];
+		const missingFields: Array<{
+			key: string;
+			title: string;
+			sensitive: boolean;
+		}> = [];
 
-		for (const [key, field] of Object.entries(manifest.user_config)) {
-			const storedValue = storedConfig[key];
+		for (const [fieldName, fieldData] of Object.entries(manifest.user_config)) {
+			const storedValue = storedConfig[fieldName];
 
 			if (storedValue !== undefined) {
-				result[key] = storedValue;
-			} else if (field.default !== undefined) {
-				result[key] = String(field.default);
-			} else if (field.required) {
-				missingRequired.push(field.title ?? key);
+				result[fieldName] = storedValue;
+			} else if (fieldData.default) {
+				result[fieldName] = String(fieldData.default);
+			} else if (fieldData.required) {
+				missingFields.push({
+					key: fieldName,
+					title: fieldData.title ?? fieldName,
+					sensitive: fieldData.sensitive ?? false,
+				});
 			}
 		}
 
-		if (missingRequired.length > 0) {
-			throw new Error(
-				`Missing required config for ${packageName}: ${missingRequired.join(", ")}. ` +
-					`Use config.setPackageConfigValue() to set values.`,
-			);
+		if (missingFields.length > 0) {
+			throw new MpakConfigError(packageName, missingFields);
 		}
 
 		return result;
 	}
 
 	/**
-	 * Resolve the manifest's server definition into a concrete command, args, and env.
+	 * Resolve the manifest's `server` block into a spawnable command, args, and env.
+	 *
+	 * Handles three server types:
+	 * - **binary** — runs the compiled executable at `entry_point`, chmod'd +x.
+	 * - **node** — runs `mcp_config.command` (default `"node"`) with `mcp_config.args`,
+	 *   or falls back to `node <entry_point>` when args are empty.
+	 * - **python** — like node, but resolves `python3`/`python` at runtime and
+	 *   prepends `<cacheDir>/deps` to `PYTHONPATH` for bundled dependencies.
+	 *
+	 * All `${__dirname}` placeholders in args are replaced with `cacheDir`.
+	 * All `${user_config.*}` placeholders in env are replaced with gathered user values.
+	 *
+	 * @throws For unsupported server types.
 	 */
 	private resolveCommand(
 		manifest: McpbManifest,
@@ -288,7 +258,7 @@ export class MpakSDK {
 		const { type, entry_point, mcp_config } = manifest.server;
 
 		// Substitute user_config placeholders in manifest env
-		const env = MpakSDK.substituteEnvVars(mcp_config.env, userConfigValues);
+		const env = Mpak.substituteEnvVars(mcp_config.env, userConfigValues);
 
 		let command: string;
 		let args: string[];
@@ -296,7 +266,7 @@ export class MpakSDK {
 		switch (type) {
 			case "binary": {
 				command = join(cacheDir, entry_point);
-				args = MpakSDK.resolveArgs(mcp_config.args ?? [], cacheDir);
+				args = Mpak.resolveArgs(mcp_config.args ?? [], cacheDir);
 				try {
 					chmodSync(command, 0o755);
 				} catch {
@@ -309,7 +279,7 @@ export class MpakSDK {
 				command = mcp_config.command || "node";
 				args =
 					mcp_config.args.length > 0
-						? MpakSDK.resolveArgs(mcp_config.args, cacheDir)
+						? Mpak.resolveArgs(mcp_config.args, cacheDir)
 						: [join(cacheDir, entry_point)];
 				break;
 			}
@@ -317,11 +287,11 @@ export class MpakSDK {
 			case "python": {
 				command =
 					mcp_config.command === "python"
-						? MpakSDK.findPythonCommand()
-						: mcp_config.command || MpakSDK.findPythonCommand();
+						? Mpak.findPythonCommand()
+						: mcp_config.command || Mpak.findPythonCommand();
 				args =
 					mcp_config.args.length > 0
-						? MpakSDK.resolveArgs(mcp_config.args, cacheDir)
+						? Mpak.resolveArgs(mcp_config.args, cacheDir)
 						: [join(cacheDir, entry_point)];
 
 				// Set PYTHONPATH to deps/ directory
@@ -332,8 +302,13 @@ export class MpakSDK {
 				break;
 			}
 
-			default:
-				throw new Error(`Unsupported server type: ${type as string}`);
+			default: {
+				const _exhaustive: never = type;
+				throw new MpakCacheCorruptedError(
+					`Unsupported server type "${_exhaustive}" in manifest for ${manifest.name}`,
+					cacheDir,
+				);
+			}
 		}
 
 		return { command, args, env };

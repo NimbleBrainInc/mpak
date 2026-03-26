@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import type { z } from "zod";
+import { MpakCacheCorruptedError } from "./errors.js";
 
 /**
  * Maximum allowed uncompressed size for a bundle (500MB).
@@ -38,21 +39,21 @@ export function extractZip(zipPath: string, destDir: string): void {
 		if (totalMatch) {
 			const totalSize = parseInt(totalMatch[1] ?? "0", 10);
 			if (totalSize > MAX_UNCOMPRESSED_SIZE) {
-				throw new Error(
+				throw new MpakCacheCorruptedError(
 					`Bundle uncompressed size (${Math.round(totalSize / 1024 / 1024)}MB) exceeds maximum allowed (${MAX_UNCOMPRESSED_SIZE / (1024 * 1024)}MB)`,
+					zipPath,
 				);
 			}
 		}
 	} catch (error: unknown) {
-		if (
-			error instanceof Error &&
-			error.message.includes("exceeds maximum allowed")
-		) {
+		if (error instanceof MpakCacheCorruptedError) {
 			throw error;
 		}
 		const message = error instanceof Error ? error.message : String(error);
-		throw new Error(
+		throw new MpakCacheCorruptedError(
 			`Cannot verify bundle size before extraction: ${message}`,
+			zipPath,
+			error instanceof Error ? error : undefined,
 		);
 	}
 
@@ -77,20 +78,25 @@ export function readJsonFromFile<T extends z.ZodTypeAny>(
 	schema: T,
 ): z.output<T> {
 	if (!existsSync(filePath)) {
-		throw new Error(`File does not exist: ${filePath}`);
+		throw new MpakCacheCorruptedError(`File does not exist: ${filePath}`, filePath);
 	}
 
 	let raw: unknown;
 	try {
 		raw = JSON.parse(readFileSync(filePath, "utf8"));
 	} catch (err) {
-		throw new Error(`File is not valid JSON: ${filePath}`, { cause: err });
+		throw new MpakCacheCorruptedError(
+			`File is not valid JSON: ${filePath}`,
+			filePath,
+			err instanceof Error ? err : undefined,
+		);
 	}
 
 	const result = schema.safeParse(raw);
 	if (!result.success) {
-		throw new Error(
+		throw new MpakCacheCorruptedError(
 			`File failed validation: ${filePath} — ${result.error.issues[0]?.message ?? "unknown error"}`,
+			filePath,
 		);
 	}
 

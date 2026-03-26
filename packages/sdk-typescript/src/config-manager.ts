@@ -263,7 +263,10 @@ export class MpakConfigManager {
 	 */
 	private saveConfig(): void {
 		if (!this.config) {
-			throw new Error(`saveConfig called before config was loaded`);
+			throw new MpakConfigCorruptedError(
+				`saveConfig called before config was loaded`,
+				this.configFile,
+			);
 		}
 		if (!existsSync(this.mpakHome)) {
 			mkdirSync(this.mpakHome, { recursive: true, mode: 0o700 });

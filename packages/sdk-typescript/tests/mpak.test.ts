@@ -1,13 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MpakSDK } from '../src/MpakSDK.js';
-import { BundleCache } from '../src/cache.js';
+import type { McpbManifest } from '@nimblebrain/mpak-schemas';
+import { Mpak } from '../src/mpakSDK.js';
+import { MpakBundleCache } from '../src/cache.js';
 import { MpakClient } from '../src/client.js';
 import { MpakConfigManager } from '../src/config-manager.js';
+import { MpakCacheCorruptedError, MpakConfigError } from '../src/errors.js';
 
-describe('MpakSDK facade', () => {
+describe('Mpak facade', () => {
   let testDir: string;
 
   beforeEach(() => {
@@ -24,39 +26,39 @@ describe('MpakSDK facade', () => {
 
   describe('construction', () => {
     it('creates all components with defaults', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+      const sdk = new Mpak({ mpakHome: testDir });
 
-      expect(sdk.config).toBeInstanceOf(MpakConfigManager);
+      expect(sdk.configManager).toBeInstanceOf(MpakConfigManager);
       expect(sdk.client).toBeInstanceOf(MpakClient);
-      expect(sdk.cache).toBeInstanceOf(BundleCache);
+      expect(sdk.bundleCache).toBeInstanceOf(MpakBundleCache);
     });
 
     it('components are readonly', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+      const sdk = new Mpak({ mpakHome: testDir });
 
-      const config = sdk.config;
+      const configManager = sdk.configManager;
       const client = sdk.client;
-      const cache = sdk.cache;
+      const bundleCache = sdk.bundleCache;
 
-      expect(sdk.config).toBe(config);
+      expect(sdk.configManager).toBe(configManager);
       expect(sdk.client).toBe(client);
-      expect(sdk.cache).toBe(cache);
+      expect(sdk.bundleCache).toBe(bundleCache);
     });
 
     it('works with no options at all', () => {
-      const noOptsSdk = new MpakSDK();
+      const sdk = new Mpak();
 
-      expect(noOptsSdk.config).toBeInstanceOf(MpakConfigManager);
-      expect(noOptsSdk.client).toBeInstanceOf(MpakClient);
-      expect(noOptsSdk.cache).toBeInstanceOf(BundleCache);
+      expect(sdk.configManager).toBeInstanceOf(MpakConfigManager);
+      expect(sdk.client).toBeInstanceOf(MpakClient);
+      expect(sdk.bundleCache).toBeInstanceOf(MpakBundleCache);
     });
 
     it('does not create mpakHome directory on construction', () => {
       const nestedDir = join(testDir, 'nested', 'deep', '.mpak');
-      const sdk = new MpakSDK({ mpakHome: nestedDir });
+      const sdk = new Mpak({ mpakHome: nestedDir });
 
       expect(existsSync(nestedDir)).toBe(false);
-      expect(sdk.config.mpakHome).toBe(nestedDir);
+      expect(sdk.configManager.mpakHome).toBe(nestedDir);
     });
   });
 
@@ -65,63 +67,42 @@ describe('MpakSDK facade', () => {
   // ===========================================================================
 
   describe('option propagation', () => {
-    it('shares mpakHome between config and cache', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+    it('shares mpakHome between configManager and bundleCache', () => {
+      const sdk = new Mpak({ mpakHome: testDir });
 
-      expect(sdk.config.mpakHome).toBe(testDir);
-      expect(sdk.cache.getPackageCachePath('@scope/pkg')).toBe(
+      expect(sdk.configManager.mpakHome).toBe(testDir);
+      expect(sdk.bundleCache.getBundleCacheDirName('@scope/pkg')).toBe(
         join(testDir, 'cache', 'scope-pkg'),
       );
     });
 
-    it('propagates registryUrl to config and client', () => {
-      const sdk = new MpakSDK({
+    it('propagates registryUrl to configManager', () => {
+      const sdk = new Mpak({
         mpakHome: testDir,
         registryUrl: 'https://custom.registry.dev',
       });
 
-      expect(sdk.config.getRegistryUrl()).toBe('https://custom.registry.dev');
+      expect(sdk.configManager.getRegistryUrl()).toBe('https://custom.registry.dev');
     });
 
     it('uses config registryUrl as source of truth for client', () => {
-      new MpakSDK({
+      new Mpak({
         mpakHome: testDir,
         registryUrl: 'https://custom.registry.dev',
       });
 
-      const sdk2 = new MpakSDK({ mpakHome: testDir });
-      expect(sdk2.config.getRegistryUrl()).toBe('https://custom.registry.dev');
+      const sdk2 = new Mpak({ mpakHome: testDir });
+      expect(sdk2.configManager.getRegistryUrl()).toBe('https://custom.registry.dev');
     });
 
     it('uses default registry URL when not specified', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+      const sdk = new Mpak({ mpakHome: testDir });
 
-      expect(sdk.config.getRegistryUrl()).toBe('https://registry.mpak.dev');
-    });
-
-    it('passes logger to cache', () => {
-      const logs: string[] = [];
-      const logger = (msg: string) => { logs.push(msg); };
-      const sdk = new MpakSDK({ mpakHome: testDir, logger });
-
-      const bundleDir = join(testDir, 'cache', 'scope-pkg');
-      mkdirSync(bundleDir, { recursive: true });
-      writeFileSync(
-        join(bundleDir, '.mpak-meta.json'),
-        JSON.stringify({
-          version: '1.0.0',
-          pulledAt: '2026-03-21T00:00:00.000Z',
-          platform: { os: 'darwin', arch: 'arm64' },
-        }),
-      );
-
-      sdk.cache.listCachedBundles();
-
-      expect(logs.some((l) => l.includes('missing manifest.json'))).toBe(true);
+      expect(sdk.configManager.getRegistryUrl()).toBe('https://registry.mpak.dev');
     });
 
     it('passes timeout and userAgent to client', async () => {
-      const sdk = new MpakSDK({
+      const sdk = new Mpak({
         mpakHome: testDir,
         timeout: 5000,
         userAgent: 'test-agent/1.0',
@@ -150,38 +131,34 @@ describe('MpakSDK facade', () => {
   // ===========================================================================
 
   describe('cross-component integration', () => {
-    it('config and cache share the same mpakHome directory', () => {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+    it('configManager and bundleCache share the same mpakHome directory', () => {
+      const sdk = new Mpak({ mpakHome: testDir });
 
-      sdk.config.setPackageConfigValue('@scope/pkg', 'key', 'value');
+      sdk.configManager.setPackageConfigValue('@scope/pkg', 'key', 'value');
       expect(existsSync(join(testDir, 'config.json'))).toBe(true);
 
-      mkdirSync(sdk.cache.getPackageCachePath('@scope/pkg'), { recursive: true });
-      sdk.cache.writeCacheMetadata('@scope/pkg', {
-        version: '1.0.0',
-        pulledAt: '2026-03-21T00:00:00.000Z',
-        platform: { os: 'darwin', arch: 'arm64' },
-      });
-      expect(existsSync(join(testDir, 'cache', 'scope-pkg', '.mpak-meta.json'))).toBe(true);
+      const cachePath = sdk.bundleCache.getBundleCacheDirName('@scope/pkg');
+      mkdirSync(cachePath, { recursive: true });
+      expect(existsSync(join(testDir, 'cache', 'scope-pkg'))).toBe(true);
     });
 
-    it('two SDK instances with different homes are independent', () => {
+    it('two Mpak instances with different homes are independent', () => {
       const homeA = join(testDir, 'home-a');
       const homeB = join(testDir, 'home-b');
 
-      const sdkA = new MpakSDK({ mpakHome: homeA });
-      const sdkB = new MpakSDK({ mpakHome: homeB });
+      const sdkA = new Mpak({ mpakHome: homeA });
+      const sdkB = new Mpak({ mpakHome: homeB });
 
-      sdkA.config.setPackageConfigValue('@scope/pkg', 'key', 'a-value');
-      sdkB.config.setPackageConfigValue('@scope/pkg', 'key', 'b-value');
+      sdkA.configManager.setPackageConfigValue('@scope/pkg', 'key', 'a-value');
+      sdkB.configManager.setPackageConfigValue('@scope/pkg', 'key', 'b-value');
 
-      expect(sdkA.config.getPackageConfig('@scope/pkg')).toEqual({ key: 'a-value' });
-      expect(sdkB.config.getPackageConfig('@scope/pkg')).toEqual({ key: 'b-value' });
+      expect(sdkA.configManager.getPackageConfig('@scope/pkg')).toEqual({ key: 'a-value' });
+      expect(sdkB.configManager.getPackageConfig('@scope/pkg')).toEqual({ key: 'b-value' });
     });
 
     it('registryUrl override flows through to client requests', async () => {
       const customUrl = 'https://my-registry.example.com';
-      const sdk = new MpakSDK({
+      const sdk = new Mpak({
         mpakHome: testDir,
         registryUrl: customUrl,
       });
@@ -203,7 +180,7 @@ describe('MpakSDK facade', () => {
   });
 
   // ===========================================================================
-  // MpakClient standalone usage (only component usable standalone)
+  // MpakClient standalone usage
   // ===========================================================================
 
   describe('MpakClient standalone', () => {
@@ -233,55 +210,11 @@ describe('MpakSDK facade', () => {
     it('MpakClient can be shared across cache instances', () => {
       const client = new MpakClient({ registryUrl: 'https://shared.registry.dev' });
 
-      const cache1 = new BundleCache({ mpakHome: join(testDir, 'cache1'), client });
-      const cache2 = new BundleCache({ mpakHome: join(testDir, 'cache2'), client });
+      const cache1 = new MpakBundleCache(client, { mpakHome: join(testDir, 'cache1') });
+      const cache2 = new MpakBundleCache(client, { mpakHome: join(testDir, 'cache2') });
 
-      expect(cache1.getPackageCachePath('@scope/pkg')).toContain('cache1');
-      expect(cache2.getPackageCachePath('@scope/pkg')).toContain('cache2');
-    });
-  });
-
-  // ===========================================================================
-  // parsePackageSpec
-  // ===========================================================================
-
-  describe('parsePackageSpec', () => {
-    it('parses @scope/name', () => {
-      expect(MpakSDK.parsePackageSpec('@scope/name')).toEqual({
-        name: '@scope/name',
-      });
-    });
-
-    it('parses @scope/name@1.0.0', () => {
-      expect(MpakSDK.parsePackageSpec('@scope/name@1.0.0')).toEqual({
-        name: '@scope/name',
-        version: '1.0.0',
-      });
-    });
-
-    it('parses @scope/name@latest', () => {
-      expect(MpakSDK.parsePackageSpec('@scope/name@latest')).toEqual({
-        name: '@scope/name',
-        version: 'latest',
-      });
-    });
-
-    it('throws for unscoped name', () => {
-      expect(() => MpakSDK.parsePackageSpec('simple')).toThrow(
-        'Invalid package spec',
-      );
-    });
-
-    it('throws for name without slash', () => {
-      expect(() => MpakSDK.parsePackageSpec('@noslash')).toThrow(
-        'Invalid package spec',
-      );
-    });
-
-    it('throws for empty string', () => {
-      expect(() => MpakSDK.parsePackageSpec('')).toThrow(
-        'Invalid package spec',
-      );
+      expect(cache1.getBundleCacheDirName('@scope/pkg')).toContain('cache1');
+      expect(cache2.getBundleCacheDirName('@scope/pkg')).toContain('cache2');
     });
   });
 
@@ -290,31 +223,32 @@ describe('MpakSDK facade', () => {
   // ===========================================================================
 
   describe('prepareServer', () => {
-    const nodeManifest = {
+    const nodeManifest: McpbManifest = {
       manifest_version: '0.3',
       name: '@scope/echo',
       version: '1.0.0',
       description: 'Echo server',
       server: {
-        type: 'node' as const,
+        type: 'node',
         entry_point: 'index.js',
         mcp_config: {
           command: 'node',
           args: ['${__dirname}/index.js'],
+          env: {},
         },
       },
     };
 
-    function setupSdk(manifest: typeof nodeManifest | null = nodeManifest) {
-      const sdk = new MpakSDK({ mpakHome: testDir });
+    function setupSdk(manifest: McpbManifest | null = nodeManifest) {
+      const sdk = new Mpak({ mpakHome: testDir });
       const cacheDir = join(testDir, 'cache', 'scope-echo');
 
-      vi.spyOn(sdk.cache, 'loadBundle').mockResolvedValue({
+      vi.spyOn(sdk.bundleCache, 'loadBundle').mockResolvedValue({
         cacheDir,
         version: '1.0.0',
         pulled: false,
       });
-      vi.spyOn(sdk.cache, 'readManifest').mockReturnValue(manifest);
+      vi.spyOn(sdk.bundleCache, 'getBundleManifest').mockReturnValue(manifest);
 
       return { sdk, cacheDir };
     }
@@ -332,11 +266,11 @@ describe('MpakSDK facade', () => {
     });
 
     it('resolves a node server with no args (falls back to entry_point)', async () => {
-      const manifest = {
+      const manifest: McpbManifest = {
         ...nodeManifest,
         server: {
           ...nodeManifest.server,
-          mcp_config: { command: 'node', args: [] as string[] },
+          mcp_config: { command: 'node', args: [], env: {} },
         },
       };
       const { sdk, cacheDir } = setupSdk(manifest);
@@ -347,32 +281,30 @@ describe('MpakSDK facade', () => {
     });
 
     it('resolves a python server', async () => {
-      const pythonManifest = {
+      const pythonManifest: McpbManifest = {
         ...nodeManifest,
         server: {
-          type: 'python' as const,
+          type: 'python',
           entry_point: 'main.py',
-          mcp_config: { command: 'python', args: ['${__dirname}/main.py'] },
+          mcp_config: { command: 'python', args: ['${__dirname}/main.py'], env: {} },
         },
       };
       const { sdk, cacheDir } = setupSdk(pythonManifest);
 
       const result = await sdk.prepareServer('@scope/echo');
 
-      // findPythonCommand should resolve 'python' to 'python3' or 'python'
       expect(['python', 'python3']).toContain(result.command);
       expect(result.args).toEqual([`${cacheDir}/main.py`]);
-      // PYTHONPATH should include deps/ directory
       expect(result.env['PYTHONPATH']).toContain(join(cacheDir, 'deps'));
     });
 
     it('resolves a binary server', async () => {
-      const binaryManifest = {
+      const binaryManifest: McpbManifest = {
         ...nodeManifest,
         server: {
-          type: 'binary' as const,
+          type: 'binary',
           entry_point: 'server',
-          mcp_config: { command: 'server', args: ['--port', '3000'] },
+          mcp_config: { command: 'server', args: ['--port', '3000'], env: {} },
         },
       };
       const { sdk, cacheDir } = setupSdk(binaryManifest);
@@ -388,7 +320,7 @@ describe('MpakSDK facade', () => {
 
       await sdk.prepareServer('@scope/echo@2.0.0');
 
-      expect(sdk.cache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
+      expect(sdk.bundleCache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
         version: '2.0.0',
       });
     });
@@ -398,7 +330,7 @@ describe('MpakSDK facade', () => {
 
       await sdk.prepareServer('@scope/echo@2.0.0', { version: '3.0.0' });
 
-      expect(sdk.cache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
+      expect(sdk.bundleCache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
         version: '3.0.0',
       });
     });
@@ -408,16 +340,17 @@ describe('MpakSDK facade', () => {
 
       await sdk.prepareServer('@scope/echo', { force: true });
 
-      expect(sdk.cache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
+      expect(sdk.bundleCache.loadBundle).toHaveBeenCalledWith('@scope/echo', {
         force: true,
       });
     });
 
-    it('throws when manifest is null', async () => {
+    it('throws MpakCacheCorruptedError when manifest is null', async () => {
       const { sdk } = setupSdk(null);
 
+      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(MpakCacheCorruptedError);
       await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(
-        'Manifest missing or corrupt',
+        'Manifest file missing for @scope/echo',
       );
     });
 
@@ -441,8 +374,18 @@ describe('MpakSDK facade', () => {
       );
     });
 
+    it('caller env overrides MPAK_WORKSPACE default', async () => {
+      const { sdk } = setupSdk();
+
+      const result = await sdk.prepareServer('@scope/echo', {
+        env: { MPAK_WORKSPACE: '/caller/wins' },
+      });
+
+      expect(result.env['MPAK_WORKSPACE']).toBe('/caller/wins');
+    });
+
     it('merges caller-provided env on top of manifest env', async () => {
-      const manifestWithEnv = {
+      const manifestWithEnv: McpbManifest = {
         ...nodeManifest,
         server: {
           ...nodeManifest.server,
@@ -464,10 +407,10 @@ describe('MpakSDK facade', () => {
     });
 
     it('substitutes user_config placeholders in manifest env', async () => {
-      const manifestWithConfig = {
+      const manifestWithConfig: McpbManifest = {
         ...nodeManifest,
         user_config: {
-          api_key: { type: 'string' as const, required: true },
+          api_key: { type: 'string', required: true },
         },
         server: {
           ...nodeManifest.server,
@@ -478,7 +421,7 @@ describe('MpakSDK facade', () => {
         },
       };
       const { sdk } = setupSdk(manifestWithConfig);
-      sdk.config.setPackageConfigValue('@scope/echo', 'api_key', 'sk-secret');
+      sdk.configManager.setPackageConfigValue('@scope/echo', 'api_key', 'sk-secret');
 
       const result = await sdk.prepareServer('@scope/echo');
 
@@ -486,10 +429,10 @@ describe('MpakSDK facade', () => {
     });
 
     it('uses default value when user config is not stored', async () => {
-      const manifestWithDefault = {
+      const manifestWithDefault: McpbManifest = {
         ...nodeManifest,
         user_config: {
-          port: { type: 'number' as const, default: 3000 },
+          port: { type: 'number', default: 3000 },
         },
         server: {
           ...nodeManifest.server,
@@ -506,12 +449,12 @@ describe('MpakSDK facade', () => {
       expect(result.env['PORT']).toBe('3000');
     });
 
-    it('throws when required user config is missing', async () => {
-      const manifestWithRequired = {
+    it('throws MpakConfigError when required user config is missing', async () => {
+      const manifestWithRequired: McpbManifest = {
         ...nodeManifest,
         user_config: {
           api_key: {
-            type: 'string' as const,
+            type: 'string',
             title: 'API Key',
             required: true,
           },
@@ -519,25 +462,56 @@ describe('MpakSDK facade', () => {
       };
       const { sdk } = setupSdk(manifestWithRequired);
 
-      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(
-        'Missing required config for @scope/echo: API Key',
-      );
+      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(MpakConfigError);
+      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow('API Key');
     });
 
-    it('throws for unsupported server type', async () => {
-      const badManifest = {
+    it('MpakConfigError contains structured missingFields', async () => {
+      const manifestWithRequired: McpbManifest = {
+        ...nodeManifest,
+        user_config: {
+          api_key: {
+            type: 'string',
+            title: 'API Key',
+            required: true,
+            sensitive: true,
+          },
+          endpoint: {
+            type: 'string',
+            title: 'Endpoint URL',
+            required: true,
+          },
+        },
+      };
+      const { sdk } = setupSdk(manifestWithRequired);
+
+      try {
+        await sdk.prepareServer('@scope/echo');
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+        expect(configErr.packageName).toBe('@scope/echo');
+        expect(configErr.missingFields).toEqual([
+          { key: 'api_key', title: 'API Key', sensitive: true },
+          { key: 'endpoint', title: 'Endpoint URL', sensitive: false },
+        ]);
+      }
+    });
+
+    it('throws MpakCacheCorruptedError for unsupported server type', async () => {
+      const badManifest: McpbManifest = {
         ...nodeManifest,
         server: {
           type: 'ruby' as unknown as 'node',
           entry_point: 'main.rb',
-          mcp_config: { command: 'ruby', args: [] as string[] },
+          mcp_config: { command: 'ruby', args: [], env: {} },
         },
       };
       const { sdk } = setupSdk(badManifest);
 
-      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(
-        'Unsupported server type: ruby',
-      );
+      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow(MpakCacheCorruptedError);
+      await expect(sdk.prepareServer('@scope/echo')).rejects.toThrow('Unsupported server type');
     });
   });
 });

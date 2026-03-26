@@ -5,32 +5,32 @@
  *
  * @example
  * ```typescript
- * import { MpakSDK } from '@nimblebrain/mpak-sdk';
+ * import { Mpak } from '@nimblebrain/mpak-sdk';
  *
- * const mpak = new MpakSDK();
+ * const mpak = new Mpak();
  *
  * // Search for bundles
  * const bundles = await mpak.client.searchBundles({ q: 'mcp' });
  *
  * // Load a bundle into cache
- * const result = await mpak.cache.loadBundle('@scope/name');
+ * const result = await mpak.bundleCache.loadBundle('@scope/name');
  * ```
  */
 
 // Facade — primary entry point
-export { MpakSDK } from './MpakSDK.js';
-export type { MpakSDKOptions, PrepareServerOptions, ServerCommand } from './MpakSDK.js';
+export { Mpak } from './mpakSDK.js';
+export type { MpakOptions, PrepareServerOptions, ServerCommand } from './mpakSDK.js';
 
 // Components (standalone use)
-// MpakConfigManager
 export { MpakConfigManager } from './config-manager.js';
 export type { MpakConfigManagerOptions } from './config-manager.js';
-//
-
-// Types consumers may need
+export { MpakBundleCache } from './cache.js';
+export type { MpakBundleCacheOptions } from './cache.js';
+export { MpakClient } from './client.js';
 export type { MpakClientConfig } from './types.js';
-export type { McpbManifest, UserConfigField, CachedBundleInfo } from '@nimblebrain/mpak-schemas';
-export type { MpakConfig, PackageConfig } from './config-manager.js';
+
+// Utilities
+export { parsePackageSpec } from './utils.js';
 
 // Errors
 export {

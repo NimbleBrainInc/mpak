@@ -10,7 +10,7 @@ import type {
   VersionsResponse,
 } from '@nimblebrain/mpak-schemas';
 import { createHash } from 'node:crypto';
-import { MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
+import { MpakError, MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
 import type { BundleSearchParams, MpakClientConfig, SkillSearchParams } from './types.js';
 
 const DEFAULT_REGISTRY_URL = 'https://registry.mpak.dev';
@@ -383,7 +383,7 @@ export class MpakClient {
    */
   private validateScopedName(name: string): void {
     if (!name.startsWith('@')) {
-      throw new Error('Package name must be scoped (e.g., @scope/package-name)');
+      throw new MpakError('Package name must be scoped (e.g., @scope/package-name)', 'INVALID_SPEC');
     }
   }
 
