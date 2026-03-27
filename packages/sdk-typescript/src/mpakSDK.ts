@@ -287,6 +287,15 @@ export class Mpak {
         break;
       }
 
+      case 'uv': {
+        command = mcp_config.command || 'uv';
+        args =
+          mcp_config.args.length > 0
+            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+            : ['run', join(cacheDir, entry_point)];
+        break;
+      }
+
       default: {
         const _exhaustive: never = type;
         throw new MpakCacheCorruptedError(

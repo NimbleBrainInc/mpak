@@ -13,6 +13,9 @@ export * from "./skill.js";
 // mpak.json schema and utilities
 export * from "./mpak-json.js";
 
+// Versioned manifest schemas
+export * from "./manifest.js";
+
 // Cache metadata
 export * from "./cache.js";
 
