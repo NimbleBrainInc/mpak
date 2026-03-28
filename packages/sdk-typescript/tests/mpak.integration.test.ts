@@ -126,7 +126,7 @@ describe('Mpak facade integration', () => {
   });
 
   it('prepareServer resolves a runnable server command', async () => {
-    const result = await sdk.prepareServer(KNOWN_BUNDLE);
+    const result = await sdk.prepareServer({ name: KNOWN_BUNDLE });
 
     expect(result.name).toBe(KNOWN_BUNDLE);
     expect(result.version).toMatch(/^\d+\.\d+\.\d+$/);
@@ -143,19 +143,19 @@ describe('Mpak facade integration', () => {
   });
 
   it('prepareServer respects workspaceDir option', async () => {
-    const result = await sdk.prepareServer(KNOWN_BUNDLE, {
+    const result = await sdk.prepareServer({ name: KNOWN_BUNDLE }, {
       workspaceDir: '/tmp/custom-workspace',
     });
 
     expect(result.env['MPAK_WORKSPACE']).toBe('/tmp/custom-workspace');
   });
 
-  it('prepareServer with inline version', async () => {
+  it('prepareServer with explicit version', async () => {
     // Get the current cached version to use as a known-good version
     const meta = sdk.bundleCache.getBundleMetadata(KNOWN_BUNDLE);
     const version = meta!.version;
 
-    const result = await sdk.prepareServer(`${KNOWN_BUNDLE}@${version}`);
+    const result = await sdk.prepareServer({ name: KNOWN_BUNDLE, version });
 
     expect(result.name).toBe(KNOWN_BUNDLE);
     expect(result.version).toBe(version);

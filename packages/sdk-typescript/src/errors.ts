@@ -91,6 +91,25 @@ export class MpakCacheCorruptedError extends MpakError {
   }
 }
 
+/**
+ * Thrown when a local `.mcpb` bundle is invalid — e.g. manifest is missing,
+ * contains invalid JSON, or fails schema validation.
+ *
+ * @param message - Human-readable description of what went wrong
+ * @param bundlePath - Absolute path to the `.mcpb` file
+ * @param cause - The underlying error
+ */
+export class MpakInvalidBundleError extends MpakError {
+  constructor(
+    message: string,
+    public readonly bundlePath: string,
+    public override readonly cause?: Error,
+  ) {
+    super(message, 'INVALID_BUNDLE');
+    this.name = 'MpakInvalidBundleError';
+  }
+}
+
 export class MpakConfigError extends MpakError {
   constructor(
     public readonly packageName: string,

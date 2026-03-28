@@ -19,7 +19,7 @@
 
 // Facade — primary entry point
 export { Mpak } from './mpakSDK.js';
-export type { MpakOptions, PrepareServerOptions, ServerCommand } from './mpakSDK.js';
+export type { MpakOptions, PrepareServerSpec, PrepareServerOptions, ServerCommand } from './mpakSDK.js';
 
 // Components (standalone use)
 export { MpakConfigManager } from './config-manager.js';
@@ -41,4 +41,5 @@ export {
   MpakCacheCorruptedError,
   MpakConfigCorruptedError,
   MpakConfigError,
+  MpakInvalidBundleError,
 } from './errors.js';

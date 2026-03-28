@@ -230,12 +230,15 @@ export class MpakBundleCache {
    * The caller can just check `if (result) { console.log("update available: " + result) }`
    * @param packageName - Scoped package name (e.g. `@scope/bundle`)
    */
-  async checkForUpdate(packageName: string): Promise<string | null> {
+  async checkForUpdate(
+    packageName: string,
+    options?: { force?: boolean },
+  ): Promise<string | null> {
     const cachedMeta = this.getBundleMetadata(packageName);
     if (!cachedMeta) return null;
 
-    // Skip if checked within the TTL
-    if (cachedMeta.lastCheckedAt) {
+    // Skip if checked within the TTL (unless force is set)
+    if (!options?.force && cachedMeta.lastCheckedAt) {
       const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
       if (elapsed < UPDATE_CHECK_TTL_MS) return null;
     }

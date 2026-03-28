@@ -1,13 +1,15 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { McpbManifest } from '@nimblebrain/mpak-schemas';
+import { McpbManifestSchema } from '@nimblebrain/mpak-schemas';
 import { MpakBundleCache } from './cache.js';
 import { MpakClient } from './client.js';
 import { MpakConfigManager } from './config-manager.js';
-import { MpakCacheCorruptedError, MpakConfigError } from './errors.js';
+import { MpakCacheCorruptedError, MpakConfigError, MpakInvalidBundleError } from './errors.js';
+import { extractZip, hashBundlePath, localBundleNeedsExtract, readJsonFromFile } from './helpers.js';
 import type { MpakClientConfig } from './types.js';
-import { parsePackageSpec } from './utils.js';
+
 
 /**
  * Options for the {@link Mpak} facade.
@@ -27,12 +29,21 @@ export interface MpakOptions {
 }
 
 /**
+ * Specifies which bundle to prepare.
+ *
+ * - `{ name, version? }` — registry bundle. Omit `version` for "latest".
+ * - `{ local }` — a local `.mcpb` file on disk. The caller is responsible for
+ *   validating that the path exists and has a `.mcpb` extension before calling.
+ */
+export type PrepareServerSpec =
+  | { name: string; version?: string }
+  | { local: string };
+
+/**
  * Options for {@link Mpak.prepareServer}.
  */
 export interface PrepareServerOptions {
-  /** Pin to a specific version. Omit for "latest". */
-  version?: string;
-  /** Skip cache and re-download from registry. */
+  /** Skip cache and re-download/re-extract. */
   force?: boolean;
   /** Extra environment variables merged on top of the manifest env. */
   env?: Record<string, string>;
@@ -117,37 +128,29 @@ export class Mpak {
   }
 
   /**
-   * Prepare a registry bundle for execution.
+   * Prepare a bundle for execution.
    *
-   * Downloads the bundle if not cached, reads its manifest, validates
-   * that all required user config values are present, and resolves the
-   * command, args, and env needed to spawn the MCP server process.
+   * Accepts either a registry spec (`{ name, version? }`) or a local bundle
+   * spec (`{ local }`). Downloads/extracts as needed, reads the manifest,
+   * validates user config, and resolves the command, args, and env needed
+   * to spawn the MCP server process.
    *
-   * @param packageName - Package name with optional version,
-   *   e.g. `@scope/name` or `@scope/name@1.0.0`.
-   * @param options - Version pinning, force re-download, extra env, and workspace dir.
+   * @param spec - Which bundle to prepare. See {@link PrepareServerSpec}.
+   * @param options - Force re-download/re-extract, extra env, and workspace dir.
    *
-   * @throws If required user config values are missing.
-   * @throws If the manifest is missing or corrupt after download.
-   * @throws If the server type is unsupported.
+   * @throws {MpakConfigError} If required user config values are missing.
+   * @throws {MpakCacheCorruptedError} If the manifest is missing or corrupt after download.
    */
-  async prepareServer(packageName: string, options?: PrepareServerOptions): Promise<ServerCommand> {
-    const { name, version: parsedVersion } = parsePackageSpec(packageName);
-    const resolvedVersion = options?.version ?? parsedVersion;
+  async prepareServer(spec: PrepareServerSpec, options?: PrepareServerOptions): Promise<ServerCommand> {
+    let cacheDir: string;
+    let name: string;
+    let version: string;
+    let manifest: McpbManifest;
 
-    // Ensure bundle is cached
-    const loadOptions: { version?: string; force?: boolean } = {};
-    if (resolvedVersion !== undefined) loadOptions.version = resolvedVersion;
-    if (options?.force !== undefined) loadOptions.force = options.force;
-    const loadResult = await this.bundleCache.loadBundle(name, loadOptions);
-
-    // Read manifest
-    const manifest = this.bundleCache.getBundleManifest(name);
-    if (!manifest) {
-      throw new MpakCacheCorruptedError(
-        `Manifest file missing for ${name}`,
-        join(this.bundleCache.cacheHome, name),
-      );
+    if ('local' in spec) {
+      ({ cacheDir, name, version, manifest } = await this.prepareLocalBundle(spec.local, options));
+    } else {
+      ({ cacheDir, name, version, manifest } = await this.prepareRegistryBundle(spec.name, spec.version, options));
     }
 
     // Gather and validate user config
@@ -156,7 +159,7 @@ export class Mpak {
     // Build command/args/env
     const { command, args, env } = this.resolveCommand(
       manifest,
-      loadResult.cacheDir,
+      cacheDir,
       userConfigValues,
     );
 
@@ -168,19 +171,91 @@ export class Mpak {
       Object.assign(env, options.env);
     }
 
-    return {
-      command,
-      args,
-      env,
-      cwd: loadResult.cacheDir,
-      name,
-      version: loadResult.version,
-    };
+    return { command, args, env, cwd: cacheDir, name, version };
   }
 
   // ===========================================================================
   // Private helpers
   // ===========================================================================
+
+  /**
+   * Load a registry bundle into cache and read its manifest.
+   */
+  private async prepareRegistryBundle(
+    packageName: string,
+    version: string | undefined,
+    options?: PrepareServerOptions,
+  ): Promise<{ cacheDir: string; name: string; version: string; manifest: McpbManifest }> {
+    const loadOptions: { version?: string; force?: boolean } = {};
+    if (version !== undefined) loadOptions.version = version;
+    if (options?.force !== undefined) loadOptions.force = options.force;
+    const loadResult = await this.bundleCache.loadBundle(packageName, loadOptions);
+
+    const manifest = this.bundleCache.getBundleManifest(packageName);
+    if (!manifest) {
+      throw new MpakCacheCorruptedError(
+        `Manifest file missing for ${packageName}`,
+        join(this.bundleCache.cacheHome, packageName),
+      );
+    }
+
+    return { cacheDir: loadResult.cacheDir, name: packageName, version: loadResult.version, manifest };
+  }
+
+  /**
+   * Extract a local `.mcpb` bundle (if stale) and read its manifest.
+   * Local bundles are cached under `<cacheHome>/_local/<hash>`.
+   *
+   * The caller is responsible for validating that `bundlePath` exists
+   * and has a `.mcpb` extension before calling this method.
+   */
+  private async prepareLocalBundle(
+    bundlePath: string,
+    options?: PrepareServerOptions,
+  ): Promise<{ cacheDir: string; name: string; version: string; manifest: McpbManifest }> {
+    const absolutePath = resolve(bundlePath);
+    const hash = hashBundlePath(absolutePath);
+    const cacheDir = join(this.bundleCache.cacheHome, '_local', hash);
+
+    const needsExtract = options?.force || localBundleNeedsExtract(absolutePath, cacheDir);
+
+    if (needsExtract) {
+      if (existsSync(cacheDir)) {
+        rmSync(cacheDir, { recursive: true, force: true });
+      }
+
+      try {
+        extractZip(absolutePath, cacheDir);
+      } catch (err) {
+        throw new MpakInvalidBundleError(
+          err instanceof Error ? err.message : String(err),
+          absolutePath,
+          err instanceof Error ? err : undefined,
+        );
+      }
+
+      writeFileSync(
+        join(cacheDir, '.mpak-local-meta.json'),
+        JSON.stringify({
+          localPath: absolutePath,
+          extractedAt: new Date().toISOString(),
+        }),
+      );
+    }
+
+    let manifest: McpbManifest;
+    try {
+      manifest = readJsonFromFile(join(cacheDir, 'manifest.json'), McpbManifestSchema);
+    } catch (err) {
+      throw new MpakInvalidBundleError(
+        err instanceof Error ? err.message : String(err),
+        absolutePath,
+        err instanceof Error ? err : undefined,
+      );
+    }
+
+    return { cacheDir, name: manifest.name, version: manifest.version, manifest };
+  }
 
   /**
    * Gather stored user config values and validate that all required fields are present.
