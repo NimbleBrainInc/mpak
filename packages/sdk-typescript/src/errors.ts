@@ -113,7 +113,7 @@ export class MpakInvalidBundleError extends MpakError {
 export class MpakConfigError extends MpakError {
   constructor(
     public readonly packageName: string,
-    public readonly missingFields: Array<{ key: string; title: string; sensitive: boolean }>,
+    public readonly missingFields: Array<{ key: string; title: string; description?: string; sensitive: boolean }>,
   ) {
     const fieldNames = missingFields.map((f) => f.title).join(', ');
     super(`Missing required config for ${packageName}: ${fieldNames}`, 'CONFIG_MISSING');

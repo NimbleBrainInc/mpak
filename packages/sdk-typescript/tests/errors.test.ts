@@ -4,6 +4,7 @@ import {
   MpakNotFoundError,
   MpakIntegrityError,
   MpakNetworkError,
+  MpakConfigError,
 } from '../src/errors.js';
 
 describe('MpakError', () => {
@@ -119,6 +120,47 @@ describe('MpakNetworkError', () => {
     expect(networkError).toBeInstanceOf(MpakNetworkError);
     expect(networkError).not.toBeInstanceOf(MpakNotFoundError);
     expect(notFoundError).not.toBeInstanceOf(MpakNetworkError);
+  });
+});
+
+describe('MpakConfigError', () => {
+  it('uses CONFIG_MISSING code', () => {
+    const error = new MpakConfigError('@scope/pkg', [
+      { key: 'api_key', title: 'API Key', sensitive: true },
+    ]);
+    expect(error.code).toBe('CONFIG_MISSING');
+  });
+
+  it('formats missing field titles in message', () => {
+    const error = new MpakConfigError('@scope/pkg', [
+      { key: 'api_key', title: 'API Key', sensitive: true },
+      { key: 'endpoint', title: 'Endpoint URL', sensitive: false },
+    ]);
+    expect(error.message).toContain('@scope/pkg');
+    expect(error.message).toContain('API Key');
+    expect(error.message).toContain('Endpoint URL');
+  });
+
+  it('stores packageName', () => {
+    const error = new MpakConfigError('@scope/pkg', []);
+    expect(error.packageName).toBe('@scope/pkg');
+  });
+
+  it('stores missingFields with description', () => {
+    const fields = [
+      { key: 'api_key', title: 'API Key', description: 'Your API key', sensitive: true },
+      { key: 'port', title: 'Port', sensitive: false },
+    ];
+    const error = new MpakConfigError('@scope/pkg', fields);
+    expect(error.missingFields).toEqual(fields);
+    expect(error.missingFields[0].description).toBe('Your API key');
+    expect(error.missingFields[1].description).toBeUndefined();
+  });
+
+  it('can be caught as MpakError', () => {
+    const error = new MpakConfigError('@scope/pkg', []);
+    expect(error).toBeInstanceOf(MpakError);
+    expect(error).toBeInstanceOf(Error);
   });
 });
 

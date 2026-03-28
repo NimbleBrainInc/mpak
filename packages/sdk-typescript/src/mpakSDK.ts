@@ -271,6 +271,7 @@ export class Mpak {
     const missingFields: Array<{
       key: string;
       title: string;
+      description?: string;
       sensitive: boolean;
     }> = [];
 
@@ -282,11 +283,15 @@ export class Mpak {
       } else if (fieldData.default) {
         result[fieldName] = String(fieldData.default);
       } else if (fieldData.required) {
-        missingFields.push({
+        const field: (typeof missingFields)[number] = {
           key: fieldName,
           title: fieldData.title ?? fieldName,
           sensitive: fieldData.sensitive ?? false,
-        });
+        };
+        if (fieldData.description !== undefined) {
+          field.description = fieldData.description;
+        }
+        missingFields.push(field);
       }
     }
 

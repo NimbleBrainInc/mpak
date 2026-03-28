@@ -497,6 +497,63 @@ describe('Mpak facade', () => {
       }
     });
 
+    it('MpakConfigError includes description when present in user_config', async () => {
+      const manifestWithDescriptions: McpbManifest = {
+        ...nodeManifest,
+        user_config: {
+          api_key: {
+            type: 'string',
+            title: 'API Key',
+            description: 'Your OpenAI API key',
+            required: true,
+            sensitive: true,
+          },
+          endpoint: {
+            type: 'string',
+            title: 'Endpoint URL',
+            description: 'The API base URL',
+            required: true,
+          },
+        },
+      };
+      const { sdk } = setupSdk(manifestWithDescriptions);
+
+      try {
+        await sdk.prepareServer({ name: '@scope/echo' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+        expect(configErr.missingFields).toEqual([
+          { key: 'api_key', title: 'API Key', description: 'Your OpenAI API key', sensitive: true },
+          { key: 'endpoint', title: 'Endpoint URL', description: 'The API base URL', sensitive: false },
+        ]);
+      }
+    });
+
+    it('MpakConfigError leaves description undefined when not in user_config', async () => {
+      const manifestNoDesc: McpbManifest = {
+        ...nodeManifest,
+        user_config: {
+          token: {
+            type: 'string',
+            title: 'Token',
+            required: true,
+          },
+        },
+      };
+      const { sdk } = setupSdk(manifestNoDesc);
+
+      try {
+        await sdk.prepareServer({ name: '@scope/echo' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+        expect(configErr.missingFields[0].description).toBeUndefined();
+      }
+    });
+
     it('throws MpakCacheCorruptedError for unsupported server type', async () => {
       const badManifest: McpbManifest = {
         ...nodeManifest,
