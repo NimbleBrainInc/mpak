@@ -25,7 +25,7 @@ import type { CacheMetadata } from "../../utils/cache.js";
 import { ConfigManager } from "../../utils/config-manager.js";
 
 export interface RunOptions {
-  update?: boolean;
+  noCache?: boolean;
   local?: string; // Path to local .mcpb file
 }
 
@@ -367,7 +367,7 @@ export async function handleRun(
 
     cacheDir = getLocalCacheDir(bundlePath);
     const needsExtract =
-      options.update ||
+      options.noCache ||
       localBundleNeedsExtract(bundlePath, cacheDir);
 
     if (needsExtract) {
@@ -407,12 +407,12 @@ export async function handleRun(
     cachedMeta = getCacheMetadata(cacheDir);
 
     // Check if we have a cached version
-    if (cachedMeta && !options.update) {
+    if (cachedMeta && !options.noCache) {
       if (requestedVersion) {
         // Specific version requested - check if cached version matches
         needsPull = !isSemverEqual(cachedMeta.version, requestedVersion);
       } else {
-        // Latest requested - use cache (user can --update to refresh)
+        // Latest requested - use cache (user can --no-cache to refresh)
         needsPull = false;
       }
     }
@@ -424,7 +424,7 @@ export async function handleRun(
       if (
         cachedMeta &&
         isSemverEqual(cachedMeta.version, downloadInfo.bundle.version) &&
-        !options.update
+        !options.noCache
       ) {
         needsPull = false;
       }

@@ -64,9 +64,10 @@ export function createProgram(): Command {
   program
     .command("run [package]")
     .description('Run an MCP server (alias for "bundle run")')
-    .option("--update", "Force re-download even if cached")
+    .option("--no-cache", "Always re-extract, skip cache")
     .option("-l, --local <path>", "Run a local .mcpb bundle file")
     .action(async (packageSpec, options) => {
+      options.noCache = options.cache === false;
       await handleRun(packageSpec || "", options);
     });
 
@@ -130,9 +131,10 @@ export function createProgram(): Command {
   bundle
     .command("run [package]")
     .description("Run an MCP server from the registry")
-    .option("--update", "Force re-download even if cached")
+    .option("--no-cache", "Always re-extract, skip cache")
     .option("-l, --local <path>", "Run a local .mcpb bundle file")
     .action(async (packageSpec, options) => {
+      options.noCache = options.cache === false;
       await handleRun(packageSpec || "", options);
     });
 
