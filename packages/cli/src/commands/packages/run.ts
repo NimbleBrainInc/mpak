@@ -524,6 +524,15 @@ export async function handleRun(
   // Defaults to $CWD/.mpak — user can override via MPAK_WORKSPACE in their environment.
   env["MPAK_WORKSPACE"] = resolveWorkspace(env["MPAK_WORKSPACE"], process.cwd());
 
+  // If the bundle is an Upjack app, set UPJACK_ROOT so entity data persists
+  // outside the bundle cache.
+  const manifestAny = manifest as unknown as Record<string, unknown>;
+  const upjackMeta = manifestAny["_meta"] as Record<string, unknown> | undefined;
+  const upjackExt = upjackMeta?.["ai.nimblebrain/upjack"] as Record<string, unknown> | undefined;
+  if (upjackExt?.["namespace"]) {
+    env["UPJACK_ROOT"] = env["MPAK_WORKSPACE"]!;
+  }
+
   // Spawn with stdio passthrough for MCP
   const child = spawn(command, args, {
     stdio: ["inherit", "inherit", "inherit"],
