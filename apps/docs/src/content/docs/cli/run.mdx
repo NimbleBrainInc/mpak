@@ -81,6 +81,18 @@ workspace = os.environ.get("MPAK_WORKSPACE", ".")
 const workspace = process.env.MPAK_WORKSPACE ?? ".";
 ```
 
+### Manifest Placeholders
+
+Bundles can also reference runtime values in `mcp_config.env` using `${mpak.*}` placeholders. These are resolved before the bundle is spawned:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `${mpak.workspace}` | Same as `MPAK_WORKSPACE` |
+| `${mpak.cache_dir}` | Bundle's cache/extraction directory |
+| `${mpak.bundle_name}` | Bundle name (e.g., `@scope/name`) |
+
+See the [Manifest Reference](/bundles/manifest#runtime-variables) for usage examples.
+
 ## Configuration
 
 Some bundles require configuration (API keys, etc.). See [mpak config](/cli/config) for storing configuration values.

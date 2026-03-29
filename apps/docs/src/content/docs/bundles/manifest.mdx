@@ -140,13 +140,28 @@ Use `${__dirname}` to reference the bundle's extraction directory:
 }
 ```
 
-### Runtime Environment Variables
+### Runtime Variables
 
-`mpak run` automatically sets environment variables that bundles can use at runtime:
+Use `${mpak.*}` placeholders in `mcp_config.env` to reference mpak runtime values. These are resolved before the bundle is spawned:
 
-| Variable | Description |
-|----------|-------------|
-| `MPAK_WORKSPACE` | Project-local directory for persistent data (defaults to `$CWD/.mpak`). Use this instead of relative paths for any data that should survive across restarts. |
+| Placeholder | Description |
+|-------------|-------------|
+| `${mpak.workspace}` | Project-local workspace directory (defaults to `$CWD/.mpak`) |
+| `${mpak.cache_dir}` | Bundle's cache/extraction directory |
+| `${mpak.bundle_name}` | Bundle name (e.g., `@scope/name`) |
+
+```json
+{
+  "mcp_config": {
+    "env": {
+      "DATA_ROOT": "${mpak.workspace}",
+      "CACHE_PATH": "${mpak.cache_dir}/state"
+    }
+  }
+}
+```
+
+`mpak run` also sets `MPAK_WORKSPACE` in the child environment automatically. Bundles can read it directly at runtime if they don't use `mcp_config.env`:
 
 ```python
 import os

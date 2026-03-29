@@ -118,6 +118,23 @@ export function resolveWorkspace(
 }
 
 /**
+ * Substitute ${mpak.*} runtime variable placeholders in a string.
+ * Available variables: workspace, cache_dir, bundle_name
+ * @example substituteMpakVars('${mpak.workspace}/data', { workspace: '/home/.mpak' }) => '/home/.mpak/data'
+ */
+export function substituteMpakVars(
+  value: string,
+  vars: Record<string, string>,
+): string {
+  return value.replace(
+    /\$\{mpak\.([^}]+)\}/g,
+    (match, key: string) => {
+      return vars[key] ?? match;
+    },
+  );
+}
+
+/**
  * Substitute ${user_config.*} placeholders in a string
  * @example substituteUserConfig('${user_config.api_key}', { api_key: 'secret' }) => 'secret'
  */
@@ -134,16 +151,21 @@ export function substituteUserConfig(
 }
 
 /**
- * Substitute ${user_config.*} placeholders in env vars
+ * Substitute ${user_config.*} and ${mpak.*} placeholders in env vars
  */
 export function substituteEnvVars(
   env: Record<string, string> | undefined,
   userConfigValues: Record<string, string>,
+  mpakVars?: Record<string, string>,
 ): Record<string, string> {
   if (!env) return {};
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    result[key] = substituteUserConfig(value, userConfigValues);
+    let substituted = substituteUserConfig(value, userConfigValues);
+    if (mpakVars) {
+      substituted = substituteMpakVars(substituted, mpakVars);
+    }
+    result[key] = substituted;
   }
   return result;
 }
@@ -453,11 +475,22 @@ export async function handleRun(
     );
   }
 
-  // Substitute user_config placeholders in env vars
+  // Resolve workspace early so bundles can reference it via ${mpak.workspace}
+  const workspace = resolveWorkspace(process.env["MPAK_WORKSPACE"], process.cwd());
+
+  // Runtime variables available to mcp_config.env via ${mpak.*}
+  const mpakVars: Record<string, string> = {
+    workspace,
+    cache_dir: cacheDir,
+    bundle_name: packageName,
+  };
+
+  // Substitute user_config and mpak placeholders in env vars
   // Priority: process.env (from parent like Claude Desktop) > substituted values (from mpak config)
   const substitutedEnv = substituteEnvVars(
     mcp_config.env,
     userConfigValues,
+    mpakVars,
   );
 
   let command: string;
@@ -520,9 +553,8 @@ export async function handleRun(
       throw new Error(`Unsupported server type: ${type as string}`);
   }
 
-  // Provide a project-local workspace directory for stateful bundles.
-  // Defaults to $CWD/.mpak — user can override via MPAK_WORKSPACE in their environment.
-  env["MPAK_WORKSPACE"] = resolveWorkspace(env["MPAK_WORKSPACE"], process.cwd());
+  // Ensure MPAK_WORKSPACE is always available in the child environment
+  env["MPAK_WORKSPACE"] = workspace;
 
   // Spawn with stdio passthrough for MCP
   const child = spawn(command, args, {
