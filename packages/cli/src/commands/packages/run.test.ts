@@ -6,6 +6,7 @@ import {
   resolveArgs,
   resolveWorkspace,
   substituteUserConfig,
+  substituteMpakVars,
   substituteEnvVars,
   getLocalCacheDir,
   localBundleNeedsExtract,
@@ -261,6 +262,46 @@ describe("substituteEnvVars", () => {
       DEBUG: "true",
     });
   });
+
+  it("substitutes mpak runtime vars when provided", () => {
+    const env = {
+      DATA_DIR: "${mpak.workspace}/data",
+      CACHE: "${mpak.cache_dir}",
+      NAME: "${mpak.bundle_name}",
+    };
+    const mpakVars = {
+      workspace: "/home/.mpak",
+      cache_dir: "/home/.mpak/cache/test",
+      bundle_name: "@scope/test",
+    };
+    expect(substituteEnvVars(env, {}, mpakVars)).toEqual({
+      DATA_DIR: "/home/.mpak/data",
+      CACHE: "/home/.mpak/cache/test",
+      NAME: "@scope/test",
+    });
+  });
+
+  it("substitutes both user_config and mpak vars in the same value", () => {
+    const env = {
+      DSN: "${user_config.db_host}:${mpak.workspace}/db",
+    };
+    expect(
+      substituteEnvVars(
+        env,
+        { db_host: "localhost" },
+        { workspace: "/data" },
+      ),
+    ).toEqual({
+      DSN: "localhost:/data/db",
+    });
+  });
+
+  it("leaves unmatched mpak vars intact", () => {
+    const env = { X: "${mpak.unknown}" };
+    expect(substituteEnvVars(env, {}, { workspace: "/w" })).toEqual({
+      X: "${mpak.unknown}",
+    });
+  });
 });
 
 describe("getLocalCacheDir", () => {
@@ -331,5 +372,40 @@ describe("resolveWorkspace", () => {
     expect(resolveWorkspace("", "/home/user/project")).toBe(
       join("/home/user/project", ".mpak"),
     );
+  });
+});
+
+describe("substituteMpakVars", () => {
+  it("replaces ${mpak.workspace}", () => {
+    expect(
+      substituteMpakVars("${mpak.workspace}/data", { workspace: "/home/.mpak" }),
+    ).toBe("/home/.mpak/data");
+  });
+
+  it("replaces multiple mpak vars in one string", () => {
+    expect(
+      substituteMpakVars("${mpak.workspace}/${mpak.bundle_name}", {
+        workspace: "/w",
+        bundle_name: "@scope/test",
+      }),
+    ).toBe("/w/@scope/test");
+  });
+
+  it("leaves unmatched mpak vars intact", () => {
+    expect(
+      substituteMpakVars("${mpak.missing}/path", { workspace: "/w" }),
+    ).toBe("${mpak.missing}/path");
+  });
+
+  it("leaves non-mpak placeholders untouched", () => {
+    expect(
+      substituteMpakVars("${user_config.key}", { workspace: "/w" }),
+    ).toBe("${user_config.key}");
+  });
+
+  it("handles string with no placeholders", () => {
+    expect(
+      substituteMpakVars("plain-value", { workspace: "/w" }),
+    ).toBe("plain-value");
   });
 });
