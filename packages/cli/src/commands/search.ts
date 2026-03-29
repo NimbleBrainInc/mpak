@@ -1,5 +1,5 @@
 import { table, certLabel, truncate, fmtError } from "../utils/format.js";
-import { createClient } from "../utils/client.js";
+import { mpak } from "../utils/config.js";
 
 export interface UnifiedSearchOptions {
   type?: "bundle" | "skill";
@@ -33,7 +33,7 @@ export async function handleUnifiedSearch(
   options: UnifiedSearchOptions = {},
 ): Promise<void> {
   try {
-    const client = createClient();
+    const client = mpak.client;
     const results: UnifiedResult[] = [];
     let bundleTotal = 0;
     let skillTotal = 0;

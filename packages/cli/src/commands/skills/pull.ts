@@ -1,7 +1,7 @@
 import { writeFileSync } from "fs";
 import { basename, join } from "path";
 import { formatSize, fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 /**
  * Parse skill spec into name and version
@@ -47,7 +47,7 @@ export async function handleSkillPull(
     const { name, version } = parseSkillSpec(skillSpec);
 
     // Get download info
-    const client = createClient();
+    const client = mpak.client;
     const downloadInfo = version
       ? await client.getSkillVersionDownload(name, version)
       : await client.getSkillDownload(name);

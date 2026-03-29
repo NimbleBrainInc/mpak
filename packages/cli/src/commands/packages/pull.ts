@@ -2,7 +2,7 @@ import { writeFileSync } from "fs";
 import { resolve } from "path";
 import { MpakClient } from "@nimblebrain/mpak-sdk";
 import { fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 export interface PullOptions {
   output?: string;
@@ -49,7 +49,7 @@ export async function handlePull(
   try {
     const { name, version } = parsePackageSpec(packageSpec);
 
-    const client = createClient();
+    const client = mpak.client;
 
     // Detect platform (or use explicit overrides)
     const detectedPlatform = MpakClient.detectPlatform();

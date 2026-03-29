@@ -1,5 +1,5 @@
 import { fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 export interface ShowOptions {
   json?: boolean;
@@ -20,7 +20,7 @@ export async function handleShow(
   options: ShowOptions = {},
 ): Promise<void> {
   try {
-    const client = createClient();
+    const client = mpak.client;
 
     // Fetch bundle details and versions in parallel
     const [bundle, versionsInfo] = await Promise.all([

@@ -1,5 +1,5 @@
 import { fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 export interface ShowOptions {
   json?: boolean;
@@ -13,7 +13,7 @@ export async function handleSkillShow(
   options: ShowOptions,
 ): Promise<void> {
   try {
-    const client = createClient();
+    const client = mpak.client;
     const skill = await client.getSkill(name);
 
     if (options.json) {

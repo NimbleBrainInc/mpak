@@ -3,7 +3,7 @@ import { join, basename } from "path";
 import { homedir, tmpdir } from "os";
 import { execFileSync } from "child_process";
 import { formatSize, fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 /**
  * Get the Claude Code skills directory
@@ -58,7 +58,7 @@ export async function handleSkillInstall(
     const { name, version } = parseSkillSpec(skillSpec);
 
     // Get download info
-    const client = createClient();
+    const client = mpak.client;
     const downloadInfo = version
       ? await client.getSkillVersionDownload(name, version)
       : await client.getSkillDownload(name);

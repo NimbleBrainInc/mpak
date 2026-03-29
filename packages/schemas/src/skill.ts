@@ -212,6 +212,8 @@ export type SkillArtifact = z.infer<typeof SkillArtifactSchema>;
 export type SkillAnnounceRequest = z.infer<typeof SkillAnnounceRequestSchema>;
 export type SkillAnnounceResponse = z.infer<typeof SkillAnnounceResponseSchema>;
 export type SkillSearchParams = z.infer<typeof SkillSearchParamsSchema>;
+/** Input type — all fields optional (before defaults are applied). */
+export type SkillSearchParamsInput = z.input<typeof SkillSearchParamsSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
 export type SkillSearchResponse = z.infer<typeof SkillSearchResponseSchema>;
 export type SkillDetail = z.infer<typeof SkillDetailSchema>;

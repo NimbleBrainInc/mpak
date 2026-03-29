@@ -1,5 +1,5 @@
 import { table, truncate, fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 
 export interface SearchOptions {
   tags?: string;
@@ -18,7 +18,7 @@ export async function handleSkillSearch(
   options: SearchOptions,
 ): Promise<void> {
   try {
-    const client = createClient();
+    const client = mpak.client;
     const params: Record<string, unknown> = { q: query };
     if (options.tags) params["tags"] = options.tags;
     if (options.category) params["category"] = options.category;

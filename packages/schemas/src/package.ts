@@ -67,4 +67,6 @@ export type Platform = z.infer<typeof PlatformSchema>;
 export type PackageSort = z.infer<typeof PackageSortSchema>;
 export type PackageSearchParams = z.infer<typeof PackageSearchParamsSchema>;
 export type BundleSearchParams = z.infer<typeof BundleSearchParamsSchema>;
+/** Input type — all fields optional (before defaults are applied). */
+export type BundleSearchParamsInput = z.input<typeof BundleSearchParamsSchema>;
 export type BundleDownloadParams = z.infer<typeof BundleDownloadParamsSchema>;
