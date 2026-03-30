@@ -1,71 +1,62 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { getOutdatedBundles } from "../../src/commands/packages/outdated.js";
-import { handleUpdate } from "../../src/commands/packages/update.js";
-import {
-  getCacheDir,
-  getCacheMetadata,
-  downloadAndExtract,
-  resolveBundle,
-} from "../../src/utils/cache.js";
-import { createClient } from "../../src/utils/client.js";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { mpak } from "../../src/utils/config.js";
+import { run } from "./helpers.js";
 
 /**
- * Integration test for the outdated → update flow.
+ * Integration test for the outdated → update command flow.
  *
- * Uses the live registry with @nimblebraininc/echo as a fixture.
- * Downgrades cached metadata to simulate an outdated bundle, then
- * verifies that outdated detection and update work end-to-end.
+ * Setup uses mpak.bundleCache directly to seed and manipulate the local cache.
+ * Assertions run the actual CLI commands as subprocesses.
  *
  * Run with: pnpm test -- tests/integration
  */
-describe("Update Flow Integration", () => {
-  const testBundle = "@nimblebraininc/echo";
+
+const TEST_BUNDLE = "@nimblebraininc/echo";
+
+describe("outdated + update flow", () => {
   let originalMeta: string | null = null;
   let metaPath: string;
 
   afterEach(() => {
-    // Restore original metadata if we modified it
     if (originalMeta && metaPath) {
       writeFileSync(metaPath, originalMeta);
     }
+    originalMeta = null;
   });
 
-  it("should detect outdated bundle and update it", async () => {
-    const client = createClient();
+  it("detects an outdated bundle and updates it to latest", async () => {
+    // 1. Seed the cache via SDK (setup, not what we're testing)
+    await mpak.bundleCache.loadBundle(TEST_BUNDLE);
 
-    // 1. Ensure bundle is cached (pull latest if not already cached)
-    const cacheDir = getCacheDir(testBundle);
-    let meta = getCacheMetadata(cacheDir);
-    if (!meta) {
-      const downloadInfo = await resolveBundle(testBundle, client);
-      await downloadAndExtract(testBundle, downloadInfo);
-      meta = getCacheMetadata(cacheDir)!;
-    }
+    // 2. Save real metadata for restoration
+    const meta = mpak.bundleCache.getBundleMetadata(TEST_BUNDLE);
+    expect(meta).not.toBeNull();
+    if (!meta) return;
 
-    // 2. Save original metadata for cleanup
+    const cacheDir = mpak.bundleCache.getBundleCacheDirName(TEST_BUNDLE);
     metaPath = join(cacheDir, ".mpak-meta.json");
     originalMeta = readFileSync(metaPath, "utf8");
     const realVersion = meta.version;
 
-    // 3. Downgrade version in metadata
-    const downgraded = { ...meta, version: "0.0.1" };
-    writeFileSync(metaPath, JSON.stringify(downgraded));
+    // 3. Downgrade version to simulate a stale cache entry
+    writeFileSync(metaPath, JSON.stringify({ ...meta, version: "0.0.1" }));
 
-    // 4. Verify outdated detects it
-    const outdated = await getOutdatedBundles();
-    const entry = outdated.find((e) => e.name === testBundle);
+    // 4. `mpak outdated --json` should detect the entry
+    const outdatedRun = await run("outdated --json");
+    expect(outdatedRun.exitCode).toBe(0);
+    const outdated = JSON.parse(outdatedRun.stdout);
+    const entry = outdated.find((e: { name: string }) => e.name === TEST_BUNDLE);
     expect(entry).toBeDefined();
-    expect(entry!.current).toBe("0.0.1");
-    expect(entry!.latest).toBe(realVersion);
+    expect(entry.current).toBe("0.0.1");
+    expect(entry.latest).toBe(realVersion);
 
-    // 5. Run update
-    await handleUpdate(testBundle);
-
-    // 6. Verify no longer outdated
-    const afterUpdate = await getOutdatedBundles();
-    const stillOutdated = afterUpdate.find((e) => e.name === testBundle);
-    expect(stillOutdated).toBeUndefined();
-  }, 30000);
+    // 5. `mpak update @nimblebraininc/echo --json` should bring it current
+    const updateRun = await run(`update ${TEST_BUNDLE} --json`);
+    expect(updateRun.exitCode).toBe(0);
+    const updated = JSON.parse(updateRun.stdout);
+    expect(updated.name).toBe(TEST_BUNDLE);
+    expect(updated.version).toBe(realVersion);
+  }, 60000);
 });
