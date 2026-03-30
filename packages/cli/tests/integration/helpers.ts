@@ -1,11 +1,11 @@
-import { exec } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { exec } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
 /** Absolute path to the built CLI entry point. */
-export const CLI = fileURLToPath(new URL("../../dist/index.js", import.meta.url));
+export const CLI = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 
 export interface RunResult {
   stdout: string;
@@ -24,8 +24,8 @@ export async function run(args: string): Promise<RunResult> {
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number };
     return {
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? "",
+      stdout: e.stdout ?? '',
+      stderr: e.stderr ?? '',
       exitCode: e.code ?? 1,
     };
   }

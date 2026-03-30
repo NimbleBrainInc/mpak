@@ -1,16 +1,16 @@
-import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { homedir, tmpdir } from "node:os";
-import { execFileSync } from "node:child_process";
-import { parsePackageSpec } from "@nimblebrain/mpak-sdk";
-import { mpak } from "../../utils/config.js";
-import { formatSize, logger } from "../../utils/format.js";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { parsePackageSpec } from '@nimblebrain/mpak-sdk';
+import { mpak } from '../../utils/config.js';
+import { formatSize, logger } from '../../utils/format.js';
 
 /**
  * Get the Claude Code skills directory
  */
 function getSkillsDir(): string {
-  return join(homedir(), ".claude", "skills");
+  return join(homedir(), '.claude', 'skills');
 }
 
 /**
@@ -18,7 +18,7 @@ function getSkillsDir(): string {
  * @scope/skill-name -> skill-name
  */
 function getShortName(scopedName: string): string {
-  const parts = scopedName.replace("@", "").split("/");
+  const parts = scopedName.replace('@', '').split('/');
   return parts[parts.length - 1]!;
 }
 
@@ -37,14 +37,9 @@ export async function handleSkillInstall(
   try {
     const { name, version } = parsePackageSpec(skillSpec);
 
-    logger.info(
-      `=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`,
-    );
+    logger.info(`=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`);
 
-    const { data, metadata } = await mpak.client.downloadSkillBundle(
-      name,
-      version,
-    );
+    const { data, metadata } = await mpak.client.downloadSkillBundle(name, version);
 
     const shortName = getShortName(metadata.name);
     const skillsDir = getSkillsDir();
@@ -52,10 +47,8 @@ export async function handleSkillInstall(
 
     // Check if already installed
     if (existsSync(installPath) && !options.force) {
-      logger.error(
-        `Skill "${shortName}" is already installed at ${installPath}`,
-      );
-      logger.error("Use --force to overwrite");
+      logger.error(`Skill "${shortName}" is already installed at ${installPath}`);
+      logger.error('Use --force to overwrite');
       process.exit(1);
     }
 
@@ -76,8 +69,8 @@ export async function handleSkillInstall(
 
     // Extract using unzip
     try {
-      execFileSync("unzip", ["-o", tempPath, "-d", skillsDir], {
-        stdio: "pipe",
+      execFileSync('unzip', ['-o', tempPath, '-d', skillsDir], {
+        stdio: 'pipe',
       });
     } catch (err) {
       throw new Error(`Failed to extract skill bundle: ${err}`);
@@ -102,14 +95,10 @@ export async function handleSkillInstall(
     } else {
       logger.info(`\n=> Installed to ${installPath}/`);
       logger.info(`   \u2713 ${shortName}@${metadata.version}`);
-      logger.info("");
-      logger.info(
-        "Skill available in Claude Code. Restart to activate.",
-      );
+      logger.info('');
+      logger.info('Skill available in Claude Code. Restart to activate.');
     }
   } catch (err) {
-    logger.error(
-      err instanceof Error ? err.message : "Failed to install skill",
-    );
+    logger.error(err instanceof Error ? err.message : 'Failed to install skill');
   }
 }

@@ -7,9 +7,13 @@ import { MpakBundleCache } from './cache.js';
 import { MpakClient } from './client.js';
 import { MpakConfigManager } from './config-manager.js';
 import { MpakCacheCorruptedError, MpakConfigError, MpakInvalidBundleError } from './errors.js';
-import { extractZip, hashBundlePath, localBundleNeedsExtract, readJsonFromFile } from './helpers.js';
+import {
+  extractZip,
+  hashBundlePath,
+  localBundleNeedsExtract,
+  readJsonFromFile,
+} from './helpers.js';
 import type { MpakClientConfig } from './types.js';
-
 
 /**
  * Options for the {@link Mpak} facade.
@@ -35,9 +39,7 @@ export interface MpakOptions {
  * - `{ local }` — a local `.mcpb` file on disk. The caller is responsible for
  *   validating that the path exists and has a `.mcpb` extension before calling.
  */
-export type PrepareServerSpec =
-  | { name: string; version?: string }
-  | { local: string };
+export type PrepareServerSpec = { name: string; version?: string } | { local: string };
 
 /**
  * Options for {@link Mpak.prepareServer}.
@@ -141,7 +143,10 @@ export class Mpak {
    * @throws {MpakConfigError} If required user config values are missing.
    * @throws {MpakCacheCorruptedError} If the manifest is missing or corrupt after download.
    */
-  async prepareServer(spec: PrepareServerSpec, options?: PrepareServerOptions): Promise<ServerCommand> {
+  async prepareServer(
+    spec: PrepareServerSpec,
+    options?: PrepareServerOptions,
+  ): Promise<ServerCommand> {
     let cacheDir: string;
     let name: string;
     let version: string;
@@ -150,18 +155,18 @@ export class Mpak {
     if ('local' in spec) {
       ({ cacheDir, name, version, manifest } = await this.prepareLocalBundle(spec.local, options));
     } else {
-      ({ cacheDir, name, version, manifest } = await this.prepareRegistryBundle(spec.name, spec.version, options));
+      ({ cacheDir, name, version, manifest } = await this.prepareRegistryBundle(
+        spec.name,
+        spec.version,
+        options,
+      ));
     }
 
     // Gather and validate user config
     const userConfigValues = this.gatherUserConfig(name, manifest);
 
     // Build command/args/env
-    const { command, args, env } = this.resolveCommand(
-      manifest,
-      cacheDir,
-      userConfigValues,
-    );
+    const { command, args, env } = this.resolveCommand(manifest, cacheDir, userConfigValues);
 
     // Set MPAK_WORKSPACE
     env['MPAK_WORKSPACE'] = options?.workspaceDir ?? join(process.cwd(), '.mpak');
@@ -199,7 +204,12 @@ export class Mpak {
       );
     }
 
-    return { cacheDir: loadResult.cacheDir, name: packageName, version: loadResult.version, manifest };
+    return {
+      cacheDir: loadResult.cacheDir,
+      name: packageName,
+      version: loadResult.version,
+      manifest,
+    };
   }
 
   /**

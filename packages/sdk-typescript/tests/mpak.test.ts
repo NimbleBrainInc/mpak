@@ -348,7 +348,9 @@ describe('Mpak facade', () => {
     it('throws MpakCacheCorruptedError when manifest is null', async () => {
       const { sdk } = setupSdk(null);
 
-      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(MpakCacheCorruptedError);
+      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
+        MpakCacheCorruptedError,
+      );
       await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
         'Manifest file missing for @scope/echo',
       );
@@ -357,9 +359,12 @@ describe('Mpak facade', () => {
     it('sets MPAK_WORKSPACE from workspaceDir option', async () => {
       const { sdk } = setupSdk();
 
-      const result = await sdk.prepareServer({ name: '@scope/echo' }, {
-        workspaceDir: '/custom/workspace',
-      });
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        {
+          workspaceDir: '/custom/workspace',
+        },
+      );
 
       expect(result.env['MPAK_WORKSPACE']).toBe('/custom/workspace');
     });
@@ -375,9 +380,12 @@ describe('Mpak facade', () => {
     it('caller env overrides MPAK_WORKSPACE default', async () => {
       const { sdk } = setupSdk();
 
-      const result = await sdk.prepareServer({ name: '@scope/echo' }, {
-        env: { MPAK_WORKSPACE: '/caller/wins' },
-      });
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        {
+          env: { MPAK_WORKSPACE: '/caller/wins' },
+        },
+      );
 
       expect(result.env['MPAK_WORKSPACE']).toBe('/caller/wins');
     });
@@ -395,9 +403,12 @@ describe('Mpak facade', () => {
       };
       const { sdk } = setupSdk(manifestWithEnv);
 
-      const result = await sdk.prepareServer({ name: '@scope/echo' }, {
-        env: { FROM_CALLER: 'added', SHARED: 'caller-wins' },
-      });
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        {
+          env: { FROM_CALLER: 'added', SHARED: 'caller-wins' },
+        },
+      );
 
       expect(result.env['FROM_MANIFEST']).toBe('original');
       expect(result.env['FROM_CALLER']).toBe('added');
@@ -526,7 +537,12 @@ describe('Mpak facade', () => {
         const configErr = err as MpakConfigError;
         expect(configErr.missingFields).toEqual([
           { key: 'api_key', title: 'API Key', description: 'Your OpenAI API key', sensitive: true },
-          { key: 'endpoint', title: 'Endpoint URL', description: 'The API base URL', sensitive: false },
+          {
+            key: 'endpoint',
+            title: 'Endpoint URL',
+            description: 'The API base URL',
+            sensitive: false,
+          },
         ]);
       }
     });
@@ -565,8 +581,12 @@ describe('Mpak facade', () => {
       };
       const { sdk } = setupSdk(badManifest);
 
-      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(MpakCacheCorruptedError);
-      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow('Unsupported server type');
+      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
+        MpakCacheCorruptedError,
+      );
+      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
+        'Unsupported server type',
+      );
     });
   });
 
@@ -601,9 +621,13 @@ describe('Mpak facade', () => {
       writeFileSync(join(srcDir, 'index.js'), 'console.log("hello")');
 
       const mcpbPath = join(dir, 'test-bundle.mcpb');
-      execFileSync('zip', ['-j', mcpbPath, join(srcDir, 'manifest.json'), join(srcDir, 'index.js')], {
-        stdio: 'pipe',
-      });
+      execFileSync(
+        'zip',
+        ['-j', mcpbPath, join(srcDir, 'manifest.json'), join(srcDir, 'index.js')],
+        {
+          stdio: 'pipe',
+        },
+      );
       return mcpbPath;
     }
 
@@ -693,7 +717,9 @@ describe('Mpak facade', () => {
       execFileSync('zip', ['-j', mcpbPath, join(srcDir, 'manifest.json')], { stdio: 'pipe' });
 
       await expect(sdk.prepareServer({ local: mcpbPath })).rejects.toThrow(MpakInvalidBundleError);
-      await expect(sdk.prepareServer({ local: mcpbPath })).rejects.toThrow('File failed validation');
+      await expect(sdk.prepareServer({ local: mcpbPath })).rejects.toThrow(
+        'File failed validation',
+      );
     });
 
     it('resolves a python server from local bundle', async () => {
@@ -719,9 +745,12 @@ describe('Mpak facade', () => {
       const sdk = new Mpak({ mpakHome: testDir });
       const mcpbPath = createMcpbBundle(testDir, nodeManifest);
 
-      const result = await sdk.prepareServer({ local: mcpbPath }, {
-        workspaceDir: '/custom/workspace',
-      });
+      const result = await sdk.prepareServer(
+        { local: mcpbPath },
+        {
+          workspaceDir: '/custom/workspace',
+        },
+      );
 
       expect(result.env['MPAK_WORKSPACE']).toBe('/custom/workspace');
     });

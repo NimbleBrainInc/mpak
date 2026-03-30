@@ -1,5 +1,5 @@
-import { mpak } from "../../utils/config.js";
-import { logger, table } from "../../utils/format.js";
+import { mpak } from '../../utils/config.js';
+import { logger, table } from '../../utils/format.js';
 
 export interface OutdatedEntry {
   name: string;
@@ -35,7 +35,9 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
           });
         }
       } catch {
-        process.stderr.write(`=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`);
+        process.stderr.write(
+          `=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`,
+        );
       }
     }),
   );
@@ -44,7 +46,7 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
 }
 
 export async function handleOutdated(options: OutdatedOptions = {}): Promise<void> {
-  process.stderr.write("=> Checking for updates...\n");
+  process.stderr.write('=> Checking for updates...\n');
 
   const outdated = await getOutdatedBundles();
 
@@ -54,13 +56,13 @@ export async function handleOutdated(options: OutdatedOptions = {}): Promise<voi
   }
 
   if (outdated.length === 0) {
-    logger.info("All cached bundles are up to date.");
+    logger.info('All cached bundles are up to date.');
     return;
   }
 
   logger.info(
     table(
-      ["Bundle", "Current", "Latest", "Pulled"],
+      ['Bundle', 'Current', 'Latest', 'Pulled'],
       outdated.map((e) => [e.name, e.current, e.latest, e.pulledAt]),
     ),
   );

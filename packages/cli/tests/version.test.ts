@@ -1,18 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { getVersion } from "../src/utils/version.js";
+import { describe, it, expect } from 'vitest';
+import { getVersion } from '../src/utils/version.js';
 
-describe("getVersion", () => {
-  it("should return a valid version string", () => {
+describe('getVersion', () => {
+  it('should return a valid version string', () => {
     const version = getVersion();
     expect(version).toBeTruthy();
-    expect(typeof version).toBe("string");
+    expect(typeof version).toBe('string');
   });
 
   it('should match semver format or be "unknown"', () => {
     const version = getVersion();
     const semverRegex = /^\d+\.\d+\.\d+/;
-    expect(version === "unknown" || semverRegex.test(version)).toBe(
-      true,
-    );
+    expect(version === 'unknown' || semverRegex.test(version)).toBe(true);
   });
 });

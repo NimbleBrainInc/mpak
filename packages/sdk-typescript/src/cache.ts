@@ -230,10 +230,7 @@ export class MpakBundleCache {
    * The caller can just check `if (result) { console.log("update available: " + result) }`
    * @param packageName - Scoped package name (e.g. `@scope/bundle`)
    */
-  async checkForUpdate(
-    packageName: string,
-    options?: { force?: boolean },
-  ): Promise<string | null> {
+  async checkForUpdate(packageName: string, options?: { force?: boolean }): Promise<string | null> {
     const cachedMeta = this.getBundleMetadata(packageName);
     if (!cachedMeta) return null;
 

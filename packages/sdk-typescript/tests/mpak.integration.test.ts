@@ -143,9 +143,12 @@ describe('Mpak facade integration', () => {
   });
 
   it('prepareServer respects workspaceDir option', async () => {
-    const result = await sdk.prepareServer({ name: KNOWN_BUNDLE }, {
-      workspaceDir: '/tmp/custom-workspace',
-    });
+    const result = await sdk.prepareServer(
+      { name: KNOWN_BUNDLE },
+      {
+        workspaceDir: '/tmp/custom-workspace',
+      },
+    );
 
     expect(result.env['MPAK_WORKSPACE']).toBe('/tmp/custom-workspace');
   });

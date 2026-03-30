@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -140,7 +148,10 @@ describe('localBundleNeedsExtract', () => {
 
     // Write metadata with an old extractedAt
     const oldTime = new Date('2020-01-01T00:00:00Z').toISOString();
-    writeFileSync(join(cacheDir, '.mpak-local-meta.json'), JSON.stringify({ extractedAt: oldTime }));
+    writeFileSync(
+      join(cacheDir, '.mpak-local-meta.json'),
+      JSON.stringify({ extractedAt: oldTime }),
+    );
 
     // Write bundle "now" — its mtime will be newer than 2020
     writeFileSync(bundlePath, 'fake bundle');

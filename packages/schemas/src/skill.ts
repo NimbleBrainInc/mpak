@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // =============================================================================
 // Agent Skills Specification - Skill Frontmatter Schema
@@ -16,7 +16,7 @@ export const SkillNameSchema = z
   .max(64)
   .regex(
     /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
-    "Lowercase alphanumeric with single hyphens, cannot start/end with hyphen",
+    'Lowercase alphanumeric with single hyphens, cannot start/end with hyphen',
   );
 
 /** Skill description (1-1024 characters) */
@@ -28,15 +28,15 @@ export const SkillDescriptionSchema = z.string().min(1).max(1024);
 
 /** Category taxonomy for skill discovery */
 export const SkillCategorySchema = z.enum([
-  "development",
-  "writing",
-  "research",
-  "consulting",
-  "data",
-  "design",
-  "operations",
-  "security",
-  "other",
+  'development',
+  'writing',
+  'research',
+  'consulting',
+  'data',
+  'design',
+  'operations',
+  'security',
+  'other',
 ]);
 
 /** Author information for attribution */
@@ -82,7 +82,7 @@ export const SkillFrontmatterSchema = z.object({
   version: z.string().optional(),
   license: z.string().optional(),
   compatibility: z.string().max(500).optional(),
-  "allowed-tools": z.string().optional(),
+  'allowed-tools': z.string().optional(),
   metadata: SkillDiscoveryMetadataSchema.optional(),
 });
 
@@ -93,14 +93,11 @@ export const SkillFrontmatterSchema = z.object({
 /** Scoped skill name for registry (e.g., @nimblebraininc/strategic-thought-partner) */
 export const ScopedSkillNameSchema = z
   .string()
-  .regex(
-    /^@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/,
-    "Scoped name format: @scope/name",
-  );
+  .regex(/^@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/, 'Scoped name format: @scope/name');
 
 /** Skill artifact info for announce endpoint */
 export const SkillArtifactSchema = z.object({
-  filename: z.string().regex(/\.skill$/, "Must have .skill extension"),
+  filename: z.string().regex(/\.skill$/, 'Must have .skill extension'),
   sha256: z.string().length(64),
   size: z.number().int().positive(),
 });
@@ -119,7 +116,7 @@ export const SkillAnnounceRequestSchema = z.object({
 export const SkillAnnounceResponseSchema = z.object({
   skill: z.string(),
   version: z.string(),
-  status: z.enum(["created", "exists"]),
+  status: z.enum(['created', 'exists']),
 });
 
 // =============================================================================
@@ -131,7 +128,7 @@ export const SkillSearchParamsSchema = z.object({
   q: z.string().optional(),
   tags: z.string().optional(),
   category: SkillCategorySchema.optional(),
-  sort: z.enum(["downloads", "recent", "name"]).optional(),
+  sort: z.enum(['downloads', 'recent', 'name']).optional(),
   limit: z.union([z.string(), z.number()]).optional(),
   offset: z.union([z.string(), z.number()]).optional(),
 });
@@ -203,9 +200,7 @@ export type SkillName = z.infer<typeof SkillNameSchema>;
 export type SkillCategory = z.infer<typeof SkillCategorySchema>;
 export type SkillAuthor = z.infer<typeof SkillAuthorSchema>;
 export type SkillExample = z.infer<typeof SkillExampleSchema>;
-export type SkillDiscoveryMetadata = z.infer<
-  typeof SkillDiscoveryMetadataSchema
->;
+export type SkillDiscoveryMetadata = z.infer<typeof SkillDiscoveryMetadataSchema>;
 export type SkillFrontmatter = z.infer<typeof SkillFrontmatterSchema>;
 export type ScopedSkillName = z.infer<typeof ScopedSkillNameSchema>;
 export type SkillArtifact = z.infer<typeof SkillArtifactSchema>;
