@@ -1,7 +1,7 @@
 import type { BundleDetail, VersionsResponse } from "@nimblebrain/mpak-schemas";
 import type { MpakClient } from "@nimblebrain/mpak-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleShow } from "../src/commands/packages/show.js";
+import { handleShow } from "../../src/commands/packages/show.js";
 
 // ---------------------------------------------------------------------------
 // Mock the mpak singleton
@@ -10,7 +10,7 @@ import { handleShow } from "../src/commands/packages/show.js";
 let mockGetBundle: ReturnType<typeof vi.fn>;
 let mockGetBundleVersions: ReturnType<typeof vi.fn>;
 
-vi.mock("../src/utils/config.js", () => ({
+vi.mock("../../src/utils/config.js", () => ({
 	get mpak() {
 		return {
 			client: {

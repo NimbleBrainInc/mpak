@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import {
   validateSkillDirectory,
   formatValidationResult,
-} from "./validate.js";
+} from "../../src/commands/skills/validate.js";
 
 describe("validateSkillDirectory", () => {
   let testDir: string;

@@ -1,36 +1,16 @@
-import { existsSync, mkdirSync, writeFileSync, rmSync } from "fs";
-import { join, basename } from "path";
-import { homedir, tmpdir } from "os";
-import { execFileSync } from "child_process";
-import { formatSize, fmtError } from "../../utils/format.js";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
+import { parsePackageSpec } from "@nimblebrain/mpak-sdk";
 import { mpak } from "../../utils/config.js";
+import { formatSize, logger } from "../../utils/format.js";
 
 /**
  * Get the Claude Code skills directory
  */
 function getSkillsDir(): string {
   return join(homedir(), ".claude", "skills");
-}
-
-/**
- * Parse skill spec into name and version
- */
-function parseSkillSpec(spec: string): {
-  name: string;
-  version?: string;
-} {
-  const atIndex = spec.lastIndexOf("@");
-  if (atIndex <= 0) {
-    return { name: spec };
-  }
-  const slashIndex = spec.indexOf("/");
-  if (atIndex > slashIndex) {
-    return {
-      name: spec.slice(0, atIndex),
-      version: spec.slice(atIndex + 1),
-    };
-  }
-  return { name: spec };
 }
 
 /**
@@ -52,17 +32,21 @@ export interface InstallOptions {
  */
 export async function handleSkillInstall(
   skillSpec: string,
-  options: InstallOptions,
+  options: InstallOptions = {},
 ): Promise<void> {
   try {
-    const { name, version } = parseSkillSpec(skillSpec);
+    const { name, version } = parsePackageSpec(skillSpec);
 
-    // Get download info
-    const client = mpak.client;
-    const downloadInfo = version
-      ? await client.getSkillVersionDownload(name, version)
-      : await client.getSkillDownload(name);
-    const shortName = getShortName(downloadInfo.skill.name);
+    console.log(
+      `=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`,
+    );
+
+    const { data, metadata } = await mpak.client.downloadSkillBundle(
+      name,
+      version,
+    );
+
+    const shortName = getShortName(metadata.name);
     const skillsDir = getSkillsDir();
     const installPath = join(skillsDir, shortName);
 
@@ -75,40 +59,15 @@ export async function handleSkillInstall(
       process.exit(1);
     }
 
-    console.log(
-      `Pulling ${downloadInfo.skill.name}@${downloadInfo.skill.version}...`,
-    );
-
-    // Download the bundle
-    const response = await fetch(downloadInfo.url);
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status})`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    // Verify SHA256
-    if (downloadInfo.skill.sha256) {
-      const { createHash } = await import("crypto");
-      const hash = createHash("sha256").update(buffer).digest("hex");
-      if (hash !== downloadInfo.skill.sha256) {
-        throw new Error(
-          `SHA256 mismatch: expected ${downloadInfo.skill.sha256}, got ${hash}`,
-        );
-      }
-    }
-
-    console.log(
-      `Downloaded ${basename(downloadInfo.skill.name)}-${downloadInfo.skill.version}.skill (${formatSize(downloadInfo.skill.size)})`,
-    );
+    console.log(`   Version: ${metadata.version}`);
+    console.log(`   Size: ${formatSize(metadata.size)}`);
 
     // Ensure skills directory exists
-    if (!existsSync(skillsDir)) {
-      mkdirSync(skillsDir, { recursive: true });
-    }
+    mkdirSync(skillsDir, { recursive: true });
 
-    // Write to temp file
+    // Write to temp file for extraction
     const tempPath = join(tmpdir(), `skill-${Date.now()}.skill`);
-    writeFileSync(tempPath, buffer);
+    writeFileSync(tempPath, data);
 
     // Remove existing installation if force
     if (existsSync(installPath)) {
@@ -116,16 +75,13 @@ export async function handleSkillInstall(
     }
 
     // Extract using unzip
-    // The .skill bundle contains: skillName/SKILL.md, skillName/...
-    // We extract to the skills directory
     try {
-      execFileSync('unzip', ['-o', tempPath, '-d', skillsDir], {
+      execFileSync("unzip", ["-o", tempPath, "-d", skillsDir], {
         stdio: "pipe",
       });
     } catch (err) {
       throw new Error(`Failed to extract skill bundle: ${err}`);
     } finally {
-      // Clean up temp file
       rmSync(tempPath, { force: true });
     }
 
@@ -134,9 +90,9 @@ export async function handleSkillInstall(
         JSON.stringify(
           {
             installed: true,
-            name: downloadInfo.skill.name,
+            name: metadata.name,
             shortName,
-            version: downloadInfo.skill.version,
+            version: metadata.version,
             path: installPath,
           },
           null,
@@ -144,14 +100,16 @@ export async function handleSkillInstall(
         ),
       );
     } else {
-      console.log(`Extracting to ${installPath}/`);
-      console.log(`\u2713 Installed: ${shortName}`);
+      console.log(`\n=> Installed to ${installPath}/`);
+      console.log(`   \u2713 ${shortName}@${metadata.version}`);
       console.log("");
       console.log(
         "Skill available in Claude Code. Restart to activate.",
       );
     }
   } catch (err) {
-    fmtError(err instanceof Error ? err.message : String(err));
+    logger.error(
+      err instanceof Error ? err.message : "Failed to install skill",
+    );
   }
 }

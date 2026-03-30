@@ -2,7 +2,7 @@ import { writeFileSync } from "fs";
 import { resolve } from "path";
 import type { MpakClient } from "@nimblebrain/mpak-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handlePull } from "../src/commands/packages/pull.js";
+import { handlePull } from "../../src/commands/packages/pull.js";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -12,7 +12,7 @@ vi.mock("fs", () => ({ writeFileSync: vi.fn() }));
 
 let mockDownloadBundle: ReturnType<typeof vi.fn>;
 
-vi.mock("../src/utils/config.js", () => ({
+vi.mock("../../src/utils/config.js", () => ({
 	get mpak() {
 		return {
 			client: { downloadBundle: mockDownloadBundle } as unknown as MpakClient,

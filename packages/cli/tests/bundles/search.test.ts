@@ -1,7 +1,7 @@
 import type { BundleSearchResponse } from "@nimblebrain/mpak-schemas";
 import type { MpakClient } from "@nimblebrain/mpak-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { handleSearch } from "../src/commands/packages/search.js";
+import { handleSearch } from "../../src/commands/packages/search.js";
 
 // ---------------------------------------------------------------------------
 // Mock the mpak singleton
@@ -9,7 +9,7 @@ import { handleSearch } from "../src/commands/packages/search.js";
 
 let mockSearchBundles: ReturnType<typeof vi.fn>;
 
-vi.mock("../src/utils/config.js", () => ({
+vi.mock("../../src/utils/config.js", () => ({
 	get mpak() {
 		return {
 			client: { searchBundles: mockSearchBundles } as unknown as MpakClient,

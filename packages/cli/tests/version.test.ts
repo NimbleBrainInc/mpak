@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getVersion } from "./version.js";
+import { getVersion } from "../src/utils/version.js";
 
 describe("getVersion", () => {
   it("should return a valid version string", () => {

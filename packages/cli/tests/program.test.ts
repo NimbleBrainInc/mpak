@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createProgram } from "./program.js";
+import { createProgram } from "../src/program.js";
 
 describe("createProgram", () => {
   it("should create a program with correct name", () => {

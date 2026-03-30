@@ -1,5 +1,5 @@
 import type { PackageConfig } from "@nimblebrain/mpak-sdk";
-import { mpakConfigManager } from "../utils/config.js";
+import { mpak } from "../utils/config.js";
 
 export interface ConfigGetOptions {
 	json?: boolean;
@@ -51,7 +51,7 @@ export async function handleConfigSet(
 			process.exit(1);
 		}
 
-		mpakConfigManager.setPackageConfigValue(packageName, key, value);
+		mpak.configManager.setPackageConfigValue(packageName, key, value);
 		setCount++;
 	}
 
@@ -67,7 +67,7 @@ export async function handleConfigGet(
 	packageName: string,
 	options: ConfigGetOptions = {},
 ): Promise<void> {
-	const config = mpakConfigManager.getPackageConfig(packageName);
+	const config = mpak.configManager.getPackageConfig(packageName);
 	const isOutputJson = !!options?.json;
 
 	// If no config or config is {}
@@ -100,8 +100,7 @@ export async function handleConfigGet(
 export async function handleConfigList(
 	options: ConfigGetOptions = {},
 ): Promise<void> {
-	const configManager = mpakConfigManager;
-	const packages = mpakConfigManager.getPackageNames();
+	const packages = mpak.configManager.getPackageNames();
 	const isOutputJson = !!options?.json;
 
 	if (packages.length === 0) {
@@ -118,7 +117,7 @@ export async function handleConfigList(
 	} else {
 		console.log("Packages with stored config:");
 		for (const pkg of packages) {
-			const config = configManager.getPackageConfig(pkg);
+			const config = mpak.configManager.getPackageConfig(pkg);
 			const keyCount = config ? Object.keys(config).length : 0;
 			console.log(`${pkg} (${keyCount} value${keyCount === 1 ? "" : "s"})`);
 		}
@@ -136,7 +135,7 @@ export async function handleConfigClear(
 ): Promise<void> {
 	if (key) {
 		// Clear specific key
-		const cleared = mpakConfigManager.clearPackageConfigValue(packageName, key);
+		const cleared = mpak.configManager.clearPackageConfigValue(packageName, key);
 		if (cleared) {
 			console.log(`Cleared ${key} for ${packageName}`);
 		} else {
@@ -144,7 +143,7 @@ export async function handleConfigClear(
 		}
 	} else {
 		// Clear all config for package
-		const cleared = mpakConfigManager.clearPackageConfig(packageName);
+		const cleared = mpak.configManager.clearPackageConfig(packageName);
 		if (cleared) {
 			console.log(`Cleared all config for ${packageName}`);
 		} else {

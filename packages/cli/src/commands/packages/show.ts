@@ -153,9 +153,6 @@ export async function handleShow(
 		}
 
 		// Install instructions
-		console.log("Install:");
-		console.log(`  mpak install ${bundle.name}`);
-		console.log();
 		console.log("Pull (download only):");
 		console.log(`  mpak pull ${bundle.name}`);
 	} catch (error) {

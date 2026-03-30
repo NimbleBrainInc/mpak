@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CLIError } from "./errors.js";
+import { CLIError } from "../src/utils/errors.js";
 
 describe("CLIError", () => {
   it("should create error with message", () => {

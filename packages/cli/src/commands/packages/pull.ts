@@ -64,7 +64,7 @@ export async function handlePull(
 		console.log(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
 	} catch (error) {
 		if (outputPath) {
-			try { rmSync(outputPath, { force: true }); } catch {}
+			try { rmSync(outputPath, { force: true }); } catch (_e) { /* ignore */ }
 		}
 		logger.error(
 			error instanceof Error ? error.message : "Failed to pull bundle",

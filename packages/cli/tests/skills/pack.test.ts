@@ -7,7 +7,7 @@ import {
 } from "fs";
 import { join, basename } from "path";
 import { tmpdir } from "os";
-import { packSkill } from "./pack.js";
+import { packSkill } from "../../src/commands/skills/pack.js";
 import { execSync } from "child_process";
 
 describe("packSkill", () => {

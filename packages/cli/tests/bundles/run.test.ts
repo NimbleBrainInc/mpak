@@ -10,7 +10,7 @@ import {
   MpakNotFoundError,
 } from "@nimblebrain/mpak-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleRun } from "../src/commands/packages/run.js";
+import { handleRun } from "../../src/commands/packages/run.js";
 
 /** Sentinel thrown by the process.exit mock so code halts like a real exit. */
 class ExitError extends Error {
@@ -67,7 +67,7 @@ const mockPrepareServer = vi.fn();
 const mockCheckForUpdate = vi.fn();
 const mockSetPackageConfigValue = vi.fn();
 
-vi.mock("../src/utils/config.js", () => ({
+vi.mock("../../src/utils/config.js", () => ({
   get mpak() {
     return {
       prepareServer: mockPrepareServer,

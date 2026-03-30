@@ -1,5 +1,4 @@
-import { isSemverEqual, listCachedBundles } from "../../utils/cache.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from "../../utils/config.js";
 import { table } from "../../utils/format.js";
 
 export interface OutdatedEntry {
@@ -18,21 +17,20 @@ export interface OutdatedOptions {
  * that have a newer version available.
  */
 export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
-  const cached = listCachedBundles();
+  const cached = mpak.bundleCache.listCachedBundles();
   if (cached.length === 0) return [];
 
-  const client = createClient();
   const results: OutdatedEntry[] = [];
 
   await Promise.all(
     cached.map(async (bundle) => {
       try {
-        const detail = await client.getBundle(bundle.name);
-        if (!isSemverEqual(detail.latest_version, bundle.version)) {
+        const latest = await mpak.bundleCache.checkForUpdate(bundle.name, { force: true });
+        if (latest) {
           results.push({
             name: bundle.name,
             current: bundle.version,
-            latest: detail.latest_version,
+            latest,
             pulledAt: bundle.pulledAt,
           });
         }

@@ -1,77 +1,92 @@
-import { downloadAndExtract, resolveBundle } from "../../utils/cache.js";
-import { createClient } from "../../utils/client.js";
-import { fmtError } from "../../utils/format.js";
+import { MpakNetworkError, MpakNotFoundError } from "@nimblebrain/mpak-sdk";
+import { mpak } from "../../utils/config.js";
 import { getOutdatedBundles } from "./outdated.js";
 
 export interface UpdateOptions {
-  json?: boolean;
+	json?: boolean;
+}
+
+async function forceUpdateBundle(
+	name: string,
+): Promise<{ name: string; version: string }> {
+	try {
+		const { version } = await mpak.bundleCache.loadBundle(name, {
+			force: true,
+		});
+		return { name, version };
+	} catch (err) {
+		if (err instanceof MpakNotFoundError) {
+			throw new Error(`Bundle "${name}" not found in the registry`);
+		}
+		if (err instanceof MpakNetworkError) {
+			throw new Error(`Network error updating "${name}": ${err.message}`);
+		}
+		throw err;
+	}
 }
 
 export async function handleUpdate(
-  packageName: string | undefined,
-  options: UpdateOptions = {},
+	packageName: string | undefined,
+	options: UpdateOptions = {},
 ): Promise<void> {
-  const client = createClient();
+	if (packageName) {
+		const { version } = await forceUpdateBundle(packageName);
+		if (options.json) {
+			console.log(JSON.stringify({ name: packageName, version }, null, 2));
+		} else {
+			console.log(`Updated ${packageName} to ${version}`);
+		}
+		return;
+	}
 
-  if (packageName) {
-    // Update a single bundle
-    const downloadInfo = await resolveBundle(packageName, client);
-    const { version } = await downloadAndExtract(packageName, downloadInfo);
-    if (options.json) {
-      console.log(JSON.stringify({ name: packageName, version }, null, 2));
-    } else {
-      console.log(`Updated ${packageName} to ${version}`);
-    }
-    return;
-  }
+	// No name given — find and update all outdated bundles
+	process.stderr.write("=> Checking for updates...\n");
+	const outdated = await getOutdatedBundles();
 
-  // No name given — find and update all outdated bundles
-  process.stderr.write("=> Checking for updates...\n");
-  const outdated = await getOutdatedBundles();
+	if (outdated.length === 0) {
+		if (options.json) {
+			console.log(JSON.stringify([], null, 2));
+		} else {
+			console.log("All cached bundles are up to date.");
+		}
+		return;
+	}
 
-  if (outdated.length === 0) {
-    if (options.json) {
-      console.log(JSON.stringify([], null, 2));
-    } else {
-      console.log("All cached bundles are up to date.");
-    }
-    return;
-  }
+	process.stderr.write(`=> ${outdated.length} bundle(s) to update\n`);
 
-  process.stderr.write(
-    `=> ${outdated.length} bundle(s) to update\n`,
-  );
+	const updated: Array<{ name: string; from: string; to: string }> = [];
 
-  const updated: Array<{ name: string; from: string; to: string }> = [];
+	const results = await Promise.allSettled(
+		outdated.map(async (entry) => {
+			const { version } = await forceUpdateBundle(entry.name);
+			return { name: entry.name, from: entry.current, to: version };
+		}),
+	);
 
-  const results = await Promise.allSettled(
-    outdated.map(async (entry) => {
-      const downloadInfo = await resolveBundle(entry.name, client);
-      const { version } = await downloadAndExtract(entry.name, downloadInfo);
-      return { name: entry.name, from: entry.current, to: version };
-    }),
-  );
+	for (const [i, result] of results.entries()) {
+		if (result.status === "fulfilled") {
+			updated.push(result.value);
+		} else {
+			const message =
+				result.reason instanceof Error
+					? result.reason.message
+					: String(result.reason);
+			process.stderr.write(
+				`=> Failed to update ${outdated[i]!.name}: ${message}\n`,
+			);
+		}
+	}
 
-  for (const [i, result] of results.entries()) {
-    if (result.status === "fulfilled") {
-      updated.push(result.value);
-    } else {
-      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      process.stderr.write(`=> Failed to update ${outdated[i]!.name}: ${message}\n`);
-    }
-  }
+	if (updated.length === 0) {
+		console.error(`[Error] All updates failed`);
+		process.exit(1);
+	}
 
-  if (options.json) {
-    console.log(JSON.stringify(updated, null, 2));
-    return;
-  }
-
-  if (updated.length === 0) {
-    fmtError("All updates failed.");
-    process.exit(1);
-  }
-
-  for (const u of updated) {
-    console.log(`Updated ${u.name}: ${u.from} -> ${u.to}`);
-  }
+	if (options.json) {
+		console.log(JSON.stringify(updated, null, 2));
+	} else {
+		for (const u of updated) {
+			console.log(`Updated ${u.name}: ${u.from} -> ${u.to}`);
+		}
+	}
 }
