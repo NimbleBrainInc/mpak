@@ -98,7 +98,7 @@ describe("handleSkillPull", () => {
 	it("prints metadata in normal output", async () => {
 		await handleSkillPull("@scope/test-skill");
 
-		const allOutput = stdoutSpy.mock.calls
+		const allOutput = stderrSpy.mock.calls
 			.map((c: unknown[]) => c[0])
 			.join("\n");
 		expect(allOutput).toContain("Version: 1.2.0");

@@ -37,7 +37,7 @@ export async function handleSkillInstall(
   try {
     const { name, version } = parsePackageSpec(skillSpec);
 
-    console.log(
+    logger.info(
       `=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`,
     );
 
@@ -52,15 +52,15 @@ export async function handleSkillInstall(
 
     // Check if already installed
     if (existsSync(installPath) && !options.force) {
-      console.error(
+      logger.error(
         `Skill "${shortName}" is already installed at ${installPath}`,
       );
-      console.error("Use --force to overwrite");
+      logger.error("Use --force to overwrite");
       process.exit(1);
     }
 
-    console.log(`   Version: ${metadata.version}`);
-    console.log(`   Size: ${formatSize(metadata.size)}`);
+    logger.info(`   Version: ${metadata.version}`);
+    logger.info(`   Size: ${formatSize(metadata.size)}`);
 
     // Ensure skills directory exists
     mkdirSync(skillsDir, { recursive: true });
@@ -100,10 +100,10 @@ export async function handleSkillInstall(
         ),
       );
     } else {
-      console.log(`\n=> Installed to ${installPath}/`);
-      console.log(`   \u2713 ${shortName}@${metadata.version}`);
-      console.log("");
-      console.log(
+      logger.info(`\n=> Installed to ${installPath}/`);
+      logger.info(`   \u2713 ${shortName}@${metadata.version}`);
+      logger.info("");
+      logger.info(
         "Skill available in Claude Code. Restart to activate.",
       );
     }

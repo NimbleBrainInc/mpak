@@ -89,7 +89,7 @@ describe("handleSkillSearch", () => {
 
 		await handleSkillSearch("nonexistent", {});
 
-		expect(stdoutSpy).toHaveBeenCalledWith(
+		expect(stderrSpy).toHaveBeenCalledWith(
 			expect.stringContaining('No skills found for "nonexistent"'),
 		);
 	});
@@ -99,7 +99,7 @@ describe("handleSkillSearch", () => {
 
 		await handleSkillSearch("test", {});
 
-		const allOutput = stdoutSpy.mock.calls
+		const allOutput = stderrSpy.mock.calls
 			.map((c: unknown[]) => c[0])
 			.join("\n");
 		expect(allOutput).toContain("@scope/skill-alpha");
@@ -132,7 +132,7 @@ describe("handleSkillSearch", () => {
 
 		await handleSkillSearch("test", {});
 
-		const allOutput = stdoutSpy.mock.calls
+		const allOutput = stderrSpy.mock.calls
 			.map((c: unknown[]) => c[0])
 			.join("\n");
 		expect(allOutput).toContain("1 of 25");

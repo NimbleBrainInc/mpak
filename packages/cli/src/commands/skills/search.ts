@@ -21,11 +21,11 @@ export async function handleSkillSearch(
 		}
 
 		if (result.skills.length === 0) {
-			console.log(`No skills found for "${query}"`);
+			logger.info(`No skills found for "${query}"`);
 			return;
 		}
 
-		console.log();
+		logger.info("");
 
 		const rows = result.skills.map((s) => [
 			s.name.length > 42 ? s.name.slice(0, 39) + "..." : s.name,
@@ -34,11 +34,11 @@ export async function handleSkillSearch(
 			truncate(s.description || "", 40),
 		]);
 
-		console.log(table(["NAME", "VERSION", "CATEGORY", "DESCRIPTION"], rows));
+		logger.info(table(["NAME", "VERSION", "CATEGORY", "DESCRIPTION"], rows));
 
 		if (result.pagination.has_more) {
-			console.log();
-			console.log(
+			logger.info("");
+			logger.info(
 				`Showing ${result.skills.length} of ${result.total} results. Use --offset to see more.`,
 			);
 		}

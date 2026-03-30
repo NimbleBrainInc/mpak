@@ -20,11 +20,11 @@ export async function handleSearch(
 		});
 
 		if (result.bundles.length === 0) {
-			console.log(`\nNo bundles found for "${query}"`);
+			logger.info(`\nNo bundles found for "${query}"`);
 			return;
 		}
 
-		console.log(`\nFound ${result.total} bundle(s) for "${query}":\n`);
+		logger.info(`\nFound ${result.total} bundle(s) for "${query}":\n`);
 
 		if (options.json) {
 			console.log(JSON.stringify(result, null, 2));
@@ -38,17 +38,17 @@ export async function handleSearch(
 			truncate(b.description || "", 50),
 		]);
 
-		console.log(table(["NAME", "VERSION", "TRUST", "DESCRIPTION"], rows));
-		console.log();
+		logger.info(table(["NAME", "VERSION", "TRUST", "DESCRIPTION"], rows));
+		logger.info("");
 
 		if (result.pagination.has_more) {
 			const nextOffset = (options.offset || 0) + (options.limit || 20);
-			console.log(
+			logger.info(
 				`More results available. Use --offset ${nextOffset} to see more.`,
 			);
 		}
 
-		console.log('Use "mpak show <bundle>" for more details');
+		logger.info('Use "mpak show <bundle>" for more details');
 	} catch (error) {
 		logger.error(
 			error instanceof Error ? error.message : "Failed to search bundles",

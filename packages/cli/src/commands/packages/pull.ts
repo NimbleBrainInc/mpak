@@ -28,10 +28,10 @@ export async function handlePull(
 			arch: options.arch || detectedPlatform.arch,
 		};
 
-		console.log(
+		logger.info(
 			`=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`,
 		);
-		console.log(`   Platform: ${platform.os}-${platform.arch}`);
+		logger.info(`   Platform: ${platform.os}-${platform.arch}`);
 
 		const { data, metadata } = await mpak.client.downloadBundle(
 			name,
@@ -44,11 +44,11 @@ export async function handlePull(
 			return;
 		}
 
-		console.log(`   Version: ${metadata.version}`);
-		console.log(
+		logger.info(`   Version: ${metadata.version}`);
+		logger.info(
 			`   Artifact: ${metadata.platform.os}-${metadata.platform.arch}`,
 		);
-		console.log(`   Size: ${formatSize(metadata.size)}`);
+		logger.info(`   Size: ${formatSize(metadata.size)}`);
 
 		const platformSuffix = `${metadata.platform.os}-${metadata.platform.arch}`;
 		const defaultFilename = `${name.replace("@", "").replace("/", "-")}-${metadata.version}-${platformSuffix}.mcpb`;
@@ -56,12 +56,12 @@ export async function handlePull(
 			? resolve(options.output)
 			: resolve(defaultFilename);
 
-		console.log(`\n=> Downloading to ${outputPath}...`);
+		logger.info(`\n=> Downloading to ${outputPath}...`);
 		writeFileSync(outputPath, data);
 
-		console.log(`\n=> Bundle downloaded successfully!`);
-		console.log(`   File: ${outputPath}`);
-		console.log(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
+		logger.info(`\n=> Bundle downloaded successfully!`);
+		logger.info(`   File: ${outputPath}`);
+		logger.info(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
 	} catch (error) {
 		if (outputPath) {
 			try { rmSync(outputPath, { force: true }); } catch (_e) { /* ignore */ }

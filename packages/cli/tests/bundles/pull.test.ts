@@ -114,7 +114,7 @@ describe("handlePull", () => {
 	it("prints metadata and SHA in normal output", async () => {
 		await handlePull("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Version: 1.2.0");
 		expect(allOutput).toContain("darwin-arm64");
 		expect(allOutput).toContain("2.4 MB");

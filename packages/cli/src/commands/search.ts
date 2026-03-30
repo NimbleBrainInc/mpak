@@ -1,4 +1,6 @@
-import { table, certLabel, truncate, fmtError } from "../utils/format.js";
+import type { BundleSearchParamsInput } from "@nimblebrain/mpak-schemas";
+import type { SkillSearchParamsInput } from "@nimblebrain/mpak-schemas";
+import { table, certLabel, truncate, logger } from "../utils/format.js";
 import { mpak } from "../utils/config.js";
 
 export interface UnifiedSearchOptions {
@@ -42,19 +44,24 @@ export async function handleUnifiedSearch(
     const searchBundles = !options.type || options.type === "bundle";
     const searchSkillsFlag = !options.type || options.type === "skill";
 
-    const searchParams: Record<string, unknown> = { q: query };
-    if (options.sort) searchParams["sort"] = options.sort;
-    if (options.limit) searchParams["limit"] = options.limit;
-    if (options.offset) searchParams["offset"] = options.offset;
+    const bundleParams: BundleSearchParamsInput = {
+      q: query,
+      ...(options.sort && { sort: options.sort }),
+      ...(options.limit && { limit: options.limit }),
+      ...(options.offset && { offset: options.offset }),
+    };
+
+    const skillParams: SkillSearchParamsInput = {
+      q: query,
+      ...(options.sort && { sort: options.sort }),
+      ...(options.limit && { limit: options.limit }),
+      ...(options.offset && { offset: options.offset }),
+    };
 
     const [bundleResult, skillResult] = await Promise.all([
-      searchBundles
-        ? client.searchBundles(searchParams as Parameters<typeof client.searchBundles>[0])
-        : null,
+      searchBundles ? client.searchBundles(bundleParams) : null,
       searchSkillsFlag
-        ? client
-            .searchSkills(searchParams as Parameters<typeof client.searchSkills>[0])
-            .catch(() => null) // Skills API may not be deployed yet
+        ? client.searchSkills(skillParams).catch(() => null) // Skills API may not be deployed yet
         : null,
     ]);
 
@@ -117,16 +124,16 @@ export async function handleUnifiedSearch(
 
     // No results
     if (results.length === 0) {
-      console.log(`\nNo results found for "${query}"`);
-      if (!searchBundles) console.log("  (searched skills only)");
-      if (!searchSkillsFlag) console.log("  (searched bundles only)");
+      logger.info(`\nNo results found for "${query}"`);
+      if (!searchBundles) logger.info("  (searched skills only)");
+      if (!searchSkillsFlag) logger.info("  (searched bundles only)");
       return;
     }
 
     // Summary
     const totalResults = bundleTotal + skillTotal;
     const typeFilter = options.type ? ` (${options.type}s only)` : "";
-    console.log(
+    logger.info(
       `\nFound ${totalResults} result(s) for "${query}"${typeFilter}:`,
     );
 
@@ -135,42 +142,42 @@ export async function handleUnifiedSearch(
 
     // Bundles section
     if (bundles.length > 0) {
-      console.log(`\nBundles (${bundleTotal}):\n`);
+      logger.info(`\nBundles (${bundleTotal}):\n`);
       const bundleRows = bundles.map((r) => [
         r.name.length > 38 ? r.name.slice(0, 35) + "..." : r.name,
         r.version || "-",
         certLabel(r.certLevel),
         truncate(r.description, 40),
       ]);
-      console.log(table(["NAME", "VERSION", "TRUST", "DESCRIPTION"], bundleRows));
+      logger.info(table(["NAME", "VERSION", "TRUST", "DESCRIPTION"], bundleRows));
     }
 
     // Skills section
     if (skills.length > 0) {
-      console.log(`\nSkills (${skillTotal}):\n`);
+      logger.info(`\nSkills (${skillTotal}):\n`);
       const skillRows = skills.map((r) => [
         r.name.length > 38 ? r.name.slice(0, 35) + "..." : r.name,
         r.version || "-",
         r.category || "-",
         truncate(r.description, 40),
       ]);
-      console.log(table(["NAME", "VERSION", "CATEGORY", "DESCRIPTION"], skillRows));
+      logger.info(table(["NAME", "VERSION", "CATEGORY", "DESCRIPTION"], skillRows));
     }
 
     // Pagination hint
     const currentLimit = options.limit || 20;
     const currentOffset = options.offset || 0;
     if (bundleTotal + skillTotal > currentOffset + results.length) {
-      console.log(
+      logger.info(
         `\n  Use --offset ${currentOffset + currentLimit} to see more results.`,
       );
     }
 
-    console.log();
-    console.log(
+    logger.info("");
+    logger.info(
       'Use "mpak bundle show <name>" or "mpak skill show <name>" for details.',
     );
   } catch (error) {
-    fmtError(error instanceof Error ? error.message : "Search failed");
+    logger.error(error instanceof Error ? error.message : "Search failed");
   }
 }

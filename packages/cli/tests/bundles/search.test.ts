@@ -74,7 +74,7 @@ describe("handleSearch", () => {
 		expect(mockSearchBundles).toHaveBeenCalledWith(
 			expect.objectContaining({ q: "nonexistent" }),
 		);
-		expect(stdoutSpy).toHaveBeenCalledWith(
+		expect(stderrSpy).toHaveBeenCalledWith(
 			expect.stringContaining('No bundles found for "nonexistent"'),
 		);
 	});
@@ -84,10 +84,10 @@ describe("handleSearch", () => {
 
 		await handleSearch("test");
 
-		expect(stdoutSpy).toHaveBeenCalledWith(
+		expect(stderrSpy).toHaveBeenCalledWith(
 			expect.stringContaining("Found 2 bundle(s)"),
 		);
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("@scope/alpha");
 		expect(allOutput).toContain("@scope/beta");
 	});

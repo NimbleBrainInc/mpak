@@ -38,10 +38,6 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     stderr += args.join(" ") + "\n";
   });
-  vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
-    stderr += String(chunk);
-    return true;
-  });
   vi.spyOn(process, "exit").mockImplementation(() => {
     throw new Error("process.exit called");
   });
@@ -62,7 +58,7 @@ describe("handleUpdate — single bundle", () => {
     await handleUpdate("@scope/a");
 
     expect(mockLoadBundle).toHaveBeenCalledWith("@scope/a", { force: true });
-    expect(stdout).toContain("Updated @scope/a to 2.0.0");
+    expect(stderr).toContain("Updated @scope/a to 2.0.0");
   });
 
   it("outputs JSON when --json is set", async () => {
@@ -107,7 +103,7 @@ describe("handleUpdate — bulk update", () => {
 
     await handleUpdate(undefined);
 
-    expect(stdout).toContain("All cached bundles are up to date.");
+    expect(stderr).toContain("All cached bundles are up to date.");
   });
 
   it("outputs empty JSON array when nothing is outdated and --json is set", async () => {
@@ -135,8 +131,8 @@ describe("handleUpdate — bulk update", () => {
 
     expect(mockLoadBundle).toHaveBeenCalledWith("@scope/a", { force: true });
     expect(mockLoadBundle).toHaveBeenCalledWith("@scope/b", { force: true });
-    expect(stdout).toContain("Updated @scope/a: 1.0.0 -> 2.0.0");
-    expect(stdout).toContain("Updated @scope/b: 1.0.0 -> 3.0.0");
+    expect(stderr).toContain("Updated @scope/a: 1.0.0 -> 2.0.0");
+    expect(stderr).toContain("Updated @scope/b: 1.0.0 -> 3.0.0");
   });
 
   it("continues updating when some bundles fail", async () => {
@@ -152,7 +148,7 @@ describe("handleUpdate — bulk update", () => {
 
     await handleUpdate(undefined);
 
-    expect(stdout).toContain("Updated @scope/good: 1.0.0 -> 2.0.0");
+    expect(stderr).toContain("Updated @scope/good: 1.0.0 -> 2.0.0");
     expect(stderr).toContain("Failed to update @scope/bad");
   });
 

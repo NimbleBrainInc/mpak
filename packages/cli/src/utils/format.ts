@@ -77,4 +77,5 @@ export const fmtError = logError;
 
 export const logger = {
 	error: (msg: string) => console.error(`[Error] ${msg}`),
+	info: (msg: string) => console.error(msg),
 };

@@ -83,7 +83,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("@scope/test-skill@1.2.0");
 		expect(allOutput).toContain("A test skill for unit tests");
 	});
@@ -93,7 +93,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("License: MIT");
 		expect(allOutput).toContain("Category: development");
 		expect(allOutput).toContain("Tags: mcp, testing");
@@ -106,7 +106,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Triggers:");
 		expect(allOutput).toContain("test trigger");
 		expect(allOutput).toContain("run tests");
@@ -117,7 +117,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Examples:");
 		expect(allOutput).toContain('"Run my tests" (in a project directory)');
 		expect(allOutput).toContain('"Check test coverage"');
@@ -128,7 +128,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Versions:");
 		expect(allOutput).toContain("1.2.0");
 		expect(allOutput).toContain("1.1.0");
@@ -140,7 +140,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/test-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Install: mpak skill install @scope/test-skill");
 	});
 
@@ -149,7 +149,7 @@ describe("handleSkillShow", () => {
 
 		await handleSkillShow("@scope/minimal-skill", {});
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("@scope/minimal-skill@0.1.0");
 		expect(allOutput).not.toContain("License:");
 		expect(allOutput).not.toContain("Category:");

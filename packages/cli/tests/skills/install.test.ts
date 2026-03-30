@@ -162,7 +162,7 @@ describe("handleSkillInstall", () => {
 	it("prints success output in normal mode", async () => {
 		await handleSkillInstall("@scope/test-skill");
 
-		const allOutput = stdoutSpy.mock.calls
+		const allOutput = stderrSpy.mock.calls
 			.map((c: unknown[]) => c[0])
 			.join("\n");
 		expect(allOutput).toContain("test-skill@1.2.0");

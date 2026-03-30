@@ -20,7 +20,7 @@ export async function handleSkillPull(
   try {
     const { name, version } = parsePackageSpec(skillSpec);
 
-    console.log(
+    logger.info(
       `=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`,
     );
 
@@ -34,8 +34,8 @@ export async function handleSkillPull(
       return;
     }
 
-    console.log(`   Version: ${metadata.version}`);
-    console.log(`   Size: ${formatSize(metadata.size)}`);
+    logger.info(`   Version: ${metadata.version}`);
+    logger.info(`   Size: ${formatSize(metadata.size)}`);
 
     const defaultFilename = `${name.replace("@", "").replace("/", "-")}-${metadata.version}.skill`;
     outputPath = options.output
@@ -44,9 +44,9 @@ export async function handleSkillPull(
 
     writeFileSync(outputPath, data);
 
-    console.log(`\n=> Skill downloaded successfully!`);
-    console.log(`   File: ${outputPath}`);
-    console.log(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
+    logger.info(`\n=> Skill downloaded successfully!`);
+    logger.info(`   File: ${outputPath}`);
+    logger.info(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
   } catch (error) {
     if (outputPath) {
       try { rmSync(outputPath, { force: true }); } catch (_e) { /* ignore */ }

@@ -1,5 +1,5 @@
 import { mpak } from "../../utils/config.js";
-import { table } from "../../utils/format.js";
+import { logger, table } from "../../utils/format.js";
 
 export interface OutdatedEntry {
   name: string;
@@ -54,15 +54,15 @@ export async function handleOutdated(options: OutdatedOptions = {}): Promise<voi
   }
 
   if (outdated.length === 0) {
-    console.log("All cached bundles are up to date.");
+    logger.info("All cached bundles are up to date.");
     return;
   }
 
-  console.log(
+  logger.info(
     table(
       ["Bundle", "Current", "Latest", "Pulled"],
       outdated.map((e) => [e.name, e.current, e.latest, e.pulledAt]),
     ),
   );
-  console.log(`\n${outdated.length} bundle(s) can be updated. Run 'mpak update' to update all.`);
+  logger.info(`\n${outdated.length} bundle(s) can be updated. Run 'mpak update' to update all.`);
 }

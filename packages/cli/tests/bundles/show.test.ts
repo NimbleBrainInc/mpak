@@ -125,7 +125,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("\u2713"); // verified checkmark
 		expect(allOutput).toContain("Test Bundle v1.2.0");
 	});
@@ -136,7 +136,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Name: @scope/test-bundle");
 		expect(allOutput).toContain("Author: test-author");
 		expect(allOutput).toContain("Type: node");
@@ -150,7 +150,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Trust: L2 Verified");
 		expect(allOutput).toContain("Controls: 8/10 passed");
 	});
@@ -161,7 +161,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Tools (2):");
 		expect(allOutput).toContain("tool-one");
 		expect(allOutput).toContain("tool-two");
@@ -173,7 +173,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).toContain("Versions (2):");
 		expect(allOutput).toContain("1.2.0");
 		expect(allOutput).toContain("(latest)");
@@ -218,7 +218,7 @@ describe("handleShow", () => {
 
 		await handleShow("@scope/test-bundle");
 
-		const allOutput = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
 		expect(allOutput).not.toContain("Author:");
 		expect(allOutput).not.toContain("License:");
 		expect(allOutput).not.toContain("Homepage:");
