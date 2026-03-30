@@ -1,106 +1,20 @@
 /**
  * SDK-specific type definitions for mpak SDK
  *
- * API response types are re-exported from @nimblebrain/mpak-schemas.
- * This file contains SDK-specific types (client config, skill references, etc.)
+ * API response types should be imported directly from @nimblebrain/mpak-schemas.
+ * This file contains only SDK-specific types (client config).
  */
 
-import type {
-  BundleSearchResponse,
-  BundleDetail,
-  VersionsResponse,
-  VersionDetail,
-  DownloadInfo,
-  SkillSearchResponse,
-  SkillDetail,
-  SkillDownloadInfo,
-  PlatformInfo,
-  Pagination,
-  FullProvenance,
-  Bundle,
-  SkillSummary,
-} from '@nimblebrain/mpak-schemas';
-
 // =============================================================================
-// Re-exports from @nimblebrain/mpak-schemas
+// Search Params (SDK-specific: all fields optional for client-side use)
 // =============================================================================
 
-/** Response from bundle search endpoint */
-export type { BundleSearchResponse };
-
-/** Full bundle detail */
-export type { BundleDetail as BundleDetailResponse };
-
-/** Bundle versions listing */
-export type { VersionsResponse as BundleVersionsResponse };
-
-/** Single version detail */
-export type { VersionDetail as BundleVersionResponse };
-
-/** Bundle download info */
-export type { DownloadInfo as BundleDownloadResponse };
-
-/** Skill search response */
-export type { SkillSearchResponse };
-
-/** Skill detail response */
-export type { SkillDetail as SkillDetailResponse };
-
-/** Skill download info */
-export type { SkillDownloadInfo as SkillDownloadResponse };
-
-/** Bundle summary in search results */
-export type { Bundle };
-
-/** Bundle detail alias */
-export type { BundleDetail };
-
-/** Version in versions listing */
-export type BundleVersion = VersionsResponse['versions'][number];
-
-/** Artifact in version detail */
-export type BundleArtifact = VersionDetail['artifacts'][number];
-
-/** Download info alias */
-export type BundleDownloadInfo = DownloadInfo;
-
-/** Skill summary in search results */
-export type Skill = SkillSummary;
-
-/** Skill detail alias */
-export type { SkillDetail };
-
-/** Skill download info alias */
-export type { SkillDownloadInfo };
-
-/** Skill version in detail */
-export type SkillVersion = SkillDetail['versions'][number];
-
-// =============================================================================
-// Common Types
-// =============================================================================
-
-/** Platform identifier (os + arch) */
-export type Platform = PlatformInfo;
-
-/** Pagination info returned by search endpoints */
-export type { Pagination };
-
-/** Provenance information for verified packages */
-export type Provenance = FullProvenance;
-
-/** Author information */
-export interface Author {
-  name: string;
-  url?: string;
-  email?: string;
-}
-
-// =============================================================================
-// Search Params
-// =============================================================================
-
-/** Query parameters for bundle search */
+/**
+ * Query parameters for bundle search.
+ *
+ * Note: The schema's BundleSearchParams uses z.default() which makes fields
+ * required in the inferred output type. The SDK needs all-optional input types.
+ */
 export interface BundleSearchParams {
   q?: string;
   type?: string;
@@ -109,12 +23,13 @@ export interface BundleSearchParams {
   offset?: number;
 }
 
-/** Query parameters for skill search */
+/**
+ * Query parameters for skill search.
+ */
 export interface SkillSearchParams {
   q?: string;
   tags?: string;
   category?: string;
-  surface?: string;
   sort?: 'downloads' | 'recent' | 'name';
   limit?: number;
   offset?: number;

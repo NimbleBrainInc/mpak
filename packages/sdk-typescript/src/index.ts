@@ -3,63 +3,42 @@
  *
  * TypeScript SDK for mpak registry - MCPB bundles and Agent Skills
  *
- * Requires Node.js 18+ for native fetch support.
- *
  * @example
  * ```typescript
- * import { MpakClient } from '@nimblebrain/mpak-sdk';
+ * import { Mpak } from '@nimblebrain/mpak-sdk';
  *
- * const client = new MpakClient();
+ * const mpak = new Mpak();
  *
  * // Search for bundles
- * const bundles = await client.searchBundles({ q: 'mcp' });
+ * const bundles = await mpak.client.searchBundles({ q: 'mcp' });
  *
- * // Download a bundle (latest version, auto-detected platform)
- * const { data, metadata } = await client.downloadBundle('@nimbletools/echo');
- *
- * // Download a skill bundle
- * const { data, metadata } = await client.downloadSkillBundle('@nimblebraininc/folk-crm');
+ * // Load a bundle into cache
+ * const result = await mpak.bundleCache.loadBundle('@scope/name');
  * ```
  */
 
-export { MpakClient } from './client.js';
+// Facade — primary entry point
+export { Mpak } from './mpakSDK.js';
+export type { MpakOptions, PrepareServerOptions, ServerCommand } from './mpakSDK.js';
 
-// Configuration
+// Components (standalone use)
+export { MpakConfigManager } from './config-manager.js';
+export type { MpakConfigManagerOptions } from './config-manager.js';
+export { MpakBundleCache } from './cache.js';
+export type { MpakBundleCacheOptions } from './cache.js';
+export { MpakClient } from './client.js';
 export type { MpakClientConfig } from './types.js';
 
-// Bundle types
-export type {
-  BundleSearchParams,
-  BundleDetailResponse,
-  BundleVersionsResponse,
-  BundleVersionResponse,
-  BundleDownloadResponse,
-  Bundle,
-  BundleDetail,
-  BundleVersion,
-  BundleArtifact,
-  BundleDownloadInfo,
-} from './types.js';
-
-// Re-export BundleSearchResponse from schemas
-export type { BundleSearchResponse } from '@nimblebrain/mpak-schemas';
-
-// Skill types
-export type {
-  SkillSearchParams,
-  SkillDetailResponse,
-  SkillDownloadResponse,
-  Skill,
-  SkillDetail,
-  SkillDownloadInfo,
-  SkillVersion,
-} from './types.js';
-
-// Re-export SkillSearchResponse from schemas
-export type { SkillSearchResponse } from '@nimblebrain/mpak-schemas';
-
-// Common types
-export type { Platform, Pagination, Provenance, Author } from './types.js';
+// Utilities
+export { parsePackageSpec } from './utils.js';
 
 // Errors
-export { MpakError, MpakNotFoundError, MpakIntegrityError, MpakNetworkError } from './errors.js';
+export {
+  MpakError,
+  MpakNotFoundError,
+  MpakIntegrityError,
+  MpakNetworkError,
+  MpakCacheCorruptedError,
+  MpakConfigCorruptedError,
+  MpakConfigError,
+} from './errors.js';

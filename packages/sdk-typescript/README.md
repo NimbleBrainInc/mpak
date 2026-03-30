@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/npm/l/@nimblebrain/mpak-sdk)](https://github.com/NimbleBrainInc/mpak/blob/main/packages/sdk-typescript/LICENSE)
 [![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
 
-TypeScript SDK for the mpak registry - search, download, and resolve MCPB bundles and Agent Skills.
+TypeScript SDK for the mpak registry — search, download, cache, configure, and run MCPB bundles and Agent Skills.
 
 ## Installation
 
@@ -16,29 +16,112 @@ pnpm add @nimblebrain/mpak-sdk
 
 ## Quick Start
 
+The `MpakSDK` facade is the primary entry point. It wires together the registry client, local cache, and config manager:
+
 ```typescript
-import { MpakClient } from '@nimblebrain/mpak-sdk';
+import { MpakSDK } from '@nimblebrain/mpak-sdk';
 
-const client = new MpakClient();
+const mpak = new MpakSDK();
 
-// Search for bundles
-const results = await client.searchBundles({ q: 'mcp', limit: 10 });
-for (const bundle of results.bundles) {
-  console.log(`${bundle.name}@${bundle.latest_version}`);
-}
+// Prepare a bundle for execution (downloads if not cached)
+const server = await mpak.prepareServer('@nimblebraininc/echo');
 
-// Get download info
-const download = await client.getBundleDownload('@nimblebraininc/echo', 'latest');
-console.log(`Download URL: ${download.url}`);
-console.log(`SHA256: ${download.bundle.sha256}`);
+// Spawn the MCP server
+import { spawn } from 'child_process';
+const child = spawn(server.command, server.args, {
+  env: { ...server.env, ...process.env },
+  cwd: server.cwd,
+  stdio: 'inherit',
+});
 ```
 
 ## Usage
 
+### Prepare and Run a Server
+
+`prepareServer` handles the full lifecycle: download, cache, read manifest, validate config, and resolve the command:
+
+```typescript
+const mpak = new MpakSDK();
+
+// Latest version
+const server = await mpak.prepareServer('@scope/bundle');
+
+// Pinned version (inline)
+const server = await mpak.prepareServer('@scope/bundle@1.2.0');
+
+// Pinned version (option) + force re-download
+const server = await mpak.prepareServer('@scope/bundle', {
+  version: '1.2.0',
+  force: true,
+});
+
+// Custom workspace directory for stateful bundles
+const server = await mpak.prepareServer('@scope/bundle', {
+  workspaceDir: '/path/to/project/.mpak',
+});
+
+// Extra env vars merged on top of manifest env
+const server = await mpak.prepareServer('@scope/bundle', {
+  env: { DEBUG: 'true' },
+});
+```
+
+The returned `ServerCommand` contains everything needed to spawn:
+
+```typescript
+server.command;  // e.g. 'node', 'python3', or '/path/to/binary'
+server.args;     // e.g. ['/cache/dir/index.js']
+server.env;      // manifest env + user config substitutions + overrides
+server.cwd;      // extracted bundle cache directory
+server.name;     // resolved package name
+server.version;  // resolved version string
+```
+
+### User Config (per-package settings)
+
+Bundles can declare required configuration (API keys, ports, etc.) in their manifest. Store values before running:
+
+```typescript
+const mpak = new MpakSDK();
+
+// Set a config value
+mpak.config.setPackageConfigValue('@scope/bundle', 'api_key', 'sk-...');
+
+// Values are substituted into ${user_config.*} placeholders in the manifest env
+// If required config is missing, prepareServer throws with a clear message
+```
+
+### Parse Package Specs
+
+Validate and parse `@scope/name` or `@scope/name@version` strings:
+
+```typescript
+MpakSDK.parsePackageSpec('@scope/name');
+// { name: '@scope/name' }
+
+MpakSDK.parsePackageSpec('@scope/name@1.0.0');
+// { name: '@scope/name', version: '1.0.0' }
+
+MpakSDK.parsePackageSpec('invalid');
+// throws: Invalid package spec
+```
+
+### Search Bundles
+
+```typescript
+const mpak = new MpakSDK();
+
+const results = await mpak.client.searchBundles({ q: 'mcp', limit: 10 });
+for (const bundle of results.bundles) {
+  console.log(`${bundle.name}@${bundle.latest_version}`);
+}
+```
+
 ### Get Bundle Details
 
 ```typescript
-const bundle = await client.getBundle('@nimblebraininc/echo');
+const bundle = await mpak.client.getBundle('@nimblebraininc/echo');
 
 console.log(bundle.description);
 console.log(`Versions: ${bundle.versions.map(v => v.version).join(', ')}`);
@@ -47,77 +130,81 @@ console.log(`Versions: ${bundle.versions.map(v => v.version).join(', ')}`);
 ### Platform-Specific Downloads
 
 ```typescript
-// Detect current platform
 const platform = MpakClient.detectPlatform();
 
-// Get platform-specific download
-const download = await client.getBundleDownload(
+const download = await mpak.client.getBundleDownload(
   '@nimblebraininc/echo',
   '0.1.3',
   platform
 );
 ```
 
-### Search Skills
+### Cache Operations
 
 ```typescript
-const skills = await client.searchSkills({
-  q: 'crm',
-  surface: 'claude-code',
-  limit: 10,
-});
+const mpak = new MpakSDK();
 
+// Download and cache a bundle
+const result = await mpak.cache.loadBundle('@scope/name');
+console.log(result.cacheDir);   // path to extracted bundle
+console.log(result.version);    // resolved version
+console.log(result.pulled);     // true if downloaded, false if from cache
+
+// Read a cached bundle's manifest
+const manifest = mpak.cache.readManifest('@scope/name');
+
+// List all cached bundles
+const bundles = mpak.cache.listCachedBundles();
+
+// Check for updates (fire-and-forget, logs via logger callback)
+await mpak.cache.checkForUpdateAsync('@scope/name');
+
+// Read/write cache metadata
+const meta = mpak.cache.getCacheMetadata('@scope/name');
+```
+
+### Config Manager
+
+```typescript
+const mpak = new MpakSDK();
+
+// Registry URL
+mpak.config.getRegistryUrl();
+mpak.config.setRegistryUrl('https://custom.registry.dev');
+
+// Per-package config
+mpak.config.setPackageConfigValue('@scope/name', 'api_key', 'sk-...');
+mpak.config.getPackageConfigValue('@scope/name', 'api_key');
+mpak.config.getPackageConfig('@scope/name');       // all values for a package
+mpak.config.clearPackageConfig('@scope/name');      // remove all config for a package
+mpak.config.clearPackageConfigValue('@scope/name', 'api_key');  // remove one key
+mpak.config.listPackagesWithConfig();               // list configured packages
+```
+
+### Search & Download Skills
+
+```typescript
+const mpak = new MpakSDK();
+
+const skills = await mpak.client.searchSkills({ q: 'crm', limit: 10 });
 for (const skill of skills.skills) {
   console.log(`${skill.name}: ${skill.description}`);
 }
+
+// Download skill with SHA256 integrity verification
+const download = await mpak.client.getSkillDownload('@nimbletools/folk-crm');
+const data = await mpak.client.downloadContent(download.url, download.skill.sha256);
 ```
 
-### Download Skill with Integrity Verification
+## Constructor Options
 
 ```typescript
-// Get skill download info
-const download = await client.getSkillDownload('@nimbletools/folk-crm');
-
-// Download content with SHA256 verification (fail-closed)
-const { content, verified } = await client.downloadSkillContent(
-  download.url,
-  download.skill.sha256 // If hash doesn't match, throws MpakIntegrityError
-);
-
-console.log(`Verified: ${verified}`);
-console.log(content);
-```
-
-### Resolve Skill References
-
-```typescript
-import { MpakClient, SkillReference } from '@nimblebrain/mpak-sdk';
-
-const client = new MpakClient();
-
-// Resolve from mpak registry
-const skill = await client.resolveSkillRef({
-  source: 'mpak',
-  name: '@nimblebraininc/folk-crm',
-  version: '1.3.0',
-});
-console.log(skill.content);
-
-// Resolve from GitHub
-const ghSkill = await client.resolveSkillRef({
-  source: 'github',
-  name: '@example/my-skill',
-  version: 'v1.0.0',
-  repo: 'owner/repo',
-  path: 'skills/my-skill/SKILL.md',
-});
-
-// Resolve from URL
-const urlSkill = await client.resolveSkillRef({
-  source: 'url',
-  name: '@example/custom',
-  version: '1.0.0',
-  url: 'https://example.com/skill.md',
+const mpak = new MpakSDK({
+  mpakHome: '~/.mpak',                       // Root directory for config + cache
+  registryUrl: 'https://registry.mpak.dev',   // Registry API URL
+  timeout: 30000,                             // Request timeout in ms
+  userAgent: 'my-app/1.0',                    // User-Agent header
+  logger: (msg) => console.error(msg),        // Logger for cache operations
 });
 ```
 
@@ -125,88 +212,130 @@ const urlSkill = await client.resolveSkillRef({
 
 ```typescript
 import {
-  MpakClient,
+  MpakSDK,
   MpakNotFoundError,
   MpakIntegrityError,
   MpakNetworkError,
 } from '@nimblebrain/mpak-sdk';
 
-const client = new MpakClient();
-
 try {
-  const bundle = await client.getBundle('@nonexistent/bundle');
+  const server = await mpak.prepareServer('@nonexistent/bundle');
 } catch (error) {
   if (error instanceof MpakNotFoundError) {
     console.error('Bundle not found:', error.message);
   } else if (error instanceof MpakIntegrityError) {
-    // CRITICAL: Content was NOT returned (fail-closed)
-    console.error('Integrity mismatch!');
-    console.error('Expected:', error.expected);
-    console.error('Actual:', error.actual);
+    // Content was NOT returned (fail-closed)
+    console.error('Expected SHA256:', error.expected);
+    console.error('Actual SHA256:', error.actual);
   } else if (error instanceof MpakNetworkError) {
     console.error('Network error:', error.message);
   }
 }
 ```
 
-## Configuration
-
-```typescript
-const client = new MpakClient({
-  registryUrl: 'https://registry.mpak.dev', // Custom registry URL
-  timeout: 30000, // Request timeout in ms
-});
-```
-
 ## API Reference
 
-### MpakClient
+### MpakSDK (facade)
+
+| Method | Description |
+|---|---|
+| `prepareServer(packageName, options?)` | Resolve a bundle into a ready-to-spawn `ServerCommand` |
+| `MpakSDK.parsePackageSpec(spec)` | Parse and validate a `@scope/name[@version]` string |
+
+Properties: `config` (ConfigManager), `client` (MpakClient), `cache` (BundleCache).
+
+### MpakClient (`mpak.client`)
 
 #### Bundle Methods
 
-- `searchBundles(params?)` - Search for bundles
-- `getBundle(name)` - Get bundle details
-- `getBundleVersions(name)` - List all versions
-- `getBundleVersion(name, version)` - Get specific version info
-- `getBundleDownload(name, version, platform?)` - Get download URL
+| Method | Description |
+|---|---|
+| `searchBundles(params?)` | Search for bundles |
+| `getBundle(name)` | Get bundle details |
+| `getBundleVersions(name)` | List all versions |
+| `getBundleVersion(name, version)` | Get specific version info |
+| `getBundleDownload(name, version, platform?)` | Get download URL and metadata |
+| `downloadBundle(name, version?)` | Download bundle with integrity verification |
+| `downloadContent(url, sha256)` | Download any content with SHA256 verification |
 
 #### Skill Methods
 
-- `searchSkills(params?)` - Search for skills
-- `getSkill(name)` - Get skill details
-- `getSkillDownload(name)` - Get latest version download
-- `getSkillVersionDownload(name, version)` - Get specific version download
-- `downloadSkillContent(url, expectedSha256?)` - Download with optional integrity check
-- `resolveSkillRef(ref)` - Resolve a skill reference to content
+| Method | Description |
+|---|---|
+| `searchSkills(params?)` | Search for skills |
+| `getSkill(name)` | Get skill details |
+| `getSkillDownload(name)` | Get latest version download info |
+| `getSkillVersionDownload(name, version)` | Get specific version download info |
+| `downloadSkillBundle(name, version?)` | Download skill bundle with integrity verification |
 
 #### Static Methods
 
-- `MpakClient.detectPlatform()` - Detect current OS/arch
+| Method | Description |
+|---|---|
+| `MpakClient.detectPlatform()` | Detect current OS and architecture |
+
+### BundleCache (`mpak.cache`)
+
+| Method | Description |
+|---|---|
+| `loadBundle(name, options?)` | Download and cache a bundle (skips if cached) |
+| `readManifest(packageName)` | Read and validate a cached bundle's `manifest.json` |
+| `getCacheMetadata(packageName)` | Read cache metadata for a package |
+| `writeCacheMetadata(packageName, metadata)` | Write cache metadata |
+| `listCachedBundles()` | List all cached registry bundles |
+| `getPackageCachePath(packageName)` | Get the cache directory path for a package |
+| `checkForUpdateAsync(packageName)` | Fire-and-forget update check (logs result) |
+
+#### Static Methods
+
+| Method | Description |
+|---|---|
+| `BundleCache.extractZip(zipPath, destDir)` | Extract a ZIP with zip-bomb protection |
+| `BundleCache.isSemverEqual(a, b)` | Compare semver strings (ignores `v` prefix) |
+
+### ConfigManager (`mpak.config`)
+
+| Method | Description |
+|---|---|
+| `getRegistryUrl()` | Get the registry URL (respects `MPAK_REGISTRY_URL` env var) |
+| `setRegistryUrl(url)` | Override the registry URL |
+| `getPackageConfig(packageName)` | Get all stored config for a package |
+| `getPackageConfigValue(packageName, key)` | Get a single config value |
+| `setPackageConfigValue(packageName, key, value)` | Store a config value |
+| `clearPackageConfig(packageName)` | Remove all config for a package |
+| `clearPackageConfigValue(packageName, key)` | Remove a single config key |
+| `listPackagesWithConfig()` | List packages that have stored config |
+
+Property: `mpakHome` (readonly) — the root directory for mpak state.
 
 ### Error Types
 
-- `MpakError` - Base error class
-- `MpakNotFoundError` - Resource not found (404)
-- `MpakIntegrityError` - Hash mismatch (content NOT returned)
-- `MpakNetworkError` - Network failures, timeouts
+| Class | Description |
+|---|---|
+| `MpakError` | Base error class |
+| `MpakNotFoundError` | Resource not found (404) |
+| `MpakIntegrityError` | SHA256 hash mismatch (content NOT returned) |
+| `MpakNetworkError` | Network failures, timeouts |
+
+### Types
+
+| Type | Description |
+|---|---|
+| `MpakSDKOptions` | Constructor options for `MpakSDK` |
+| `MpakClientConfig` | Constructor options for `MpakClient` |
+| `PrepareServerOptions` | Options for `prepareServer` |
+| `ServerCommand` | Return type of `prepareServer` |
+| `McpbManifest` | Parsed MCPB manifest schema |
+| `UserConfigField` | User config field definition from manifest |
 
 ## Development
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run unit tests
-pnpm test
-
-# Run integration tests (hits real API)
-pnpm test:integration
-
-# Type check
-pnpm typecheck
-
-# Build
-pnpm build
+pnpm install          # Install dependencies
+pnpm test             # Run unit tests
+pnpm test:integration # Run integration tests (hits live registry)
+pnpm typecheck        # Type check
+pnpm build            # Build
 ```
 
 ### Verification
@@ -214,14 +343,11 @@ pnpm build
 Run all checks before submitting changes:
 
 ```bash
-pnpm --filter @nimblebrain/mpak-sdk lint           # lint
-pnpm --filter @nimblebrain/mpak-sdk exec prettier --check "src/**/*.ts" "tests/**/*.ts"  # format
-pnpm --filter @nimblebrain/mpak-sdk typecheck       # type check
-pnpm --filter @nimblebrain/mpak-sdk test            # unit tests
-pnpm --filter @nimblebrain/mpak-sdk test:integration  # integration tests (hits live registry)
+pnpm --filter @nimblebrain/mpak-sdk lint
+pnpm --filter @nimblebrain/mpak-sdk typecheck
+pnpm --filter @nimblebrain/mpak-sdk test
+pnpm --filter @nimblebrain/mpak-sdk test:integration
 ```
-
-CI runs lint, format check, typecheck, and unit tests on every PR via [`sdk-typescript-ci.yml`](../../.github/workflows/sdk-typescript-ci.yml).
 
 ## Releasing
 

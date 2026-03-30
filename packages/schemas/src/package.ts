@@ -1,11 +1,27 @@
 import { z } from "zod";
 
+import { ServerTypeSchema } from "./manifest.js";
+
+// Re-export manifest schemas so existing consumers of package.ts are not broken.
+export {
+  CapabilitySchema,
+  ManifestAuthorSchema,
+  ManifestServerSchema,
+  McpbManifestSchema,
+  McpConfigSchema,
+  ServerTypeSchema,
+  UserConfigFieldSchema,
+  type ManifestAuthor,
+  type ManifestServer,
+  type McpbManifest,
+  type McpConfig,
+  type ServerType,
+  type UserConfigField,
+} from "./manifest.js";
+
 // =============================================================================
 // Enums & Search Params
 // =============================================================================
-
-/** Server runtime type */
-export const ServerTypeSchema = z.enum(["node", "python", "binary"]);
 
 /** Supported operating system platforms */
 export const PlatformSchema = z.enum(["darwin", "win32", "linux"]);
@@ -47,7 +63,6 @@ export const BundleDownloadParamsSchema = z.object({
 // TypeScript Types
 // =============================================================================
 
-export type ServerType = z.infer<typeof ServerTypeSchema>;
 export type Platform = z.infer<typeof PlatformSchema>;
 export type PackageSort = z.infer<typeof PackageSortSchema>;
 export type PackageSearchParams = z.infer<typeof PackageSearchParamsSchema>;
