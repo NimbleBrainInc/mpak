@@ -461,5 +461,92 @@ describe("ConfigManager", () => {
         config.packages?.["@scope/pkg"]?.["api_key"],
       ).toBe("secret");
     });
+
+    it("should throw ConfigCorruptedError when provider is not a string", () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: "1.0.0",
+          lastUpdated: "2024-01-01T00:00:00Z",
+          provider: 12345,
+        }),
+        { mode: 0o600 },
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(
+        ConfigCorruptedError,
+      );
+      expect(() => manager.loadConfig()).toThrow(
+        /provider must be a string/,
+      );
+    });
+
+    it("should load config with valid provider field", () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: "1.0.0",
+          lastUpdated: "2024-01-01T00:00:00Z",
+          provider: "cursor",
+        }),
+        { mode: 0o600 },
+      );
+
+      const manager = new ConfigManager();
+      const config = manager.loadConfig();
+      expect(config.provider).toBe("cursor");
+    });
+  });
+
+  describe("provider", () => {
+    it("should persist provider to disk across instances", () => {
+      // Instance 1 writes
+      const writer = new ConfigManager();
+      writer.setProvider("cursor");
+
+      // Instance 2 reads from disk (fresh, no cache)
+      const reader = new ConfigManager();
+      expect(reader.getProvider()).toBe("cursor");
+    });
+
+    it("should return undefined when no provider is set", () => {
+      const manager = new ConfigManager();
+      expect(manager.getProvider()).toBeUndefined();
+    });
+
+    it("should overwrite existing provider and persist the latest", () => {
+      const manager = new ConfigManager();
+      manager.setProvider("cursor");
+      manager.setProvider("copilot");
+
+      // Verify latest value persisted to disk
+      const reader = new ConfigManager();
+      expect(reader.getProvider()).toBe("copilot");
+    });
+
+    it("should accept arbitrary strings (no validation at storage layer)", () => {
+      // ConfigManager.setProvider does NOT validate against known providers.
+      // resolveProvider() is responsible for validation on read.
+      // This test documents that design decision.
+      const manager = new ConfigManager();
+      manager.setProvider("invented-provider");
+      expect(manager.getProvider()).toBe("invented-provider");
+    });
+
+    it("should not interfere with other config fields", () => {
+      const manager = new ConfigManager();
+      manager.setRegistryUrl("https://custom.example.com");
+      manager.setPackageConfigValue("@scope/pkg", "key", "value");
+      manager.setProvider("cursor");
+
+      // All three fields should coexist
+      const reader = new ConfigManager();
+      expect(reader.getProvider()).toBe("cursor");
+      expect(reader.getRegistryUrl()).toBe("https://custom.example.com");
+      expect(reader.getPackageConfigValue("@scope/pkg", "key")).toBe(
+        "value",
+      );
+    });
   });
 });
