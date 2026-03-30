@@ -141,15 +141,15 @@ describe("handleUnifiedSearch", () => {
 		expect(allOutput).toContain("@scope/skill-a");
 	});
 
-	it("swallows skill API errors and continues", async () => {
+	it("logs error when skill search throws", async () => {
 		mockSearchBundles.mockResolvedValue(bundleResponse);
 		mockSearchSkills.mockRejectedValue(new Error("Skills API not deployed"));
 
 		await handleUnifiedSearch("test");
 
-		// Should still show bundle results, not crash
-		const allOutput = stderrSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
-		expect(allOutput).toContain("@scope/bundle-a");
+		expect(stderrSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Skills API not deployed"),
+		);
 	});
 
 	it("outputs JSON when --json is set", async () => {
