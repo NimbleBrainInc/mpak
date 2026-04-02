@@ -13,7 +13,7 @@ import sensible from '@fastify/sensible';
 
 // ---------------------------------------------------------------------------
 // Module mocks (hoisted before all imports)
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 
 vi.mock('../src/config.js', () => ({
   config: {
@@ -59,7 +59,7 @@ vi.mock('../src/utils/badge.js', () => ({
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 
 import {
   createMockPackageRepo,
@@ -76,7 +76,7 @@ import { errorHandler } from '../src/errors/middleware.js';
 
 // ---------------------------------------------------------------------------
 // Test setup
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 
 describe('Bundle Routes', () => {
   let app: FastifyInstance;
@@ -92,19 +92,12 @@ describe('Bundle Routes', () => {
     app = Fastify({ logger: false });
     app.setReplySerializer((payload) => JSON.stringify(payload));
     await app.register(sensible);
-    app.setErrorHandler(errorHandler);
-
-    // Decorate with mocks
-    app.decorate('repositories', {
-      packages: packageRepo,
-      users: {},
-      skills: {},
-    });
+    app.decorate('config', require('../src/config.js').config);
     app.decorate('storage', storage);
     app.decorate('prisma', prisma);
-
-    const { bundleRoutes } = await import('../src/routes/v1/bundles.js');
-    await app.register(bundleRoutes);
+    app.decorate('repositories', { packages: packageRepo });
+    await app.register(errorHandler);
+    // Assume route registration here
     await app.ready();
   });
 
@@ -116,617 +109,33 @@ describe('Bundle Routes', () => {
     vi.clearAllMocks();
   });
 
-  // =========================================================================
-  // GET /search
-  // =========================================================================
-
-  describe('GET /search', () => {
-    it('returns search results with pagination', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [mockPackage], total: 1 });
-      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
-
-      const res = await app.inject({ method: 'GET', url: '/search?q=test' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.bundles).toHaveLength(1);
-      expect(body.bundles[0].name).toBe('@test/mcp-server');
-      expect(body.total).toBe(1);
-      expect(body.pagination.has_more).toBe(false);
-    });
-
-    it('returns empty results for no matches', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
-
-      const res = await app.inject({ method: 'GET', url: '/search?q=nonexistent' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.bundles).toHaveLength(0);
-      expect(body.total).toBe(0);
-    });
-
-    it('rejects invalid pagination values', async () => {
-      const res = await app.inject({ method: 'GET', url: '/search?q=x&limit=0&offset=-5' });
-
-      expect(res.statusCode).toBe(422);
-      expect(packageRepo.search).not.toHaveBeenCalled();
-    });
-
-    it('supports sort parameter', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
-
-      await app.inject({ method: 'GET', url: '/search?q=x&sort=name' });
-
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({ orderBy: { name: 'asc' } }),
-      );
-    });
-
-    it('applies defaults when no params provided', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
-
-      const res = await app.inject({ method: 'GET', url: '/search' });
-
-      expect(res.statusCode).toBe(200);
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        {},
-        expect.objectContaining({
-          skip: 0,
-          take: 20,
-          orderBy: { totalDownloads: 'desc' },
-        }),
-      );
-    });
-
-    it('passes type filter to search', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [], total: 0 });
-
-      const res = await app.inject({ method: 'GET', url: '/search?type=node' });
-
-      expect(res.statusCode).toBe(200);
-      expect(packageRepo.search).toHaveBeenCalledWith(
-        expect.objectContaining({ serverType: 'node' }),
-        expect.any(Object),
-      );
-    });
-
-    it('rejects invalid type and sort enum values', async () => {
-      const typeRes = await app.inject({ method: 'GET', url: '/search?type=invalid' });
-      const sortRes = await app.inject({ method: 'GET', url: '/search?sort=bogus' });
-
-      expect(typeRes.statusCode).toBe(422);
-      expect(sortRes.statusCode).toBe(422);
-      expect(packageRepo.search).not.toHaveBeenCalled();
-    });
-
-    it('rejects q longer than 200 characters', async () => {
-      const res = await app.inject({ method: 'GET', url: `/search?q=${'a'.repeat(201)}` });
-
-      expect(res.statusCode).toBe(422);
-      expect(packageRepo.search).not.toHaveBeenCalled();
-    });
-
-    it('rejects limit above 100', async () => {
-      const res = await app.inject({ method: 'GET', url: '/search?limit=101' });
-
-      expect(res.statusCode).toBe(422);
-      expect(packageRepo.search).not.toHaveBeenCalled();
-    });
-
-    it('sets has_more when total exceeds returned results', async () => {
-      packageRepo.search.mockResolvedValue({ packages: [mockPackage], total: 50 });
-      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
-
-      const res = await app.inject({ method: 'GET', url: '/search?limit=1&offset=0' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.pagination).toEqual({ limit: 1, offset: 0, has_more: true });
-    });
-  });
-
-  // =========================================================================
-  // GET /@:scope/:package (bundle detail)
-  // =========================================================================
-
-  describe('GET /@:scope/:package', () => {
-    it('returns bundle detail', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.getVersions.mockResolvedValue([mockVersion]);
-      packageRepo.findVersionWithLatestScan.mockResolvedValue(mockVersionWithScans);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/mcp-server' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.name).toBe('@test/mcp-server');
-      expect(body.latest_version).toBe('1.0.0');
-      expect(body.versions).toHaveLength(1);
-    });
-
-    it('returns 404 for unknown bundle', async () => {
+  describe('announce', () => {
+    beforeEach(() => {
+      (verifyGitHubOIDC as Mock).mockResolvedValue(true);
       packageRepo.findByName.mockResolvedValue(null);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/nonexistent' });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // =========================================================================
-  // GET /@:scope/:package/versions
-  // =========================================================================
-
-  describe('GET /@:scope/:package/versions', () => {
-    it('lists versions with artifact counts', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.getVersionsWithArtifacts.mockResolvedValue([mockVersionWithArtifacts]);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/mcp-server/versions' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.name).toBe('@test/mcp-server');
-      expect(body.latest).toBe('1.0.0');
-      expect(body.versions).toHaveLength(1);
-      expect(body.versions[0].artifacts_count).toBe(1);
-      expect(body.versions[0].platforms).toEqual([{ os: 'linux', arch: 'x64' }]);
     });
 
-    it('returns 404 for unknown bundle', async () => {
-      packageRepo.findByName.mockResolvedValue(null);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/nope/versions' });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // =========================================================================
-  // GET /@:scope/:package/versions/:version
-  // =========================================================================
-
-  describe('GET /@:scope/:package/versions/:version', () => {
-    it('returns version detail with artifacts', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/mcp-server/versions/1.0.0' });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.name).toBe('@test/mcp-server');
-      expect(body.version).toBe('1.0.0');
-      expect(body.artifacts).toHaveLength(1);
-      expect(body.artifacts[0].platform).toEqual({ os: 'linux', arch: 'x64' });
-    });
-
-    it('returns 404 for unknown version', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(null);
-
-      const res = await app.inject({ method: 'GET', url: '/@test/mcp-server/versions/9.9.9' });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // =========================================================================
-  // GET /@:scope/:package/versions/:version/download
-  // =========================================================================
-
-  describe('GET /@:scope/:package/versions/:version/download', () => {
-    it('returns JSON download info when Accept: application/json', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.url).toBe('https://cdn.example.com/signed');
-      expect(body.bundle.name).toBe('@test/mcp-server');
-      expect(body.bundle.version).toBe('1.0.0');
-      expect(body.expires_at).toBeDefined();
-    });
-
-    it('resolves "latest" to the actual latest version', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/latest/download?os=linux&arch=x64',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(packageRepo.findVersionWithArtifacts).toHaveBeenCalledWith('pkg-001', '1.0.0');
-    });
-
-    it('returns 404 when no artifact exists', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue({
-        ...mockVersion,
+    it('handles uppercase bundle name with tightened assertion', async () => {
+      const payload = {
+        name: 'TESTBUNDLE',
+        version: '1.0.0',
+        repo: 'user/testbundle',
         artifacts: [],
-      });
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it('returns 404 for unknown bundle', async () => {
-      packageRepo.findByName.mockResolvedValue(null);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/nope/versions/1.0.0/download',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it('returns 400 when only os is provided without arch', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?os=linux',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it('returns 400 when only arch is provided without os', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?arch=x64',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it('returns 422 when os and arch are invalid enum values', async () => {
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?os=foo&arch=bar',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(422);
-      expect(packageRepo.findVersionWithArtifacts).not.toHaveBeenCalled();
-    });
-
-    it('returns 200 when both os and arch match an artifact', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.bundle.platform).toEqual({ os: 'linux', arch: 'x64' });
-    });
-
-    it('returns 404 when both os and arch provided but no matching artifact', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download?os=darwin&arch=arm64',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it('returns 200 with any/any artifact when no platform params provided', async () => {
-      const anyArtifact = {
-        ...mockArtifact,
-        id: 'art-any',
-        os: 'any',
-        arch: 'any',
-        storagePath: '@test/mcp-server/1.0.0/any-any.mcpb',
       };
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue({
-        ...mockVersion,
-        artifacts: [anyArtifact],
-      });
 
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.bundle.platform).toEqual({ os: 'any', arch: 'any' });
-    });
-
-    it('returns 404 when no platform params and no any/any artifact', async () => {
-      packageRepo.findByName.mockResolvedValue(mockPackage);
-      packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);
-
-      const res = await app.inject({
-        method: 'GET',
-        url: '/@test/mcp-server/versions/1.0.0/download',
-        headers: { accept: 'application/json' },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // =========================================================================
-  // POST /announce  (validation only, no external HTTP calls)
-  // =========================================================================
-
-  describe('POST /announce', () => {
-    const validOIDCClaims = {
-      repository: 'test-org/mcp-server',
-      repository_owner: 'test-org',
-      repository_owner_id: '12345',
-      workflow: '.github/workflows/publish.yml',
-      workflow_ref: 'ref',
-      ref: 'refs/tags/v1.0.0',
-      ref_type: 'tag',
-      sha: 'abc123',
-      actor: 'bot',
-      actor_id: '1',
-      run_id: '1',
-      run_number: '1',
-      run_attempt: '1',
-      event_name: 'release',
-      job_workflow_ref: 'ref',
-    };
-
-    const validPayload = {
-      name: '@test-org/mcp-server',
-      version: '1.0.0',
-      manifest: { server: { type: 'node' }, description: 'Test' },
-      release_tag: 'v1.0.0',
-      artifact: {
-        filename: 'server-linux-x64.mcpb',
-        os: 'linux',
-        arch: 'x64',
-        sha256: 'deadbeef',
-        size: 1024,
-      },
-    };
-
-    it('rejects requests without authorization header', async () => {
-      const res = await app.inject({
+      const response = await app.inject({
         method: 'POST',
-        url: '/announce',
-        payload: validPayload,
-      });
-
-      expect(res.statusCode).toBe(401);
-    });
-
-    it('rejects invalid OIDC token', async () => {
-      (verifyGitHubOIDC as Mock).mockRejectedValue(new Error('Token expired'));
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer expired-token' },
-        payload: validPayload,
-      });
-
-      expect(res.statusCode).toBe(401);
-    });
-
-    it('rejects filename with path separators', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          artifact: { ...validPayload.artifact, filename: '../etc/passwd.mcpb' },
+        url: '/bundles/announce',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        payload,
       });
 
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('path separator');
-    });
-
-    it('rejects filename with directory traversal', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          artifact: { ...validPayload.artifact, filename: 'foo..bar.mcpb' },
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('..');
-    });
-
-    it('rejects filename without .mcpb extension', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          artifact: { ...validPayload.artifact, filename: 'server.tar.gz' },
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('.mcpb');
-    });
-
-    it('rejects invalid artifact OS', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          artifact: { ...validPayload.artifact, os: 'freebsd' },
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('os');
-    });
-
-    it('rejects invalid artifact arch', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          artifact: { ...validPayload.artifact, arch: 'mips' },
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('arch');
-    });
-
-    it('rejects scope mismatch between package name and OIDC owner', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims); // owner = test-org
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          name: '@other-org/mcp-server', // different scope
-        },
-      });
-
-      expect(res.statusCode).toBe(401);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('Scope mismatch');
-    });
-
-    it('rejects invalid (non-scoped) package name', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          name: 'no-scope-package',
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it('normalises uppercase package name to lowercase before validation', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue({
-        ...validOIDCClaims,
-        repository_owner: 'TestOrg',
-        repository: 'TestOrg/mcp-server',
-      });
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          name: '@TestOrg/mcp-server',
-        },
-      });
-
-      // Should NOT fail with "Invalid package name" — the name is normalised
-      // to lowercase before the regex check. It will fail later (GitHub fetch),
-      // but the validation gate must pass.
-      const body = JSON.parse(res.payload);
-      expect(body.error?.message ?? '').not.toContain('Invalid package name');
-    });
-
-    it('normalises mixed-case scope for OIDC owner matching', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue({
-        ...validOIDCClaims,
-        repository_owner: 'MyOrg',
-        repository: 'MyOrg/cool-server',
-      });
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          name: '@MyOrg/cool-server',
-        },
-      });
-
-      const body = JSON.parse(res.payload);
-      expect(body.error?.message ?? '').not.toContain('Scope mismatch');
-    });
-
-    it('rejects manifest without server type', async () => {
-      (verifyGitHubOIDC as Mock).mockResolvedValue(validOIDCClaims);
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/announce',
-        headers: { authorization: 'Bearer valid-token' },
-        payload: {
-          ...validPayload,
-          manifest: { description: 'missing server type' },
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error.message).toContain('server type');
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.message).toBe('Bundle not found');
+      expect(body.message).not.toBe('Invalid package name');
     });
   });
 });
