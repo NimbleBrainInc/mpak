@@ -1,6 +1,6 @@
 {
   "name": "@nimblebrain/mpak-schemas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared Zod schemas and TypeScript types for the mpak registry",
   "author": "NimbleBrain <engineering@mpak.dev>",
   "license": "Apache-2.0",

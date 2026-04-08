@@ -11,6 +11,7 @@ export {
   McpConfigSchema,
   ServerTypeSchema,
   UserConfigFieldSchema,
+  type Capability,
   type ManifestAuthor,
   type ManifestServer,
   type McpbManifest,

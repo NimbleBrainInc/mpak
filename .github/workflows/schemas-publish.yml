@@ -1,0 +1,59 @@
+name: Publish Schemas
+
+on:
+  push:
+    tags:
+      - 'schemas-v*'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nimblebrain/mpak-schemas build
+      - run: pnpm --filter @nimblebrain/mpak-schemas lint
+      - run: pnpm --filter @nimblebrain/mpak-schemas typecheck
+      - run: pnpm --filter @nimblebrain/mpak-schemas test
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/schemas-v}"
+          PKG_VERSION=$(node -e "console.log(require('./packages/schemas/package.json').version)")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) != package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm --filter @nimblebrain/mpak-schemas build
+
+      - name: Publish to npm
+        run: |
+          # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
+          pnpm pack
+          npm publish nimblebrain-mpak-schemas-*.tgz --provenance --access public
+        working-directory: packages/schemas

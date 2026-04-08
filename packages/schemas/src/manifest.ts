@@ -87,4 +87,5 @@ export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type ManifestAuthor = z.infer<typeof ManifestAuthorSchema>;
 export type ManifestServer = z.infer<typeof ManifestServerSchema>;
+export type Capability = z.infer<typeof CapabilitySchema>;
 export type McpbManifest = z.infer<typeof McpbManifestSchema>;
