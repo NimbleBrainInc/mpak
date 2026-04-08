@@ -29,9 +29,22 @@ export interface CacheMetadata {
 /**
  * Get the mpak base directory.
  * Respects MPAK_HOME env var; defaults to ~/.mpak/.
+ * The value is resolved once and cached for the lifetime of the process.
  */
+let _mpakHome: string | undefined;
 export function getMpakHome(): string {
-  return process.env["MPAK_HOME"] || join(homedir(), ".mpak");
+  if (_mpakHome === undefined) {
+    _mpakHome = process.env["MPAK_HOME"] || join(homedir(), ".mpak");
+  }
+  return _mpakHome;
+}
+
+/**
+ * Reset the cached MPAK_HOME value. Only for use in tests.
+ * @internal
+ */
+export function _resetMpakHome(): void {
+  _mpakHome = undefined;
 }
 
 /**

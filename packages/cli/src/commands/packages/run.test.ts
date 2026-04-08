@@ -1,7 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { tmpdir } from "os";
+import { describe, it, expect } from "vitest";
 import { join } from "path";
-import { mkdirSync, rmSync } from "fs";
 import {
   parsePackageSpec,
   resolveArgs,
@@ -12,6 +10,7 @@ import {
   localBundleNeedsExtract,
 } from "./run.js";
 import { getCacheDir } from "../../utils/cache.js";
+import { useTempMpakHome } from "../../test-utils/mpak-home.js";
 
 describe("parsePackageSpec", () => {
   describe("scoped packages", () => {
@@ -79,40 +78,24 @@ describe("parsePackageSpec", () => {
 });
 
 describe("getCacheDir", () => {
-  let tempMpakHome: string;
-  const originalMpakHome = process.env["MPAK_HOME"];
-
-  beforeEach(() => {
-    tempMpakHome = join(tmpdir(), `mpak-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(tempMpakHome, { recursive: true });
-    process.env["MPAK_HOME"] = tempMpakHome;
-  });
-
-  afterEach(() => {
-    if (originalMpakHome !== undefined) {
-      process.env["MPAK_HOME"] = originalMpakHome;
-    } else {
-      delete process.env["MPAK_HOME"];
-    }
-    rmSync(tempMpakHome, { recursive: true, force: true });
-  });
+  const mpakHome = useTempMpakHome();
 
   it("converts @scope/name to scope-name", () => {
-    const expectedBase = join(tempMpakHome, "cache");
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("@nimblebraininc/echo")).toBe(
       join(expectedBase, "nimblebraininc-echo"),
     );
   });
 
   it("handles simple scoped names", () => {
-    const expectedBase = join(tempMpakHome, "cache");
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("@foo/bar")).toBe(
       join(expectedBase, "foo-bar"),
     );
   });
 
   it("handles unscoped names", () => {
-    const expectedBase = join(tempMpakHome, "cache");
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("simple")).toBe(
       join(expectedBase, "simple"),
     );
@@ -284,23 +267,7 @@ describe("substituteEnvVars", () => {
 });
 
 describe("getLocalCacheDir", () => {
-  let tempMpakHome: string;
-  const originalMpakHome = process.env["MPAK_HOME"];
-
-  beforeEach(() => {
-    tempMpakHome = join(tmpdir(), `mpak-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(tempMpakHome, { recursive: true });
-    process.env["MPAK_HOME"] = tempMpakHome;
-  });
-
-  afterEach(() => {
-    if (originalMpakHome !== undefined) {
-      process.env["MPAK_HOME"] = originalMpakHome;
-    } else {
-      delete process.env["MPAK_HOME"];
-    }
-    rmSync(tempMpakHome, { recursive: true, force: true });
-  });
+  const mpakHome = useTempMpakHome();
 
   it("returns consistent hash for same path", () => {
     const dir1 = getLocalCacheDir("/path/to/bundle.mcpb");
@@ -315,7 +282,7 @@ describe("getLocalCacheDir", () => {
   });
 
   it("includes _local in path", () => {
-    const expectedBase = join(tempMpakHome, "cache", "_local");
+    const expectedBase = join(mpakHome.path, "cache", "_local");
     const dir = getLocalCacheDir("/path/to/bundle.mcpb");
     expect(dir).toContain("_local");
     expect(dir.startsWith(expectedBase)).toBe(true);

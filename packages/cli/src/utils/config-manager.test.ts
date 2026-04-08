@@ -3,7 +3,6 @@ import {
   it,
   expect,
   beforeEach,
-  afterEach,
 } from "vitest";
 import {
   ConfigManager,
@@ -11,34 +10,20 @@ import {
 } from "./config-manager.js";
 import {
   existsSync,
-  rmSync,
   writeFileSync,
   mkdirSync,
 } from "fs";
 import { join } from "path";
-import { tmpdir } from "os";
+import { useTempMpakHome } from "../test-utils/mpak-home.js";
 
 describe("ConfigManager", () => {
+  const mpakHome = useTempMpakHome();
   let testConfigDir: string;
   let testConfigFile: string;
-  const originalMpakHome = process.env["MPAK_HOME"];
 
   beforeEach(() => {
-    // Use a temp dir via MPAK_HOME so tests don't touch the real ~/.mpak/
-    testConfigDir = join(tmpdir(), `mpak-config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testConfigDir = mpakHome.path;
     testConfigFile = join(testConfigDir, "config.json");
-    process.env["MPAK_HOME"] = testConfigDir;
-  });
-
-  afterEach(() => {
-    if (originalMpakHome !== undefined) {
-      process.env["MPAK_HOME"] = originalMpakHome;
-    } else {
-      delete process.env["MPAK_HOME"];
-    }
-    if (existsSync(testConfigDir)) {
-      rmSync(testConfigDir, { recursive: true, force: true });
-    }
   });
 
   describe("loadConfig", () => {

@@ -58,7 +58,7 @@ The CLI stores configuration in `~/.mpak/config.json`:
 Downloaded bundles are cached in `~/.mpak/cache/` (or `$MPAK_HOME/cache/` if set). To clear the cache:
 
 ```bash
-rm -rf ~/.mpak/cache
+rm -rf "${MPAK_HOME:-$HOME/.mpak}"/cache
 ```
 
 ## Next Steps

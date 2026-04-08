@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { listCachedBundles } from "./cache.js";
+import { useTempMpakHome } from "../test-utils/mpak-home.js";
 
 /**
  * Creates a fake cached bundle directory with manifest.json and .mpak-meta.json.
@@ -20,25 +21,12 @@ function seedBundle(
 }
 
 describe("listCachedBundles", () => {
+  const mpakHome = useTempMpakHome();
   let tempCacheBase: string;
-  let tempMpakHome: string;
-  const originalMpakHome = process.env["MPAK_HOME"];
 
   beforeEach(() => {
-    // Create a temp dir that acts as MPAK_HOME/cache/
-    tempMpakHome = join(tmpdir(), `mpak-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    tempCacheBase = join(tempMpakHome, "cache");
+    tempCacheBase = join(mpakHome.path, "cache");
     mkdirSync(tempCacheBase, { recursive: true });
-    process.env["MPAK_HOME"] = tempMpakHome;
-  });
-
-  afterEach(() => {
-    if (originalMpakHome !== undefined) {
-      process.env["MPAK_HOME"] = originalMpakHome;
-    } else {
-      delete process.env["MPAK_HOME"];
-    }
-    rmSync(tempMpakHome, { recursive: true, force: true });
   });
 
   it("returns empty array when cache dir does not exist", () => {
