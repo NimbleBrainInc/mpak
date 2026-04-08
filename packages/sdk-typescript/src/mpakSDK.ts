@@ -290,7 +290,7 @@ export class Mpak {
 
       if (storedValue !== undefined) {
         result[fieldName] = storedValue;
-      } else if (fieldData.default) {
+      } else if (fieldData.default !== undefined && fieldData.default !== null) {
         result[fieldName] = String(fieldData.default);
       } else if (fieldData.required) {
         const field: (typeof missingFields)[number] = {

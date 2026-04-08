@@ -68,7 +68,7 @@ export async function handleUpdate(
     } else {
       const message =
         result.reason instanceof Error ? result.reason.message : String(result.reason);
-      logger.info(`=> Failed to update ${outdated[i]!.name}: ${message}`);
+      logger.error(`Failed to update ${outdated[i]!.name}: ${message}`);
     }
   }
 

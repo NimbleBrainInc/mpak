@@ -99,6 +99,6 @@ export async function handleSkillInstall(
       logger.info('Skill available in Claude Code. Restart to activate.');
     }
   } catch (err) {
-    logger.error(err instanceof Error ? err.message : 'Failed to install skill');
+    logger.error(err instanceof Error ? err.message : String(err));
   }
 }

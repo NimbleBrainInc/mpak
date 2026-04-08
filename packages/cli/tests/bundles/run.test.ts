@@ -338,12 +338,15 @@ describe('async update check', () => {
     expect(stderr).not.toContain('Update available');
   });
 
-  it('logs debug message when update check fails', async () => {
+  it('silently swallows update check failures', async () => {
     mockCheckForUpdate.mockRejectedValue(new Error('network timeout'));
 
     handleRun('@scope/echo');
 
-    await vi.waitFor(() => expect(stderr).toContain('Debug: update check failed: network timeout'));
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(stderr).not.toContain('network timeout');
   });
 
   it('skips update check for local bundles', async () => {

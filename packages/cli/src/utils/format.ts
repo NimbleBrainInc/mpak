@@ -63,9 +63,6 @@ export function logError(message: string): void {
   console.error(`Error: ${message}`);
 }
 
-/** @deprecated Use {@link logError} instead. */
-export const fmtError = logError;
-
 export const logger = {
   error: (msg: string) => console.error(`[Error] ${msg}`),
   info: (msg: string) => console.error(msg),

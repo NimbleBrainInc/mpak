@@ -159,9 +159,8 @@ export async function handleRun(packageSpec: string, options: RunOptions = {}): 
           );
         }
       })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`=> Debug: update check failed: ${msg}\n`);
+      .catch(() => {
+        // Silently swallow — update check is best-effort
       });
   }
 
@@ -174,9 +173,8 @@ export async function handleRun(packageSpec: string, options: RunOptions = {}): 
     if (updateCheckPromise) {
       try {
         await Promise.race([updateCheckPromise, new Promise((r) => setTimeout(r, 3000))]);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`=> Debug: update check failed: ${msg}\n`);
+      } catch {
+        // Silently swallow — update check is best-effort
       }
     }
     process.exit(code ?? 0);
