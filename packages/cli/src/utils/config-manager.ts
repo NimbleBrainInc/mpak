@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
+import { getMpakHome } from "./cache.js";
 
 /**
  * Current config schema version
@@ -137,7 +137,7 @@ export class ConfigManager {
   private config: MpakConfig | null = null;
 
   constructor() {
-    this.configDir = join(homedir(), ".mpak");
+    this.configDir = getMpakHome();
     this.configFile = join(this.configDir, "config.json");
     this.ensureConfigDir();
   }

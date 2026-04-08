@@ -16,23 +16,28 @@ import {
   mkdirSync,
 } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { tmpdir } from "os";
 
 describe("ConfigManager", () => {
-  const testConfigDir = join(homedir(), ".mpak");
-  const testConfigFile = join(testConfigDir, "config.json");
+  let testConfigDir: string;
+  let testConfigFile: string;
+  const originalMpakHome = process.env["MPAK_HOME"];
 
   beforeEach(() => {
-    // Clean up test config before each test
-    if (existsSync(testConfigFile)) {
-      rmSync(testConfigFile, { force: true });
-    }
+    // Use a temp dir via MPAK_HOME so tests don't touch the real ~/.mpak/
+    testConfigDir = join(tmpdir(), `mpak-config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    testConfigFile = join(testConfigDir, "config.json");
+    process.env["MPAK_HOME"] = testConfigDir;
   });
 
   afterEach(() => {
-    // Clean up test config after each test
-    if (existsSync(testConfigFile)) {
-      rmSync(testConfigFile, { force: true });
+    if (originalMpakHome !== undefined) {
+      process.env["MPAK_HOME"] = originalMpakHome;
+    } else {
+      delete process.env["MPAK_HOME"];
+    }
+    if (existsSync(testConfigDir)) {
+      rmSync(testConfigDir, { recursive: true, force: true });
     }
   });
 

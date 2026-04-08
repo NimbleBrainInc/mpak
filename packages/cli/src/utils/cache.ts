@@ -27,11 +27,19 @@ export interface CacheMetadata {
 }
 
 /**
+ * Get the mpak base directory.
+ * Respects MPAK_HOME env var; defaults to ~/.mpak/.
+ */
+export function getMpakHome(): string {
+  return process.env["MPAK_HOME"] || join(homedir(), ".mpak");
+}
+
+/**
  * Get cache directory for a package
  * @example getCacheDir('@scope/name') => '~/.mpak/cache/scope-name'
  */
 export function getCacheDir(packageName: string): string {
-  const cacheBase = join(homedir(), ".mpak", "cache");
+  const cacheBase = join(getMpakHome(), "cache");
   // @scope/name -> scope/name
   const safeName = packageName.replace("@", "").replace("/", "-");
   return join(cacheBase, safeName);
@@ -112,11 +120,11 @@ export interface CachedBundle {
 }
 
 /**
- * Scan ~/.mpak/cache/ and return metadata for every cached registry bundle.
+ * Scan the cache directory and return metadata for every cached registry bundle.
  * Skips the _local/ directory (local dev bundles).
  */
 export function listCachedBundles(): CachedBundle[] {
-  const cacheBase = join(homedir(), ".mpak", "cache");
+  const cacheBase = join(getMpakHome(), "cache");
   if (!existsSync(cacheBase)) return [];
 
   const entries = readdirSync(cacheBase, { withFileTypes: true });
@@ -224,7 +232,7 @@ export async function downloadAndExtract(
   const cacheDir = getCacheDir(name);
 
   // Download to temp file
-  const tempPath = join(homedir(), ".mpak", "tmp", `${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
+  const tempPath = join(getMpakHome(), "tmp", `${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
   mkdirSync(dirname(tempPath), { recursive: true });
 
   process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);

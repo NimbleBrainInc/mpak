@@ -21,28 +21,31 @@ function seedBundle(
 
 describe("listCachedBundles", () => {
   let tempCacheBase: string;
-  const originalHome = process.env["HOME"];
+  let tempMpakHome: string;
+  const originalMpakHome = process.env["MPAK_HOME"];
 
   beforeEach(() => {
-    // Create a temp dir that acts as ~/.mpak/cache/
-    const tempHome = join(tmpdir(), `mpak-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    tempCacheBase = join(tempHome, ".mpak", "cache");
+    // Create a temp dir that acts as MPAK_HOME/cache/
+    tempMpakHome = join(tmpdir(), `mpak-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempCacheBase = join(tempMpakHome, "cache");
     mkdirSync(tempCacheBase, { recursive: true });
-    process.env["HOME"] = tempHome;
+    process.env["MPAK_HOME"] = tempMpakHome;
   });
 
   afterEach(() => {
-    process.env["HOME"] = originalHome;
-    // Clean up temp dir (parent of .mpak)
-    const tempHome = tempCacheBase.replace("/.mpak/cache", "");
-    rmSync(tempHome, { recursive: true, force: true });
+    if (originalMpakHome !== undefined) {
+      process.env["MPAK_HOME"] = originalMpakHome;
+    } else {
+      delete process.env["MPAK_HOME"];
+    }
+    rmSync(tempMpakHome, { recursive: true, force: true });
   });
 
   it("returns empty array when cache dir does not exist", () => {
-    // Point HOME to a dir with no .mpak/cache
+    // Point MPAK_HOME to a dir with no cache/
     const emptyHome = join(tmpdir(), `mpak-empty-${Date.now()}`);
     mkdirSync(emptyHome, { recursive: true });
-    process.env["HOME"] = emptyHome;
+    process.env["MPAK_HOME"] = emptyHome;
 
     expect(listCachedBundles()).toEqual([]);
 
