@@ -58,6 +58,14 @@ See the [Integrations](/integrations/claude-code) section for setting up mpak bu
 
 ## Environment Variables
 
+### Base directory
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MPAK_HOME` | `~/.mpak` | Override the base directory for cache, config, and temp files. All subdirectories (`cache/`, `tmp/`, `config.json`) are relative to this path. |
+
+### Runtime variables
+
 When `mpak run` spawns a bundle, it sets the following environment variables:
 
 | Variable | Default | Description |

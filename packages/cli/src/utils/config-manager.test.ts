@@ -3,7 +3,6 @@ import {
   it,
   expect,
   beforeEach,
-  afterEach,
 } from "vitest";
 import {
   ConfigManager,
@@ -11,29 +10,20 @@ import {
 } from "./config-manager.js";
 import {
   existsSync,
-  rmSync,
   writeFileSync,
   mkdirSync,
 } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { useTempMpakHome } from "../test-utils/mpak-home.js";
 
 describe("ConfigManager", () => {
-  const testConfigDir = join(homedir(), ".mpak");
-  const testConfigFile = join(testConfigDir, "config.json");
+  const mpakHome = useTempMpakHome();
+  let testConfigDir: string;
+  let testConfigFile: string;
 
   beforeEach(() => {
-    // Clean up test config before each test
-    if (existsSync(testConfigFile)) {
-      rmSync(testConfigFile, { force: true });
-    }
-  });
-
-  afterEach(() => {
-    // Clean up test config after each test
-    if (existsSync(testConfigFile)) {
-      rmSync(testConfigFile, { force: true });
-    }
+    testConfigDir = mpakHome.path;
+    testConfigFile = join(testConfigDir, "config.json");
   });
 
   describe("loadConfig", () => {

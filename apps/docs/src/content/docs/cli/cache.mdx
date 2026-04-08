@@ -9,7 +9,7 @@ When you run `mpak bundle run`, bundles are downloaded and cached locally. The c
 
 ## Cache Location
 
-Bundles are cached in your home directory:
+Bundles are cached in `$MPAK_HOME/cache/` (defaults to `~/.mpak/cache/`):
 
 ```
 ~/.mpak/cache/
@@ -19,6 +19,8 @@ Bundles are cached in your home directory:
     ├── src/
     └── deps/
 ```
+
+Set `MPAK_HOME` to override the base directory (e.g., `MPAK_HOME=~/.myapp/mpak`).
 
 Package names are flattened: `@scope/name` becomes `scope-name`. Only one version is cached per package. Running a newer version replaces the previous cached version.
 
@@ -97,4 +99,5 @@ mpak bundle run @org/server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `MPAK_HOME` | `~/.mpak` | Override the base directory for cache, config, and temp files |
 | `MPAK_REGISTRY_URL` | `https://registry.mpak.dev` | Override the registry API URL |

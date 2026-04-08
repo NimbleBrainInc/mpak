@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { homedir } from "os";
 import { join } from "path";
 import {
   parsePackageSpec,
@@ -11,6 +10,7 @@ import {
   localBundleNeedsExtract,
 } from "./run.js";
 import { getCacheDir } from "../../utils/cache.js";
+import { useTempMpakHome } from "../../test-utils/mpak-home.js";
 
 describe("parsePackageSpec", () => {
   describe("scoped packages", () => {
@@ -78,21 +78,24 @@ describe("parsePackageSpec", () => {
 });
 
 describe("getCacheDir", () => {
-  const expectedBase = join(homedir(), ".mpak", "cache");
+  const mpakHome = useTempMpakHome();
 
   it("converts @scope/name to scope-name", () => {
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("@nimblebraininc/echo")).toBe(
       join(expectedBase, "nimblebraininc-echo"),
     );
   });
 
   it("handles simple scoped names", () => {
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("@foo/bar")).toBe(
       join(expectedBase, "foo-bar"),
     );
   });
 
   it("handles unscoped names", () => {
+    const expectedBase = join(mpakHome.path, "cache");
     expect(getCacheDir("simple")).toBe(
       join(expectedBase, "simple"),
     );
@@ -264,12 +267,7 @@ describe("substituteEnvVars", () => {
 });
 
 describe("getLocalCacheDir", () => {
-  const expectedBase = join(
-    homedir(),
-    ".mpak",
-    "cache",
-    "_local",
-  );
+  const mpakHome = useTempMpakHome();
 
   it("returns consistent hash for same path", () => {
     const dir1 = getLocalCacheDir("/path/to/bundle.mcpb");
@@ -284,6 +282,7 @@ describe("getLocalCacheDir", () => {
   });
 
   it("includes _local in path", () => {
+    const expectedBase = join(mpakHome.path, "cache", "_local");
     const dir = getLocalCacheDir("/path/to/bundle.mcpb");
     expect(dir).toContain("_local");
     expect(dir.startsWith(expectedBase)).toBe(true);

@@ -9,12 +9,12 @@ import {
   statSync,
 } from "fs";
 import { createHash } from "crypto";
-import { homedir } from "os";
 import { join, resolve, basename } from "path";
 import { createClient } from "../../utils/client.js";
 import {
   getCacheDir,
   getCacheMetadata,
+  getMpakHome,
   checkForUpdateAsync,
   extractZip,
   resolveBundle,
@@ -158,7 +158,7 @@ export function getLocalCacheDir(bundlePath: string): string {
     .update(absolutePath)
     .digest("hex")
     .slice(0, 12);
-  return join(homedir(), ".mpak", "cache", "_local", hash);
+  return join(getMpakHome(), "cache", "_local", hash);
 }
 
 /**
@@ -298,7 +298,7 @@ async function gatherUserConfigValues(
                   value,
                 );
                 process.stderr.write(
-                  `=> Saved to ~/.mpak/config.json\n`,
+                  `=> Saved to ${join(getMpakHome(), "config.json")}\n`,
                 );
               }
               resolvePrompt();
