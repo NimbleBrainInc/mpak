@@ -1,5 +1,5 @@
-import { fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
+import { mpak } from '../../utils/config.js';
+import { logger } from '../../utils/format.js';
 
 export interface ShowOptions {
   json?: boolean;
@@ -8,92 +8,66 @@ export interface ShowOptions {
 /**
  * Handle the skill show command
  */
-export async function handleSkillShow(
-  name: string,
-  options: ShowOptions,
-): Promise<void> {
+export async function handleSkillShow(name: string, options: ShowOptions): Promise<void> {
   try {
-    const client = createClient();
-    const skill = await client.getSkill(name);
+    const skill = await mpak.client.getSkill(name);
 
     if (options.json) {
       console.log(JSON.stringify(skill, null, 2));
       return;
     }
 
-    console.log("");
-    console.log(`${skill.name}@${skill.latest_version}`);
-    console.log("");
-    console.log(skill.description);
-    console.log("");
+    logger.info('');
+    logger.info(`${skill.name}@${skill.latest_version}`);
+    logger.info('');
+    logger.info(skill.description);
+    logger.info('');
 
     // Metadata section
-    console.log("Metadata:");
-    if (skill.license) console.log(`  License: ${skill.license}`);
-    if (skill.category)
-      console.log(`  Category: ${skill.category}`);
-    if (skill.tags && skill.tags.length > 0)
-      console.log(`  Tags: ${skill.tags.join(", ")}`);
+    logger.info('Metadata:');
+    if (skill.license) logger.info(`  License: ${skill.license}`);
+    if (skill.category) logger.info(`  Category: ${skill.category}`);
+    if (skill.tags && skill.tags.length > 0) logger.info(`  Tags: ${skill.tags.join(', ')}`);
     if (skill.author)
-      console.log(
-        `  Author: ${skill.author.name}${skill.author.url ? ` (${skill.author.url})` : ""}`,
+      logger.info(
+        `  Author: ${skill.author.name}${skill.author.url ? ` (${skill.author.url})` : ''}`,
       );
-    console.log(
-      `  Downloads: ${skill.downloads.toLocaleString()}`,
-    );
-    console.log(
-      `  Published: ${new Date(skill.published_at).toLocaleDateString()}`,
-    );
+    logger.info(`  Downloads: ${skill.downloads.toLocaleString()}`);
+    logger.info(`  Published: ${new Date(skill.published_at).toLocaleDateString()}`);
 
     // Triggers
     if (skill.triggers && skill.triggers.length > 0) {
-      console.log("");
-      console.log("Triggers:");
-      skill.triggers.forEach((t: string) =>
-        console.log(`  - ${t}`),
-      );
+      logger.info('');
+      logger.info('Triggers:');
+      skill.triggers.forEach((t) => logger.info(`  - ${t}`));
     }
 
     // Examples
     if (skill.examples && skill.examples.length > 0) {
-      console.log("");
-      console.log("Examples:");
-      skill.examples.forEach(
-        (ex: { prompt: string; context?: string | undefined }) => {
-          console.log(
-            `  - "${ex.prompt}"${ex.context ? ` (${ex.context})` : ""}`,
-          );
-        },
-      );
+      logger.info('');
+      logger.info('Examples:');
+      skill.examples.forEach((ex) => {
+        logger.info(`  - "${ex.prompt}"${ex.context ? ` (${ex.context})` : ''}`);
+      });
     }
 
     // Versions
     if (skill.versions && skill.versions.length > 0) {
-      console.log("");
-      console.log("Versions:");
-      skill.versions
-        .slice(0, 5)
-        .forEach(
-          (v: {
-            version: string;
-            published_at: string;
-            downloads: number;
-          }) => {
-            console.log(
-              `  ${v.version.padEnd(12)} ${new Date(v.published_at).toLocaleDateString().padEnd(12)} ${v.downloads.toLocaleString()} downloads`,
-            );
-          },
+      logger.info('');
+      logger.info('Versions:');
+      skill.versions.slice(0, 5).forEach((v) => {
+        logger.info(
+          `  ${v.version.padEnd(12)} ${new Date(v.published_at).toLocaleDateString().padEnd(12)} ${v.downloads.toLocaleString()} downloads`,
         );
+      });
       if (skill.versions.length > 5) {
-        console.log(
-          `  ... and ${skill.versions.length - 5} more`,
-        );
+        logger.info(`  ... and ${skill.versions.length - 5} more`);
       }
     }
 
-    console.log("");
-    console.log(`Install: mpak skill install ${skill.name}`);
+    logger.info('');
+    logger.info(`Install: mpak skill install ${skill.name}`);
   } catch (err) {
-    fmtError(err instanceof Error ? err.message : String(err));
+    logger.error(err instanceof Error ? err.message : String(err));
   }
 }

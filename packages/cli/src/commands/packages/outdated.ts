@@ -1,6 +1,5 @@
-import { isSemverEqual, listCachedBundles } from "../../utils/cache.js";
-import { createClient } from "../../utils/client.js";
-import { table } from "../../utils/format.js";
+import { mpak } from '../../utils/config.js';
+import { logger, table } from '../../utils/format.js';
 
 export interface OutdatedEntry {
   name: string;
@@ -18,26 +17,27 @@ export interface OutdatedOptions {
  * that have a newer version available.
  */
 export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
-  const cached = listCachedBundles();
+  const cached = mpak.bundleCache.listCachedBundles();
   if (cached.length === 0) return [];
 
-  const client = createClient();
   const results: OutdatedEntry[] = [];
 
   await Promise.all(
     cached.map(async (bundle) => {
       try {
-        const detail = await client.getBundle(bundle.name);
-        if (!isSemverEqual(detail.latest_version, bundle.version)) {
+        const latest = await mpak.bundleCache.checkForUpdate(bundle.name, { force: true });
+        if (latest) {
           results.push({
             name: bundle.name,
             current: bundle.version,
-            latest: detail.latest_version,
+            latest,
             pulledAt: bundle.pulledAt,
           });
         }
       } catch {
-        process.stderr.write(`=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`);
+        process.stderr.write(
+          `=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`,
+        );
       }
     }),
   );
@@ -46,7 +46,7 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
 }
 
 export async function handleOutdated(options: OutdatedOptions = {}): Promise<void> {
-  process.stderr.write("=> Checking for updates...\n");
+  process.stderr.write('=> Checking for updates...\n');
 
   const outdated = await getOutdatedBundles();
 
@@ -56,15 +56,15 @@ export async function handleOutdated(options: OutdatedOptions = {}): Promise<voi
   }
 
   if (outdated.length === 0) {
-    console.log("All cached bundles are up to date.");
+    logger.info('All cached bundles are up to date.');
     return;
   }
 
-  console.log(
+  logger.info(
     table(
-      ["Bundle", "Current", "Latest", "Pulled"],
+      ['Bundle', 'Current', 'Latest', 'Pulled'],
       outdated.map((e) => [e.name, e.current, e.latest, e.pulledAt]),
     ),
   );
-  console.log(`\n${outdated.length} bundle(s) can be updated. Run 'mpak update' to update all.`);
+  logger.info(`\n${outdated.length} bundle(s) can be updated. Run 'mpak update' to update all.`);
 }

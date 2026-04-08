@@ -6,19 +6,12 @@ export interface TableOptions {
 /**
  * Render an aligned text table with auto-calculated column widths.
  */
-export function table(
-  headers: string[],
-  rows: string[][],
-  opts?: TableOptions,
-): string {
+export function table(headers: string[], rows: string[][], opts?: TableOptions): string {
   const rightAlign = new Set(opts?.rightAlign ?? []);
 
   // Calculate column widths from headers and data
   const widths = headers.map((h, i) => {
-    const maxData = rows.reduce(
-      (max, row) => Math.max(max, (row[i] ?? "").length),
-      0,
-    );
+    const maxData = rows.reduce((max, row) => Math.max(max, (row[i] ?? '').length), 0);
     return Math.max(h.length, maxData);
   });
 
@@ -28,27 +21,21 @@ export function table(
   const lines: string[] = [];
 
   // Header
-  lines.push(
-    headers.map((h, i) => pad(h, widths[i]!, i)).join("  "),
-  );
+  lines.push(headers.map((h, i) => pad(h, widths[i]!, i)).join('  '));
 
   // Rows
   for (const row of rows) {
-    lines.push(
-      headers
-        .map((_, i) => pad(row[i] ?? "", widths[i]!, i))
-        .join("  "),
-    );
+    lines.push(headers.map((_, i) => pad(row[i] ?? '', widths[i]!, i)).join('  '));
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**
  * Return a short trust label for a certification level.
  */
 export function certLabel(level: number | null | undefined): string {
-  if (level == null) return "-";
+  if (level == null) return '-';
   return `L${level}`;
 }
 
@@ -66,13 +53,17 @@ export function formatSize(bytes: number): string {
  */
 export function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
-  return text.slice(0, max - 3) + "...";
+  return text.slice(0, max - 3) + '...';
 }
 
 /**
- * Print a standardized error message and exit.
+ * Print a standardized error message.
  */
-export function fmtError(message: string): never {
+export function logError(message: string): void {
   console.error(`Error: ${message}`);
-  process.exit(1);
 }
+
+export const logger = {
+  error: (msg: string) => console.error(`[Error] ${msg}`),
+  info: (msg: string) => console.error(msg),
+};

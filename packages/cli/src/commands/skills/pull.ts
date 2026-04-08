@@ -1,35 +1,8 @@
-import { writeFileSync } from "fs";
-import { basename, join } from "path";
-import { formatSize, fmtError } from "../../utils/format.js";
-import { createClient } from "../../utils/client.js";
-
-/**
- * Parse skill spec into name and version
- * Examples: @scope/name, @scope/name@1.0.0
- */
-function parseSkillSpec(spec: string): {
-  name: string;
-  version?: string;
-} {
-  // Handle @scope/name@version format
-  const atIndex = spec.lastIndexOf("@");
-
-  // If @ is at position 0, it's just the scope prefix
-  if (atIndex <= 0) {
-    return { name: spec };
-  }
-
-  // Check if the @ is part of version (after the /)
-  const slashIndex = spec.indexOf("/");
-  if (atIndex > slashIndex) {
-    return {
-      name: spec.slice(0, atIndex),
-      version: spec.slice(atIndex + 1),
-    };
-  }
-
-  return { name: spec };
-}
+import { rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parsePackageSpec } from '@nimblebrain/mpak-sdk';
+import { mpak } from '../../utils/config.js';
+import { formatSize, logger } from '../../utils/format.js';
 
 export interface PullOptions {
   output?: string;
@@ -37,73 +10,41 @@ export interface PullOptions {
 }
 
 /**
- * Handle the skill pull command
+ * Pull (download) a skill from the registry to disk.
  */
-export async function handleSkillPull(
-  skillSpec: string,
-  options: PullOptions,
-): Promise<void> {
+export async function handleSkillPull(skillSpec: string, options: PullOptions = {}): Promise<void> {
+  let outputPath: string | undefined;
   try {
-    const { name, version } = parseSkillSpec(skillSpec);
+    const { name, version } = parsePackageSpec(skillSpec);
 
-    // Get download info
-    const client = createClient();
-    const downloadInfo = version
-      ? await client.getSkillVersionDownload(name, version)
-      : await client.getSkillDownload(name);
+    logger.info(`=> Fetching ${version ? `${name}@${version}` : `${name} (latest)`}...`);
 
-    console.log(
-      `Pulling ${downloadInfo.skill.name}@${downloadInfo.skill.version}...`,
-    );
-
-    // Download the bundle
-    const response = await fetch(downloadInfo.url);
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status})`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    // Verify SHA256
-    if (downloadInfo.skill.sha256) {
-      const { createHash } = await import("crypto");
-      const hash = createHash("sha256").update(buffer).digest("hex");
-      if (hash !== downloadInfo.skill.sha256) {
-        throw new Error(
-          `SHA256 mismatch: expected ${downloadInfo.skill.sha256}, got ${hash}`,
-        );
-      }
-    }
-
-    // Determine output path
-    const filename = `${basename(downloadInfo.skill.name.replace("@", "").replace("/", "-"))}-${downloadInfo.skill.version}.skill`;
-    const outputPath =
-      options.output || join(process.cwd(), filename);
-
-    // Write to disk
-    writeFileSync(outputPath, buffer);
+    const { data, metadata } = await mpak.client.downloadSkillBundle(name, version);
 
     if (options.json) {
-      console.log(
-        JSON.stringify(
-          {
-            path: outputPath,
-            name: downloadInfo.skill.name,
-            version: downloadInfo.skill.version,
-            size: downloadInfo.skill.size,
-            sha256: downloadInfo.skill.sha256,
-          },
-          null,
-          2,
-        ),
-      );
-    } else {
-      console.log(
-        `Downloaded ${filename} (${formatSize(downloadInfo.skill.size)})`,
-      );
-      console.log(`  SHA256: ${downloadInfo.skill.sha256}`);
-      console.log(`  Path: ${outputPath}`);
+      console.log(JSON.stringify(metadata, null, 2));
+      return;
     }
-  } catch (err) {
-    fmtError(err instanceof Error ? err.message : String(err));
+
+    logger.info(`   Version: ${metadata.version}`);
+    logger.info(`   Size: ${formatSize(metadata.size)}`);
+
+    const defaultFilename = `${name.replace('@', '').replace('/', '-')}-${metadata.version}.skill`;
+    outputPath = options.output ? resolve(options.output) : resolve(defaultFilename);
+
+    writeFileSync(outputPath, data);
+
+    logger.info(`\n=> Skill downloaded successfully!`);
+    logger.info(`   File: ${outputPath}`);
+    logger.info(`   SHA256: ${metadata.sha256.substring(0, 16)}...`);
+  } catch (error) {
+    if (outputPath) {
+      try {
+        rmSync(outputPath, { force: true });
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    logger.error(error instanceof Error ? error.message : 'Failed to pull skill');
   }
 }

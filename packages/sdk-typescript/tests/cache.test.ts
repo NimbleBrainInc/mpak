@@ -361,6 +361,39 @@ describe('MpakBundleCache', () => {
       expect(await cache.checkForUpdate('@scope/name')).toBeNull();
     });
 
+    it('bypasses TTL when force is true', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockResolvedValue({ latest_version: '2.0.0' }),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: {
+          ...validMetadata,
+          lastCheckedAt: new Date().toISOString(), // just checked
+        },
+      });
+
+      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBe('2.0.0');
+      expect(client.getBundle).toHaveBeenCalledWith('@scope/name');
+    });
+
+    it('returns null when force is true but already up to date', async () => {
+      const client = mockClient({
+        getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+      seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: {
+          ...validMetadata,
+          lastCheckedAt: new Date().toISOString(),
+        },
+      });
+
+      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBeNull();
+    });
+
     it('updates lastCheckedAt after successful check', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),

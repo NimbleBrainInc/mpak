@@ -5,35 +5,9 @@
  * This file contains only SDK-specific types (client config).
  */
 
-// =============================================================================
-// Search Params (SDK-specific: all fields optional for client-side use)
-// =============================================================================
-
-/**
- * Query parameters for bundle search.
- *
- * Note: The schema's BundleSearchParams uses z.default() which makes fields
- * required in the inferred output type. The SDK needs all-optional input types.
- */
-export interface BundleSearchParams {
-  q?: string;
-  type?: string;
-  sort?: 'downloads' | 'recent' | 'name';
-  limit?: number;
-  offset?: number;
-}
-
-/**
- * Query parameters for skill search.
- */
-export interface SkillSearchParams {
-  q?: string;
-  tags?: string;
-  category?: string;
-  sort?: 'downloads' | 'recent' | 'name';
-  limit?: number;
-  offset?: number;
-}
+// Re-export input types from schemas — all fields optional (pre-default).
+export type { BundleSearchParamsInput as BundleSearchParams } from '@nimblebrain/mpak-schemas';
+export type { SkillSearchParamsInput as SkillSearchParams } from '@nimblebrain/mpak-schemas';
 
 // =============================================================================
 // Client Configuration
