@@ -1,6 +1,6 @@
 {
   "name": "@nimblebrain/mpak",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "CLI for downloading MCPB bundles and Agent Skills from the mpak registry",
   "type": "module",
   "bin": {
