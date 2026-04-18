@@ -591,6 +591,225 @@ describe('Mpak facade', () => {
   });
 
   // ===========================================================================
+  // prepareServer — userConfig override option
+  // ===========================================================================
+
+  describe('prepareServer (userConfig option)', () => {
+    const baseManifest: McpbManifest = {
+      manifest_version: '0.3',
+      name: '@scope/echo',
+      version: '1.0.0',
+      description: 'Echo server',
+      server: {
+        type: 'node',
+        entry_point: 'index.js',
+        mcp_config: {
+          command: 'node',
+          args: ['${__dirname}/index.js'],
+          env: {},
+        },
+      },
+    };
+
+    /**
+     * Build a manifest with the given user_config fields. Each field appears in
+     * mcp_config.env as `UPPERCASE_KEY: ${user_config.key}` so the resolved env
+     * directly reflects which source provided the value.
+     */
+    function manifestWithFields(fields: McpbManifest['user_config']): McpbManifest {
+      const envEntries: Record<string, string> = {};
+      for (const fieldName of Object.keys(fields ?? {})) {
+        envEntries[fieldName.toUpperCase()] = `\${user_config.${fieldName}}`;
+      }
+      return {
+        ...baseManifest,
+        user_config: fields,
+        server: {
+          ...baseManifest.server,
+          mcp_config: {
+            ...baseManifest.server.mcp_config,
+            env: envEntries,
+          },
+        },
+      };
+    }
+
+    function setupSdk(manifest: McpbManifest) {
+      const sdk = new Mpak({ mpakHome: testDir });
+      const cacheDir = join(testDir, 'cache', 'scope-echo');
+
+      vi.spyOn(sdk.bundleCache, 'loadBundle').mockResolvedValue({
+        cacheDir,
+        version: '1.0.0',
+        pulled: false,
+      });
+      vi.spyOn(sdk.bundleCache, 'getBundleManifest').mockReturnValue(manifest);
+
+      return { sdk, cacheDir };
+    }
+
+    it('satisfies a required user_config field from userConfig when nothing is stored', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      // Nothing is stored in config.json — only the caller-provided value exists.
+      expect(sdk.configManager.getPackageConfig('@scope/echo')).toBeUndefined();
+
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        { userConfig: { api_key: 'sk-from-caller' } },
+      );
+
+      expect(result.env['API_KEY']).toBe('sk-from-caller');
+    });
+
+    it('caller userConfig takes precedence over stored config for the same field', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      sdk.configManager.setPackageConfigValue('@scope/echo', 'api_key', 'sk-from-stored');
+
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        { userConfig: { api_key: 'sk-from-caller' } },
+      );
+
+      expect(result.env['API_KEY']).toBe('sk-from-caller');
+      // Stored value is NOT mutated — precedence is runtime only.
+      expect(sdk.configManager.getPackageConfig('@scope/echo')).toEqual({
+        api_key: 'sk-from-stored',
+      });
+    });
+
+    it('merges partial userConfig with stored config on a per-field basis', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+        endpoint: { type: 'string', title: 'Endpoint', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      // Store both fields up front.
+      sdk.configManager.setPackageConfigValue('@scope/echo', 'api_key', 'sk-from-stored');
+      sdk.configManager.setPackageConfigValue(
+        '@scope/echo',
+        'endpoint',
+        'https://stored.example.com',
+      );
+
+      // Caller overrides only api_key; endpoint must still come from stored config.
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        { userConfig: { api_key: 'sk-from-caller' } },
+      );
+
+      expect(result.env['API_KEY']).toBe('sk-from-caller');
+      expect(result.env['ENDPOINT']).toBe('https://stored.example.com');
+    });
+
+    it('still throws MpakConfigError when userConfig lacks a required field', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+        endpoint: { type: 'string', title: 'Endpoint', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      // Provide only one of two required fields.
+      await expect(
+        sdk.prepareServer({ name: '@scope/echo' }, { userConfig: { api_key: 'sk-from-caller' } }),
+      ).rejects.toThrow(MpakConfigError);
+
+      try {
+        await sdk.prepareServer(
+          { name: '@scope/echo' },
+          { userConfig: { api_key: 'sk-from-caller' } },
+        );
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+        // Only the unprovided field is reported missing.
+        expect(configErr.missingFields.map((f) => f.key)).toEqual(['endpoint']);
+      }
+    });
+
+    it('empty userConfig {} behaves the same as omitting the option', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      sdk.configManager.setPackageConfigValue('@scope/echo', 'api_key', 'sk-from-stored');
+
+      const withOmitted = await sdk.prepareServer({ name: '@scope/echo' });
+      const withEmpty = await sdk.prepareServer({ name: '@scope/echo' }, { userConfig: {} });
+
+      expect(withOmitted.env['API_KEY']).toBe('sk-from-stored');
+      expect(withEmpty.env['API_KEY']).toBe('sk-from-stored');
+    });
+
+    it('empty userConfig {} still throws when stored config is missing required field', async () => {
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      await expect(sdk.prepareServer({ name: '@scope/echo' }, { userConfig: {} })).rejects.toThrow(
+        MpakConfigError,
+      );
+    });
+
+    it('userConfig does not override a manifest default when the caller does not provide the field', async () => {
+      const manifest = manifestWithFields({
+        port: { type: 'number', default: 3000 },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      // Caller provides a *different* field — the one with a default is untouched.
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        { userConfig: { unrelated: 'ignored' } },
+      );
+
+      expect(result.env['PORT']).toBe('3000');
+    });
+
+    it('userConfig overrides manifest default when caller provides the field', async () => {
+      const manifest = manifestWithFields({
+        port: { type: 'number', default: 3000 },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      const result = await sdk.prepareServer(
+        { name: '@scope/echo' },
+        { userConfig: { port: '8080' } },
+      );
+
+      expect(result.env['PORT']).toBe('8080');
+    });
+
+    it('omitting userConfig preserves the original stored-then-default resolution', async () => {
+      // Regression guard: ensure the new parameter does not change legacy behavior
+      // when callers do not opt in.
+      const manifest = manifestWithFields({
+        api_key: { type: 'string', title: 'API Key', required: true },
+        port: { type: 'number', default: 3000 },
+      });
+      const { sdk } = setupSdk(manifest);
+
+      sdk.configManager.setPackageConfigValue('@scope/echo', 'api_key', 'sk-stored');
+
+      const result = await sdk.prepareServer({ name: '@scope/echo' });
+
+      expect(result.env['API_KEY']).toBe('sk-stored');
+      expect(result.env['PORT']).toBe('3000');
+    });
+  });
+
+  // ===========================================================================
   // prepareServer — local bundles
   // ===========================================================================
 
