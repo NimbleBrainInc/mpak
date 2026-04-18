@@ -63,6 +63,10 @@ export interface PrepareServerOptions {
    * for example, when credentials live in a workspace-scoped secret store
    * managed by the host runtime.
    *
+   * Values must be strings. Manifest fields typed as `number` or `boolean`
+   * must be stringified by the caller (e.g. `String(port)`) — matching how
+   * stored `config.json` values and manifest defaults are handled internally.
+   *
    * Backward compatible: omitting this option (or passing an empty object)
    * preserves the existing behavior of reading exclusively from stored config.
    */
