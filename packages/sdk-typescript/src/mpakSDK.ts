@@ -54,6 +54,23 @@ export interface PrepareServerOptions {
    * project-local data (databases, logs, etc.). Defaults to `process.cwd()/.mpak`.
    */
   workspaceDir?: string;
+  /**
+   * Pre-resolved `user_config` values supplied by the host.
+   *
+   * When provided, these values are layered over the stored `config.json`
+   * values (caller wins, per field) before `user_config` validation runs.
+   * Use this to satisfy required fields without persisting them to disk —
+   * for example, when credentials live in a workspace-scoped secret store
+   * managed by the host runtime.
+   *
+   * Values must be strings. Manifest fields typed as `number` or `boolean`
+   * must be stringified by the caller (e.g. `String(port)`) — matching how
+   * stored `config.json` values and manifest defaults are handled internally.
+   *
+   * Backward compatible: omitting this option (or passing an empty object)
+   * preserves the existing behavior of reading exclusively from stored config.
+   */
+  userConfig?: Record<string, string>;
 }
 
 /**
@@ -163,7 +180,7 @@ export class Mpak {
     }
 
     // Gather and validate user config
-    const userConfigValues = this.gatherUserConfig(name, manifest);
+    const userConfigValues = this.gatherUserConfig(name, manifest, options?.userConfig);
 
     // Build command/args/env
     const { command, args, env } = this.resolveCommand(manifest, cacheDir, userConfigValues);
@@ -268,10 +285,23 @@ export class Mpak {
   }
 
   /**
-   * Gather stored user config values and validate that all required fields are present.
-   * @throws If required config values are missing.
+   * Gather user config values and validate that all required fields are present.
+   *
+   * Resolution per field (first match wins):
+   *   1. `overrides[fieldName]` — caller-provided value (host runtime)
+   *   2. stored `config.json` value — from `MpakConfigManager`
+   *   3. `default` from the manifest
+   *   4. missing required → collected and thrown as `MpakConfigError`
+   *
+   * @param overrides Optional pre-resolved values that take precedence over stored config.
+   *                  An empty object is treated the same as omitting the argument.
+   * @throws {MpakConfigError} If required config values are missing from every tier.
    */
-  private gatherUserConfig(packageName: string, manifest: McpbManifest): Record<string, string> {
+  private gatherUserConfig(
+    packageName: string,
+    manifest: McpbManifest,
+    overrides?: Record<string, string>,
+  ): Record<string, string> {
     if (!manifest.user_config || Object.keys(manifest.user_config).length === 0) {
       return {};
     }
@@ -286,9 +316,12 @@ export class Mpak {
     }> = [];
 
     for (const [fieldName, fieldData] of Object.entries(manifest.user_config)) {
+      const overrideValue = overrides?.[fieldName];
       const storedValue = storedConfig[fieldName];
 
-      if (storedValue !== undefined) {
+      if (overrideValue !== undefined) {
+        result[fieldName] = overrideValue;
+      } else if (storedValue !== undefined) {
         result[fieldName] = storedValue;
       } else if (fieldData.default !== undefined && fieldData.default !== null) {
         result[fieldName] = String(fieldData.default);
