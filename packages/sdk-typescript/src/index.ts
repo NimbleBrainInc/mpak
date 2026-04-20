@@ -36,7 +36,7 @@ export type { MpakClientConfig } from './types.js';
 
 // Utilities
 export { parsePackageSpec } from './utils.js';
-export { MAX_UNCOMPRESSED_SIZE } from './helpers.js';
+export { MAX_UNCOMPRESSED_SIZE, extractZip, isSemverEqual } from './helpers.js';
 export type { ExtractZipOptions } from './helpers.js';
 
 // Errors

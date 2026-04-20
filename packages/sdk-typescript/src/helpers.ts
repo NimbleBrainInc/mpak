@@ -123,12 +123,20 @@ export async function extractZip(
 
       mkdirSync(dirname(safePath), { recursive: true });
 
-      const readStream = await openReadStream(zipfile, entry);
-      const counter = createByteCounter(entry, zipPath, () => cumulativeBytes, maxSize, (n) => {
-        cumulativeBytes = n;
-      });
-
-      await pipeline(readStream, counter, createWriteStream(safePath));
+      try {
+        const readStream = await openReadStream(zipfile, entry);
+        const counter = createByteCounter(entry, zipPath, () => cumulativeBytes, maxSize, (n) => {
+          cumulativeBytes = n;
+        });
+        await pipeline(readStream, counter, createWriteStream(safePath));
+      } catch (error: unknown) {
+        if (error instanceof MpakCacheCorruptedError) throw error;
+        throw new MpakCacheCorruptedError(
+          `Failed to extract entry ${entry.fileName}: ${errorMessage(error)}`,
+          zipPath,
+          error instanceof Error ? error : undefined,
+        );
+      }
 
       const mode = unixMode(entry);
       if (mode !== null) {
@@ -141,6 +149,9 @@ export async function extractZip(
 }
 
 function openZip(path: string): Promise<ZipFile> {
+  // lazyEntries: false — we need the full central directory before extraction
+  // to do the pre-write size cap check, so buffering entries up-front is
+  // intentional (memory cost scales with entry count, not file size).
   return new Promise((res, rej) => {
     yauzl.open(path, { lazyEntries: false, autoClose: false }, (err, zipfile) => {
       if (err || !zipfile) rej(err ?? new Error('yauzl returned no zipfile'));
@@ -195,7 +206,9 @@ function isSymlink(entry: Entry): boolean {
 }
 
 function unixMode(entry: Entry): number | null {
-  const mode = (entry.externalFileAttributes >>> 16) & 0o7777;
+  // Mask to the 9 permission bits only — strip setuid/setgid/sticky so a
+  // malicious bundle cannot land a setuid file on disk.
+  const mode = (entry.externalFileAttributes >>> 16) & 0o777;
   return mode === 0 ? null : mode;
 }
 

@@ -286,12 +286,15 @@ Properties: `config` (ConfigManager), `client` (MpakClient), `cache` (BundleCach
 | `getPackageCachePath(packageName)` | Get the cache directory path for a package |
 | `checkForUpdateAsync(packageName)` | Fire-and-forget update check (logs result) |
 
-#### Static Methods
+#### Utility Exports
 
-| Method | Description |
+Standalone functions exported from the package (not methods on any class):
+
+| Export | Description |
 |---|---|
-| `BundleCache.extractZip(zipPath, destDir)` | Extract a ZIP with zip-bomb protection |
-| `BundleCache.isSemverEqual(a, b)` | Compare semver strings (ignores `v` prefix) |
+| `extractZip(zipPath, destDir, options?)` | Async. Stream-extract a ZIP with zip-bomb, path-traversal, and symlink protection. Pass `{ maxUncompressedSize }` to override the default cap. |
+| `MAX_UNCOMPRESSED_SIZE` | Default uncompressed-size cap applied by `extractZip` (2 GB). |
+| `isSemverEqual(a, b)` | Compare semver strings (ignores `v` prefix) |
 
 ### ConfigManager (`mpak.config`)
 
