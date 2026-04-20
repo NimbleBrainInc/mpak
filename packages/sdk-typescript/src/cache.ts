@@ -15,6 +15,11 @@ import { extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from
 
 export interface MpakBundleCacheOptions {
   mpakHome?: string;
+  /**
+   * Maximum allowed uncompressed size (bytes) for any bundle this cache
+   * extracts. Defaults to {@link MAX_UNCOMPRESSED_SIZE}.
+   */
+  maxUncompressedSize?: number;
 }
 
 /**
@@ -41,12 +46,14 @@ export interface MpakBundleCacheOptions {
  */
 export class MpakBundleCache {
   public readonly cacheHome: string;
+  public readonly maxUncompressedSize: number | undefined;
   private readonly mpakClient: MpakClient;
 
   constructor(client: MpakClient, options?: MpakBundleCacheOptions) {
     this.mpakClient = client;
 
     this.cacheHome = join(options?.mpakHome ?? join(homedir(), '.mpak'), 'cache');
+    this.maxUncompressedSize = options?.maxUncompressedSize;
   }
 
   /**
@@ -293,7 +300,7 @@ export class MpakBundleCache {
         rmSync(cacheDir, { recursive: true, force: true });
       }
 
-      extractZip(tempPath, cacheDir);
+      await extractZip(tempPath, cacheDir, this.extractOptions());
 
       // Write metadata
       this.writeCacheMetadata(name, {
@@ -304,5 +311,12 @@ export class MpakBundleCache {
     } finally {
       rmSync(tempPath, { force: true });
     }
+  }
+
+  /** Options threaded into every `extractZip` call. */
+  extractOptions(): { maxUncompressedSize?: number } {
+    return this.maxUncompressedSize !== undefined
+      ? { maxUncompressedSize: this.maxUncompressedSize }
+      : {};
   }
 }
