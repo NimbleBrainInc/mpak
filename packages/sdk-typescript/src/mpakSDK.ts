@@ -290,8 +290,17 @@ export class Mpak {
    * Resolution per field (first match wins):
    *   1. `overrides[fieldName]` — caller-provided value (host runtime)
    *   2. stored `config.json` value — from `MpakConfigManager`
-   *   3. `default` from the manifest
-   *   4. missing required → collected and thrown as `MpakConfigError`
+   *   3. host process env via manifest-declared alias — see {@link envAliasesForField}
+   *   4. `default` from the manifest
+   *   5. missing required → collected and thrown as `MpakConfigError`
+   *
+   * Tier 3 (env alias) reads the bundle's existing `server.mcp_config.env`
+   * declaration in reverse. A bundle that maps a field to a spawn env var,
+   * e.g. `"NEWSAPI_API_KEY": "${user_config.api_key}"`, implicitly says
+   * "the `api_key` field is about the NEWSAPI_API_KEY env var." At resolve
+   * time we honor that: if the host process has NEWSAPI_API_KEY set
+   * (non-empty), its value satisfies the field. No new schema field, no
+   * host-specific convention — the mapping is already declared.
    *
    * @param overrides Optional pre-resolved values that take precedence over stored config.
    *                  An empty object is treated the same as omitting the argument.
@@ -307,6 +316,7 @@ export class Mpak {
     }
 
     const storedConfig = this.configManager.getPackageConfig(packageName) ?? {};
+    const envAliases = buildEnvAliasMap(manifest);
     const result: Record<string, string> = {};
     const missingFields: Array<{
       key: string;
@@ -323,18 +333,33 @@ export class Mpak {
         result[fieldName] = overrideValue;
       } else if (storedValue !== undefined) {
         result[fieldName] = storedValue;
-      } else if (fieldData.default !== undefined && fieldData.default !== null) {
-        result[fieldName] = String(fieldData.default);
-      } else if (fieldData.required) {
-        const field: (typeof missingFields)[number] = {
-          key: fieldName,
-          title: fieldData.title ?? fieldName,
-          sensitive: fieldData.sensitive ?? false,
-        };
-        if (fieldData.description !== undefined) {
-          field.description = fieldData.description;
+      } else {
+        // Tier 3: env alias — bundle's mcp_config.env declared this field.
+        // Empty strings are treated as absent (accidentally-cleared export
+        // shouldn't mask a stored value or a default).
+        let envValue: string | undefined;
+        for (const envVar of envAliases.get(fieldName) ?? []) {
+          const v = process.env[envVar];
+          if (typeof v === 'string' && v.length > 0) {
+            envValue = v;
+            break;
+          }
         }
-        missingFields.push(field);
+        if (envValue !== undefined) {
+          result[fieldName] = envValue;
+        } else if (fieldData.default !== undefined && fieldData.default !== null) {
+          result[fieldName] = String(fieldData.default);
+        } else if (fieldData.required) {
+          const field: (typeof missingFields)[number] = {
+            key: fieldName,
+            title: fieldData.title ?? fieldName,
+            sensitive: fieldData.sensitive ?? false,
+          };
+          if (fieldData.description !== undefined) {
+            field.description = fieldData.description;
+          }
+          missingFields.push(field);
+        }
       }
     }
 
@@ -466,4 +491,40 @@ export class Mpak {
     }
     return 'python';
   }
+}
+
+/**
+ * Build a reverse map from `user_config` field name → host env var aliases,
+ * based on the bundle's existing `server.mcp_config.env` declaration.
+ *
+ * A declaration like `"NEWSAPI_API_KEY": "${user_config.api_key}"` says
+ * "when the api_key field is resolved, put it in NEWSAPI_API_KEY for the
+ * spawned process." Read in reverse: the host's NEWSAPI_API_KEY env var
+ * can satisfy the api_key field.
+ *
+ * Only whole-value single-substitution templates participate. A template
+ * with literal text (`"PREFIX_${user_config.x}_SUFFIX"`) or multiple
+ * substitutions (`"${user_config.a}-${user_config.b}"`) has no clean
+ * inverse — the env var would have to be unpicked back into constituent
+ * parts. Those are skipped; the field falls through to default/prompt.
+ *
+ * Multiple env vars may map to the same field — the field's alias list
+ * preserves declaration order so the first non-empty match wins.
+ */
+function buildEnvAliasMap(manifest: McpbManifest): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  const entries = manifest.server?.mcp_config?.env;
+  if (!entries) return map;
+
+  const wholeSubstitution = /^\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}$/;
+  for (const [envVar, template] of Object.entries(entries)) {
+    if (typeof template !== 'string') continue;
+    const match = wholeSubstitution.exec(template);
+    if (!match) continue;
+    const fieldName = match[1]!;
+    const existing = map.get(fieldName);
+    if (existing) existing.push(envVar);
+    else map.set(fieldName, [envVar]);
+  }
+  return map;
 }

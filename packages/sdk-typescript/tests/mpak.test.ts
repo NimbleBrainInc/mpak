@@ -987,4 +987,227 @@ describe('Mpak facade', () => {
       await expect(sdk.prepareServer({ local: mcpbPath })).rejects.toThrow(MpakConfigError);
     });
   });
+
+  // ===========================================================================
+  // prepareServer — env alias tier (reverse mcp_config.env lookup)
+  // ===========================================================================
+  //
+  // A bundle that maps a user_config field to a spawn env var — e.g.
+  // `"NEWSAPI_API_KEY": "${user_config.api_key}"` — implicitly declares
+  // "the api_key field is about NEWSAPI_API_KEY." The SDK reads this
+  // declaration in reverse at resolve time: if the host process has
+  // NEWSAPI_API_KEY set non-empty, it satisfies the field. No new schema
+  // field, no host convention — the bundle's existing canonical declaration
+  // is the single source of truth.
+
+  describe('prepareServer (env alias tier)', () => {
+    const baseManifest: McpbManifest = {
+      manifest_version: '0.3',
+      name: '@scope/newsapi',
+      version: '1.0.0',
+      description: 'News API client',
+      server: {
+        type: 'node',
+        entry_point: 'index.js',
+        mcp_config: {
+          command: 'node',
+          args: ['${__dirname}/index.js'],
+          env: {},
+        },
+      },
+    };
+
+    /** Build a manifest with declared mcp_config.env mappings and user_config fields. */
+    function manifestWith(
+      envMap: Record<string, string>,
+      fields: McpbManifest['user_config'],
+    ): McpbManifest {
+      return {
+        ...baseManifest,
+        user_config: fields,
+        server: {
+          ...baseManifest.server,
+          mcp_config: { ...baseManifest.server.mcp_config, env: envMap },
+        },
+      };
+    }
+
+    function setupSdk(manifest: McpbManifest) {
+      const sdk = new Mpak({ mpakHome: testDir });
+      const cacheDir = join(testDir, 'cache', 'scope-newsapi');
+      vi.spyOn(sdk.bundleCache, 'loadBundle').mockResolvedValue({
+        cacheDir,
+        version: '1.0.0',
+        pulled: false,
+      });
+      vi.spyOn(sdk.bundleCache, 'getBundleManifest').mockReturnValue(manifest);
+      return sdk;
+    }
+
+    /** Snapshot and restore a named env var across a test body. */
+    async function withEnv(name: string, value: string | undefined, fn: () => Promise<void>) {
+      const prev = process.env[name];
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+      try {
+        await fn();
+      } finally {
+        if (prev === undefined) delete process.env[name];
+        else process.env[name] = prev;
+      }
+    }
+
+    it('a declared single-substitution env var satisfies a required field', async () => {
+      const manifest = manifestWith(
+        { NEWSAPI_API_KEY: '${user_config.api_key}' },
+        { api_key: { type: 'string', title: 'API Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      await withEnv('NEWSAPI_API_KEY', 'sk-from-env', async () => {
+        const result = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-from-env');
+      });
+    });
+
+    it('precedence: overrides beats stored beats env beats default', async () => {
+      const manifest = manifestWith(
+        { NEWSAPI_API_KEY: '${user_config.api_key}' },
+        { api_key: { type: 'string', title: 'API Key', default: 'default-val' } },
+      );
+      const sdk = setupSdk(manifest);
+      sdk.configManager.setPackageConfigValue('@scope/newsapi', 'api_key', 'from-stored');
+
+      await withEnv('NEWSAPI_API_KEY', 'from-env', async () => {
+        // Override wins over everything else.
+        const withOverride = await sdk.prepareServer(
+          { name: '@scope/newsapi' },
+          { userConfig: { api_key: 'from-override' } },
+        );
+        expect(withOverride.env['NEWSAPI_API_KEY']).toBe('from-override');
+
+        // Stored wins over env and default.
+        const withStored = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(withStored.env['NEWSAPI_API_KEY']).toBe('from-stored');
+      });
+
+      // Env wins over default when no stored value.
+      sdk.configManager.clearPackageConfig('@scope/newsapi');
+      await withEnv('NEWSAPI_API_KEY', 'from-env', async () => {
+        const withEnvOnly = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(withEnvOnly.env['NEWSAPI_API_KEY']).toBe('from-env');
+      });
+
+      // Default wins when env is unset.
+      await withEnv('NEWSAPI_API_KEY', undefined, async () => {
+        const withDefault = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(withDefault.env['NEWSAPI_API_KEY']).toBe('default-val');
+      });
+    });
+
+    it('empty env var string is treated as absent', async () => {
+      const manifest = manifestWith(
+        { NEWSAPI_API_KEY: '${user_config.api_key}' },
+        { api_key: { type: 'string', title: 'API Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      await withEnv('NEWSAPI_API_KEY', '', async () => {
+        // Empty export shouldn't mask the missing-required error.
+        await expect(sdk.prepareServer({ name: '@scope/newsapi' })).rejects.toThrow(
+          MpakConfigError,
+        );
+      });
+    });
+
+    it('multiple env vars mapped to the same field — first non-empty wins, declaration order', async () => {
+      // A bundle could declare both a canonical and an alias name for the
+      // same field. The SDK honors declaration order.
+      const manifest = manifestWith(
+        {
+          ANTHROPIC_API_KEY: '${user_config.key}',
+          CLAUDE_API_KEY: '${user_config.key}',
+        },
+        { key: { type: 'string', title: 'Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      await withEnv('CLAUDE_API_KEY', 'from-claude', async () => {
+        await withEnv('ANTHROPIC_API_KEY', undefined, async () => {
+          // Only the alias is set — alias wins because canonical is empty.
+          const result = await sdk.prepareServer({ name: '@scope/newsapi' });
+          expect(result.env['ANTHROPIC_API_KEY']).toBe('from-claude');
+          expect(result.env['CLAUDE_API_KEY']).toBe('from-claude');
+        });
+
+        await withEnv('ANTHROPIC_API_KEY', 'from-anthropic', async () => {
+          // Both set — canonical (declared first) wins.
+          const result = await sdk.prepareServer({ name: '@scope/newsapi' });
+          expect(result.env['ANTHROPIC_API_KEY']).toBe('from-anthropic');
+        });
+      });
+    });
+
+    it('literal values in mcp_config.env are ignored (no substitution to reverse)', async () => {
+      const manifest = manifestWith(
+        {
+          LOG_LEVEL: 'info',
+          NEWSAPI_API_KEY: '${user_config.api_key}',
+        },
+        { api_key: { type: 'string', title: 'API Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      // A host env var matching a literal entry's KEY must not satisfy a
+      // user_config field (there's no `${user_config.*}` to reverse).
+      await withEnv('LOG_LEVEL', 'debug', async () => {
+        await expect(sdk.prepareServer({ name: '@scope/newsapi' })).rejects.toThrow(
+          MpakConfigError,
+        );
+      });
+    });
+
+    it('template with literal text or multiple substitutions is skipped (no clean inverse)', async () => {
+      const manifest = manifestWith(
+        {
+          // Literal prefix + substitution — cannot be reversed unambiguously.
+          PREFIXED: 'prefix-${user_config.api_key}',
+          // Multiple substitutions — cannot be split back into components.
+          COMPOSITE: '${user_config.a}-${user_config.b}',
+        },
+        {
+          api_key: { type: 'string', title: 'API Key', required: true },
+          a: { type: 'string', title: 'A', required: true },
+          b: { type: 'string', title: 'B', required: true },
+        },
+      );
+      const sdk = setupSdk(manifest);
+
+      // Setting PREFIXED doesn't satisfy api_key — the template isn't a
+      // whole-value substitution.
+      await withEnv('PREFIXED', 'prefix-sk-xxx', async () => {
+        await withEnv('COMPOSITE', 'a-b', async () => {
+          await expect(sdk.prepareServer({ name: '@scope/newsapi' })).rejects.toThrow(
+            MpakConfigError,
+          );
+        });
+      });
+    });
+
+    it('bundle with no mcp_config.env declarations — env tier is empty, falls back as before', async () => {
+      const manifest = manifestWith(
+        {}, // no declared env mappings
+        { api_key: { type: 'string', title: 'API Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      // Without a declared mapping, no host env var can satisfy the field.
+      // Set something obvious to confirm it's ignored.
+      await withEnv('API_KEY', 'from-env', async () => {
+        await expect(sdk.prepareServer({ name: '@scope/newsapi' })).rejects.toThrow(
+          MpakConfigError,
+        );
+      });
+    });
+  });
 });
