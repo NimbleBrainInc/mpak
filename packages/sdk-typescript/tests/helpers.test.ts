@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -40,8 +42,8 @@ describe('isSemverEqual', () => {
 });
 
 describe('constants', () => {
-  it('MAX_UNCOMPRESSED_SIZE is 500MB', () => {
-    expect(MAX_UNCOMPRESSED_SIZE).toBe(500 * 1024 * 1024);
+  it('MAX_UNCOMPRESSED_SIZE has a sensible default (>=1GB)', () => {
+    expect(MAX_UNCOMPRESSED_SIZE).toBeGreaterThanOrEqual(1024 * 1024 * 1024);
   });
 
   it('UPDATE_CHECK_TTL_MS is 1 hour', () => {
@@ -60,7 +62,7 @@ describe('extractZip', () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('extracts a valid zip to the destination directory', () => {
+  it('extracts a valid zip to the destination directory', async () => {
     const srcDir = join(testDir, 'src');
     mkdirSync(srcDir);
     writeFileSync(join(srcDir, 'hello.txt'), 'hello world');
@@ -69,13 +71,13 @@ describe('extractZip', () => {
     execFileSync('zip', ['-j', zipPath, join(srcDir, 'hello.txt')], { stdio: 'pipe' });
 
     const destDir = join(testDir, 'dest');
-    extractZip(zipPath, destDir);
+    await extractZip(zipPath, destDir);
 
     expect(existsSync(join(destDir, 'hello.txt'))).toBe(true);
     expect(readFileSync(join(destDir, 'hello.txt'), 'utf8')).toBe('hello world');
   });
 
-  it('creates the destination directory if it does not exist', () => {
+  it('creates the destination directory if it does not exist', async () => {
     const srcDir = join(testDir, 'src');
     mkdirSync(srcDir);
     writeFileSync(join(srcDir, 'file.txt'), 'content');
@@ -84,17 +86,139 @@ describe('extractZip', () => {
     execFileSync('zip', ['-j', zipPath, join(srcDir, 'file.txt')], { stdio: 'pipe' });
 
     const destDir = join(testDir, 'nested', 'deep', 'dest');
-    extractZip(zipPath, destDir);
+    await extractZip(zipPath, destDir);
 
     expect(existsSync(join(destDir, 'file.txt'))).toBe(true);
   });
 
-  it('throws for an invalid zip file', () => {
+  it('preserves nested directory structure', async () => {
+    const srcDir = join(testDir, 'src');
+    mkdirSync(join(srcDir, 'a', 'b', 'c'), { recursive: true });
+    writeFileSync(join(srcDir, 'top.txt'), 'top');
+    writeFileSync(join(srcDir, 'a', 'b', 'c', 'deep.txt'), 'deep');
+
+    const zipPath = join(testDir, 'test.zip');
+    execFileSync('zip', ['-r', zipPath, '.'], { cwd: srcDir, stdio: 'pipe' });
+
+    const destDir = join(testDir, 'dest');
+    await extractZip(zipPath, destDir);
+
+    expect(readFileSync(join(destDir, 'top.txt'), 'utf8')).toBe('top');
+    expect(readFileSync(join(destDir, 'a', 'b', 'c', 'deep.txt'), 'utf8')).toBe('deep');
+  });
+
+  it('preserves executable bit on scripts', async () => {
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    const scriptPath = join(srcDir, 'run.sh');
+    writeFileSync(scriptPath, '#!/bin/sh\necho hi\n');
+    chmodSync(scriptPath, 0o755);
+
+    const zipPath = join(testDir, 'test.zip');
+    execFileSync('zip', ['-j', zipPath, scriptPath], { stdio: 'pipe' });
+
+    const destDir = join(testDir, 'dest');
+    await extractZip(zipPath, destDir);
+
+    const mode = statSync(join(destDir, 'run.sh')).mode & 0o777;
+    expect(mode & 0o100).toBe(0o100); // owner-executable
+  });
+
+  it('throws for an invalid zip file', async () => {
     const zipPath = join(testDir, 'bad.zip');
     writeFileSync(zipPath, 'not a zip');
 
-    expect(() => extractZip(zipPath, join(testDir, 'dest'))).toThrow(
-      'Cannot verify bundle size before extraction',
+    await expect(extractZip(zipPath, join(testDir, 'dest'))).rejects.toThrow(
+      'Cannot open bundle archive',
+    );
+  });
+
+  it('handles archives with many entries (no buffer limit regression)', async () => {
+    // The previous implementation shelled out to `unzip -l` with Node's
+    // default 1 MB maxBuffer, which blew up on archives with ~15K+ files.
+    // This test creates enough entries to have exceeded that limit.
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    const count = 20000;
+    for (let i = 0; i < count; i++) {
+      writeFileSync(join(srcDir, `f${i}.txt`), String(i));
+    }
+
+    const zipPath = join(testDir, 'many.zip');
+    execFileSync('zip', ['-r', '-0', zipPath, '.'], { cwd: srcDir, stdio: 'pipe' });
+
+    const destDir = join(testDir, 'dest');
+    await extractZip(zipPath, destDir);
+
+    expect(existsSync(join(destDir, 'f0.txt'))).toBe(true);
+    expect(existsSync(join(destDir, `f${count - 1}.txt`))).toBe(true);
+  }, 60_000);
+
+  it('rejects when total declared size exceeds the configured cap', async () => {
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    // 4 files × 1KB = 4KB declared total; cap at 2KB
+    const payload = 'x'.repeat(1024);
+    for (let i = 0; i < 4; i++) writeFileSync(join(srcDir, `f${i}.txt`), payload);
+
+    const zipPath = join(testDir, 'oversize.zip');
+    execFileSync('zip', ['-r', zipPath, '.'], { cwd: srcDir, stdio: 'pipe' });
+
+    await expect(
+      extractZip(zipPath, join(testDir, 'dest'), { maxUncompressedSize: 2048 }),
+    ).rejects.toThrow(/exceeds maximum allowed/);
+  });
+
+  it('accepts when total declared size is under the configured cap', async () => {
+    const srcDir = join(testDir, 'src');
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, 'small.txt'), 'hi');
+
+    const zipPath = join(testDir, 'small.zip');
+    execFileSync('zip', ['-r', zipPath, '.'], { cwd: srcDir, stdio: 'pipe' });
+
+    await expect(
+      extractZip(zipPath, join(testDir, 'dest'), { maxUncompressedSize: 1024 * 1024 }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects entries that escape the destination directory', async () => {
+    // Craft a zip containing a path-traversal entry. `zip` normalizes `..`
+    // out of relative paths, so we use Python to write the raw entry name.
+    const zipPath = join(testDir, 'traversal.zip');
+    execFileSync(
+      'python3',
+      [
+        '-c',
+        `import zipfile, sys\nwith zipfile.ZipFile(sys.argv[1], 'w') as z:\n  z.writestr('../escaped.txt', 'pwned')\n`,
+        zipPath,
+      ],
+      { stdio: 'pipe' },
+    );
+
+    // Rejection may come from yauzl's own `..` guard (wrapped as
+     // "Invalid bundle entry") or from our resolve-based check
+     // ("escapes destination directory"). Either proves traversal is blocked.
+    await expect(extractZip(zipPath, join(testDir, 'dest'))).rejects.toThrow(
+      /(escapes destination directory|Invalid bundle entry.*invalid relative path)/,
+    );
+  });
+
+  it('rejects archives containing symlink entries', async () => {
+    const zipPath = join(testDir, 'symlink.zip');
+    // Create a symlink entry via Python: external_attr encodes mode 0o120777.
+    execFileSync(
+      'python3',
+      [
+        '-c',
+        `import zipfile, sys\nzi = zipfile.ZipInfo('link')\nzi.create_system = 3\nzi.external_attr = (0o120777 << 16)\nwith zipfile.ZipFile(sys.argv[1], 'w') as z:\n  z.writestr(zi, 'target.txt')\n`,
+        zipPath,
+      ],
+      { stdio: 'pipe' },
+    );
+
+    await expect(extractZip(zipPath, join(testDir, 'dest'))).rejects.toThrow(
+      /symlinks are not permitted/,
     );
   });
 });

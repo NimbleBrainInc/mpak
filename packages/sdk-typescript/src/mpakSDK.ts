@@ -30,6 +30,14 @@ export interface MpakOptions {
   timeout?: number;
   /** User-Agent string sent with every request. */
   userAgent?: string;
+  /**
+   * Maximum allowed uncompressed size (bytes) for any bundle this SDK
+   * extracts. Defaults to the SDK's built-in cap (see
+   * `MAX_UNCOMPRESSED_SIZE` in `helpers.ts`). Raise this for bundles that
+   * vendor heavy ML/Python dependencies; lower it to enforce a stricter
+   * policy.
+   */
+  maxUncompressedSize?: number;
 }
 
 /**
@@ -141,9 +149,13 @@ export class Mpak {
     this.client = new MpakClient(clientConfig);
 
     // initialize cache
-    this.bundleCache = new MpakBundleCache(this.client, {
+    const cacheOptions: { mpakHome: string; maxUncompressedSize?: number } = {
       mpakHome: this.configManager.mpakHome,
-    });
+    };
+    if (options?.maxUncompressedSize !== undefined) {
+      cacheOptions.maxUncompressedSize = options.maxUncompressedSize;
+    }
+    this.bundleCache = new MpakBundleCache(this.client, cacheOptions);
   }
 
   /**
@@ -252,7 +264,7 @@ export class Mpak {
       }
 
       try {
-        extractZip(absolutePath, cacheDir);
+        await extractZip(absolutePath, cacheDir, this.bundleCache.extractOptions());
       } catch (err) {
         throw new MpakInvalidBundleError(
           err instanceof Error ? err.message : String(err),
