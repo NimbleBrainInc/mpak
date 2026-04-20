@@ -197,8 +197,8 @@ describe('extractZip', () => {
     );
 
     // Rejection may come from yauzl's own `..` guard (wrapped as
-     // "Invalid bundle entry") or from our resolve-based check
-     // ("escapes destination directory"). Either proves traversal is blocked.
+    // "Invalid bundle entry") or from our resolve-based check
+    // ("escapes destination directory"). Either proves traversal is blocked.
     await expect(extractZip(zipPath, join(testDir, 'dest'))).rejects.toThrow(
       /(escapes destination directory|Invalid bundle entry.*invalid relative path)/,
     );

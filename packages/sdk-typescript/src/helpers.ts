@@ -125,9 +125,15 @@ export async function extractZip(
 
       try {
         const readStream = await openReadStream(zipfile, entry);
-        const counter = createByteCounter(entry, zipPath, () => cumulativeBytes, maxSize, (n) => {
-          cumulativeBytes = n;
-        });
+        const counter = createByteCounter(
+          entry,
+          zipPath,
+          () => cumulativeBytes,
+          maxSize,
+          (n) => {
+            cumulativeBytes = n;
+          },
+        );
         await pipeline(readStream, counter, createWriteStream(safePath));
       } catch (error: unknown) {
         if (error instanceof MpakCacheCorruptedError) throw error;
