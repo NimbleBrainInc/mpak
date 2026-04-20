@@ -323,6 +323,7 @@ export class Mpak {
       title: string;
       description?: string;
       sensitive: boolean;
+      envAliases: string[];
     }> = [];
 
     for (const [fieldName, fieldData] of Object.entries(manifest.user_config)) {
@@ -337,8 +338,9 @@ export class Mpak {
         // Tier 3: env alias — bundle's mcp_config.env declared this field.
         // Empty strings are treated as absent (accidentally-cleared export
         // shouldn't mask a stored value or a default).
+        const aliasesForField = envAliases.get(fieldName) ?? [];
         let envValue: string | undefined;
-        for (const envVar of envAliases.get(fieldName) ?? []) {
+        for (const envVar of aliasesForField) {
           const v = process.env[envVar];
           if (typeof v === 'string' && v.length > 0) {
             envValue = v;
@@ -350,10 +352,14 @@ export class Mpak {
         } else if (fieldData.default !== undefined && fieldData.default !== null) {
           result[fieldName] = String(fieldData.default);
         } else if (fieldData.required) {
+          // Attach the same alias list the tier-3 lookup just tried, so
+          // error-translators can point users at `export ANTHROPIC_API_KEY=…`
+          // without re-deriving the mapping from the manifest.
           const field: (typeof missingFields)[number] = {
             key: fieldName,
             title: fieldData.title ?? fieldName,
             sensitive: fieldData.sensitive ?? false,
+            envAliases: aliasesForField,
           };
           if (fieldData.description !== undefined) {
             field.description = fieldData.description;
