@@ -501,9 +501,12 @@ describe('Mpak facade', () => {
         expect(err).toBeInstanceOf(MpakConfigError);
         const configErr = err as MpakConfigError;
         expect(configErr.packageName).toBe('@scope/echo');
+        // envAliases is always present — empty array when the bundle
+        // declared no `${user_config.<field>}` mapping (nodeManifest
+        // above has `mcp_config.env: {}`).
         expect(configErr.missingFields).toEqual([
-          { key: 'api_key', title: 'API Key', sensitive: true },
-          { key: 'endpoint', title: 'Endpoint URL', sensitive: false },
+          { key: 'api_key', title: 'API Key', sensitive: true, envAliases: [] },
+          { key: 'endpoint', title: 'Endpoint URL', sensitive: false, envAliases: [] },
         ]);
       }
     });
@@ -536,12 +539,19 @@ describe('Mpak facade', () => {
         expect(err).toBeInstanceOf(MpakConfigError);
         const configErr = err as MpakConfigError;
         expect(configErr.missingFields).toEqual([
-          { key: 'api_key', title: 'API Key', description: 'Your OpenAI API key', sensitive: true },
+          {
+            key: 'api_key',
+            title: 'API Key',
+            description: 'Your OpenAI API key',
+            sensitive: true,
+            envAliases: [],
+          },
           {
             key: 'endpoint',
             title: 'Endpoint URL',
             description: 'The API base URL',
             sensitive: false,
+            envAliases: [],
           },
         ]);
       }
@@ -1262,6 +1272,78 @@ describe('Mpak facade', () => {
         const result = await sdk.prepareServer({ name: '@scope/newsapi' });
         expect(result.env['NEWSAPI_API_KEY']).toBe('sk-survives');
       });
+    });
+
+    it('MpakConfigError.missingFields[i].envAliases lists the bundle-declared env var names', async () => {
+      // The error carries everything a friendly translator needs to render
+      // `export ANTHROPIC_API_KEY=<value>` hints — no consumer should have
+      // to re-derive the mapping from the manifest. Canonical first, alias
+      // second; declaration order preserved.
+      const manifest = manifestWith(
+        {
+          ANTHROPIC_API_KEY: '${user_config.api_key}',
+          CLAUDE_API_KEY: '${user_config.api_key}',
+          OTHER_MAPPING: '${user_config.other_field}',
+          LITERAL: 'not-a-substitution',
+          PARTIAL: 'prefix-${user_config.api_key}',
+        },
+        {
+          api_key: {
+            type: 'string',
+            title: 'API Key',
+            description: 'Anthropic API key',
+            required: true,
+          },
+          other_field: {
+            type: 'string',
+            title: 'Other',
+            description: 'Another required field',
+            required: true,
+          },
+        },
+      );
+      const sdk = setupSdk(manifest);
+
+      // Nothing set anywhere — both fields land in missingFields.
+      try {
+        await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+
+        const apiKeyField = configErr.missingFields.find((f) => f.key === 'api_key');
+        expect(apiKeyField?.envAliases).toEqual(['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY']);
+
+        const otherField = configErr.missingFields.find((f) => f.key === 'other_field');
+        expect(otherField?.envAliases).toEqual(['OTHER_MAPPING']);
+      }
+    });
+
+    it('MpakConfigError.missingFields[i].envAliases is empty when the bundle declared no mapping', async () => {
+      const manifest = manifestWith(
+        {}, // no env mappings at all
+        {
+          api_key: {
+            type: 'string',
+            title: 'API Key',
+            description: 'API key for the service',
+            required: true,
+          },
+        },
+      );
+      const sdk = setupSdk(manifest);
+
+      try {
+        await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MpakConfigError);
+        const configErr = err as MpakConfigError;
+        // Required, always present — consumers can iterate without a
+        // nullish check.
+        expect(configErr.missingFields[0]?.envAliases).toEqual([]);
+      }
     });
   });
 });

@@ -113,11 +113,23 @@ export class MpakInvalidBundleError extends MpakError {
 export class MpakConfigError extends MpakError {
   constructor(
     public readonly packageName: string,
+    /**
+     * The fields that could not be satisfied by any of the SDK's resolution
+     * tiers (override, stored config, env alias, manifest default).
+     *
+     * `envAliases` lists the host env var names the bundle declared as
+     * satisfying this field in its `server.mcp_config.env`. Empty when the
+     * bundle has no `${user_config.<field>}` mapping. Always present —
+     * consumers never need to re-derive this from the manifest. A friendly
+     * error-translator can render a `export ANTHROPIC_API_KEY=...` hint
+     * directly from the error without reaching back into the manifest.
+     */
     public readonly missingFields: Array<{
       key: string;
       title: string;
       description?: string;
       sensitive: boolean;
+      envAliases: string[];
     }>,
   ) {
     const fieldNames = missingFields.map((f) => f.title).join(', ');
