@@ -57,12 +57,14 @@ In your `manifest.json`:
 
 ## How Values Are Resolved
 
-When `mpak bundle run` executes, it resolves `${user_config.*}` placeholders in this order:
+The mpak SDK's `gatherUserConfig` walks these tiers for each `user_config` field. First non-empty value wins:
 
-1. **Process environment** - Already set by parent (e.g., Claude Desktop)
-2. **Stored config** - Set via `mpak config set`
-3. **Default value** - From manifest
-4. **Interactive prompt** - If TTY and required
+1. **Caller override** — `userConfig` passed to `prepareServer({ userConfig })` by a host runtime (SDK 0.3.0+).
+2. **Stored config** — values set via `mpak config set`, read from `~/.mpak/config.json`.
+3. **Env alias** — the manifest's `mcp_config.env` declaration, read in reverse. If you mapped `"API_KEY": "${user_config.api_key}"`, a host `API_KEY` env var satisfies `api_key` (SDK 0.4.0+). Only whole-value substitutions participate; composite templates like `"prefix-${user_config.a}"` don't.
+4. **Manifest default** — the field's `default`.
+
+If a required field is still unresolved, the SDK throws `MpakConfigError`. Each missing field carries its `envAliases` list so callers can render a specific `export VAR=...` hint (SDK 0.5.0+).
 
 ## User Workflow
 
@@ -93,7 +95,7 @@ mpak bundle run @yourorg/my-api-server
 ```
 
 <Aside type="caution">
-  The environment variable name (e.g., `API_KEY`) comes from your `mcp_config.env` mapping, not from the `user_config` key name.
+  The environment variable name (e.g., `API_KEY`) comes from your `mcp_config.env` mapping, not from the `user_config` key name. This mapping also controls which host env var satisfies the field via the SDK's env alias tier — see [Choose canonical env var names](#choose-canonical-env-var-names).
 </Aside>
 
 ## Key Name Mapping
@@ -157,6 +159,34 @@ Always set `sensitive: true` for API keys, passwords, and tokens:
 ```
 
 This masks the value in `mpak config get` output.
+
+### Use standard env var names
+
+Your `mcp_config.env` name is also the host env alias (tier 3 above). Pick the name the upstream service's own SDK uses so users who already have it exported get zero-config startup:
+
+```json
+{
+  "mcp_config": {
+    "env": { "ANTHROPIC_API_KEY": "${user_config.anthropic_api_key}" }
+  }
+}
+```
+
+A user with `ANTHROPIC_API_KEY` already in their shell — which Anthropic's own SDK reads — runs your bundle with no extra configuration. Renaming to `MYBUNDLE_ANTHROPIC_KEY` would force them to re-export the same secret for no benefit.
+
+When the upstream has no de-facto standard, use the name the service itself calls it:
+
+| Upstream | Env var |
+|----------|---------|
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| GitHub | `GITHUB_TOKEN` |
+| Google Gemini | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| Stripe | `STRIPE_API_KEY` |
+| AWS | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| Postgres | `DATABASE_URL`, or `PGHOST`/`PGUSER`/etc. |
+
+For multiple keys into the same service, keep the service prefix and disambiguate with a suffix: `SLACK_BOT_TOKEN` and `SLACK_USER_TOKEN`, not `MYBUNDLE_SLACK_BOT`.
 
 ### Provide Sensible Defaults
 
