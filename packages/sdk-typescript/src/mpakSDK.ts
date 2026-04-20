@@ -465,6 +465,16 @@ export class Mpak {
 
   /**
    * Substitute `${user_config.*}` placeholders in env vars.
+   *
+   * When a bundle maps the same field to multiple env vars, e.g.
+   *   `{ "ANTHROPIC_API_KEY": "${user_config.key}",
+   *      "CLAUDE_API_KEY":    "${user_config.key}" }`
+   * every mapped var receives the resolved value on spawn, even if the
+   * env-alias tier in `gatherUserConfig` only matched one of them in the
+   * host process. That's intentional: once a field is resolved, all of
+   * the bundle's declared destinations for that field get populated —
+   * it's the bundle author's declaration of "these names mean this
+   * field to me." Tests pin this behavior down in mpak.test.ts.
    */
   private static substituteEnvVars(
     env: Record<string, string> | undefined,
@@ -473,6 +483,11 @@ export class Mpak {
     if (!env) return {};
     const result: Record<string, string> = {};
     for (const [key, value] of Object.entries(env)) {
+      // Zod's `z.record(z.string(), z.string())` rejects non-strings at
+      // parse time, but guard here anyway so a malformed manifest that
+      // bypasses parse (tests, hand-built objects) can't take down the
+      // resolver. Kept in sync with `buildEnvAliasMap`'s guard.
+      if (typeof value !== 'string') continue;
       result[key] = value.replace(
         /\$\{user_config\.([^}]+)\}/g,
         (match, configKey: string) => userConfigValues[configKey] ?? match,
@@ -516,7 +531,12 @@ function buildEnvAliasMap(manifest: McpbManifest): Map<string, string[]> {
   const entries = manifest.server?.mcp_config?.env;
   if (!entries) return map;
 
-  const wholeSubstitution = /^\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}$/;
+  // Keep this character class aligned with the forward substitution in
+  // `resolveCommand` (`[^}]+`). Any field name that forward-substitutes
+  // cleanly must also reverse-resolve, otherwise a bundle author using
+  // e.g. `${user_config.api-key}` sees their spawn env populate at
+  // runtime but the env-alias tier silently misses at resolve time.
+  const wholeSubstitution = /^\$\{user_config\.([^}]+)\}$/;
   for (const [envVar, template] of Object.entries(entries)) {
     if (typeof template !== 'string') continue;
     const match = wholeSubstitution.exec(template);

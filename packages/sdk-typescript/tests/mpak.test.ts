@@ -1209,5 +1209,59 @@ describe('Mpak facade', () => {
         );
       });
     });
+
+    it('hyphenated field name in mcp_config.env round-trips both directions', async () => {
+      // The forward substitution accepts any char except `}`, so a bundle
+      // is free to use hyphens (`${user_config.api-key}`). The reverse
+      // lookup must accept the same alphabet — otherwise a host export
+      // satisfies the forward path at spawn but not the resolve tier.
+      // QA-flagged asymmetry; pinned here so it can't regress.
+      const manifest = manifestWith(
+        { NEWSAPI_API_KEY: '${user_config.api-key}' },
+        { 'api-key': { type: 'string', title: 'API Key', required: true } },
+      );
+      const sdk = setupSdk(manifest);
+
+      await withEnv('NEWSAPI_API_KEY', 'sk-from-env', async () => {
+        const result = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-from-env');
+      });
+    });
+
+    it('non-string values in mcp_config.env are skipped defensively', async () => {
+      // Zod's `z.record(z.string(), z.string())` rejects non-strings at
+      // parse time in production, so this path is guard-rail only. The
+      // test uses a hand-built manifest object (bypassing parse) to pin
+      // the guard in place — if the schema ever loosens, this fallback
+      // prevents a runtime crash in `resolveCommand`.
+      const manifest = {
+        ...baseManifest,
+        user_config: {
+          api_key: { type: 'string' as const, title: 'API Key', required: true },
+        },
+        server: {
+          ...baseManifest.server,
+          mcp_config: {
+            ...baseManifest.server.mcp_config,
+            env: {
+              // Intentionally malformed to exercise the non-string guard.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              NUMBER_VAL: 42 as any,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              NULL_VAL: null as any,
+              NEWSAPI_API_KEY: '${user_config.api_key}',
+            },
+          },
+        },
+      } as McpbManifest;
+      const sdk = setupSdk(manifest);
+
+      await withEnv('NEWSAPI_API_KEY', 'sk-survives', async () => {
+        // Valid string entry still reverses; malformed entries are skipped
+        // without taking down the resolver.
+        const result = await sdk.prepareServer({ name: '@scope/newsapi' });
+        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-survives');
+      });
+    });
   });
 });
