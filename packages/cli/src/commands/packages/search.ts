@@ -43,7 +43,7 @@ export async function handleSearch(query: string, options: SearchOptions = {}): 
       logger.info(`More results available. Use --offset ${nextOffset} to see more.`);
     }
 
-    logger.info('Use "mpak show <bundle>" for more details');
+    logger.info('Use "mpak bundle show <bundle>" for more details');
   } catch (error) {
     logger.error(error instanceof Error ? error.message : 'Failed to search bundles');
   }
