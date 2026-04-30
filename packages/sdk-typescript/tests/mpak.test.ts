@@ -251,10 +251,14 @@ describe('Mpak facade', () => {
 
     function setupSdk(
       manifest: McpbManifest | null = nodeManifest,
-      opts: { pythonProbe?: (cmd: string) => { cacheTag: string; version: string } | null } = {},
+      opts: {
+        pythonProbe?: (cmd: string) => { cacheTag: string; version: string } | null;
+        uvProbe?: (cmd: string) => { version: string } | null;
+      } = {},
     ) {
       const sdkOpts: ConstructorParameters<typeof Mpak>[0] = { mpakHome: testDir };
       if (opts.pythonProbe) sdkOpts.pythonProbe = opts.pythonProbe;
+      if (opts.uvProbe) sdkOpts.uvProbe = opts.uvProbe;
       const sdk = new Mpak(sdkOpts);
       const cacheDir = join(testDir, 'cache', 'scope-echo');
 
@@ -340,6 +344,49 @@ describe('Mpak facade', () => {
 
       expect(result.command).toBe(join(cacheDir, 'server'));
       expect(result.args).toEqual(['--port', '3000']);
+    });
+
+    it('resolves a uv server with the spec-canonical default args', async () => {
+      // Mirrors `examples/hello-world-uv/manifest.json` upstream: the bundle
+      // omits args, the resolver supplies `run --directory <cacheDir> <entry>`.
+      const uvManifest: McpbManifest = {
+        ...nodeManifest,
+        server: {
+          type: 'uv',
+          entry_point: 'src/server.py',
+        },
+        compatibility: { runtimes: { python: '>=3.13' } },
+      };
+      const { sdk, cacheDir } = setupSdk(uvManifest, {
+        uvProbe: () => ({ version: '0.4.22' }),
+      });
+
+      const result = await sdk.prepareServer({ name: '@scope/echo' });
+
+      expect(result.command).toBe('uv');
+      expect(result.args).toEqual([
+        'run',
+        '--directory',
+        cacheDir,
+        'src/server.py',
+      ]);
+    });
+
+    it('throws when uv mode is requested but uv is not installed', async () => {
+      const uvManifest: McpbManifest = {
+        ...nodeManifest,
+        server: {
+          type: 'uv',
+          entry_point: 'src/server.py',
+        },
+      };
+      const { sdk } = setupSdk(uvManifest, {
+        uvProbe: () => null,
+      });
+
+      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
+        /not on PATH/,
+      );
     });
 
     it('passes version from spec to loadBundle', async () => {

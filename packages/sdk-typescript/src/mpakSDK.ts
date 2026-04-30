@@ -13,6 +13,7 @@ import {
   readJsonFromFile,
 } from './helpers.js';
 import { resolvePython } from './python-resolver.js';
+import { resolveUv } from './uv-resolver.js';
 import type { MpakClientConfig } from './types.js';
 
 /**
@@ -46,6 +47,14 @@ export interface MpakOptions {
    * doesn't depend on which Python is on the runner's PATH.
    */
   pythonProbe?: (command: string) => { cacheTag: string; version: string } | null;
+  /**
+   * Override the `uv --version` probe used by `type: "uv"` bundles.
+   *
+   * Production callers omit this — the resolver spawns the real binary to
+   * confirm uv is installed. Tests inject a stub so the suite doesn't
+   * depend on whether uv is on the runner's PATH.
+   */
+  uvProbe?: (command: string) => { version: string } | null;
 }
 
 /**
@@ -142,6 +151,8 @@ export class Mpak {
   readonly bundleCache: MpakBundleCache;
   /** Optional probe override for `type: "python"` resolution (test seam). */
   private readonly pythonProbe: MpakOptions["pythonProbe"];
+  /** Optional probe override for `type: "uv"` resolution (test seam). */
+  private readonly uvProbe: MpakOptions["uvProbe"];
 
   constructor(options?: MpakOptions) {
     // initialize config
@@ -168,6 +179,7 @@ export class Mpak {
     this.bundleCache = new MpakBundleCache(this.client, cacheOptions);
 
     this.pythonProbe = options?.pythonProbe;
+    this.uvProbe = options?.uvProbe;
   }
 
   /**
@@ -490,11 +502,23 @@ export class Mpak {
       }
 
       case 'uv': {
-        command = mcp_config.command || 'uv';
-        args =
-          userArgs.length > 0
-            ? Mpak.resolveArgs(userArgs, cacheDir)
-            : ['run', join(cacheDir, entry_point)];
+        // Preflight uv before spawning so the failure mode is "install uv"
+        // instead of a raw ENOENT mid-spawn. Default args follow the spec
+        // example (`run --directory <cacheDir> <entry>`) so the invocation
+        // is cwd-independent — embedders that don't honor `server.cwd`
+        // still find pyproject.toml correctly.
+        const resolvedUv = resolveUv({
+          cacheDir,
+          entryPoint: entry_point,
+          manifestCommand: mcp_config.command,
+          userArgs: Mpak.resolveArgs(userArgs, cacheDir),
+          ...(this.uvProbe ? { probe: this.uvProbe } : {}),
+        });
+        command = resolvedUv.command;
+        args = resolvedUv.args;
+        process.stderr.write(
+          `[mpak] uv: ${resolvedUv.command} (${resolvedUv.version})\n`,
+        );
         break;
       }
 
