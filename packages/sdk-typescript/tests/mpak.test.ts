@@ -249,8 +249,13 @@ describe('Mpak facade', () => {
       },
     };
 
-    function setupSdk(manifest: McpbManifest | null = nodeManifest) {
-      const sdk = new Mpak({ mpakHome: testDir });
+    function setupSdk(
+      manifest: McpbManifest | null = nodeManifest,
+      opts: { pythonProbe?: (cmd: string) => { cacheTag: string; version: string } | null } = {},
+    ) {
+      const sdkOpts: ConstructorParameters<typeof Mpak>[0] = { mpakHome: testDir };
+      if (opts.pythonProbe) sdkOpts.pythonProbe = opts.pythonProbe;
+      const sdk = new Mpak(sdkOpts);
       const cacheDir = join(testDir, 'cache', 'scope-echo');
 
       vi.spyOn(sdk.bundleCache, 'loadBundle').mockResolvedValue({
@@ -290,7 +295,7 @@ describe('Mpak facade', () => {
       expect(result.args).toEqual([join(cacheDir, 'index.js')]);
     });
 
-    it('resolves a python server', async () => {
+    it('resolves a python server, honoring the manifest command verbatim (issue #90)', async () => {
       const pythonManifest: McpbManifest = {
         ...nodeManifest,
         server: {
@@ -299,11 +304,23 @@ describe('Mpak facade', () => {
           mcp_config: { command: 'python', args: ['${__dirname}/main.py'], env: {} },
         },
       };
-      const { sdk, cacheDir } = setupSdk(pythonManifest);
+      const { sdk, cacheDir } = setupSdk(pythonManifest, {
+        // No `deps/` in the test fixture → ABI check no-ops; the probe still
+        // has to return *something* so resolvePython can confirm the chosen
+        // interpreter is runnable.
+        pythonProbe: (cmd) => {
+          // Pin the assertion below: whatever `cmd` the manifest declared is
+          // exactly what reaches the probe. No silent rewrite to 'python3'.
+          expect(cmd).toBe('python');
+          return { cacheTag: 'cpython-313', version: '3.13.0' };
+        },
+      });
 
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
-      expect(['python', 'python3']).toContain(result.command);
+      // Manifest said `python` — resolver must return `python`, not 'python3'.
+      // This pins the issue #90 fix.
+      expect(result.command).toBe('python');
       expect(result.args).toEqual([`${cacheDir}/main.py`]);
       expect(result.env['PYTHONPATH']).toContain(join(cacheDir, 'deps'));
     });
@@ -951,7 +968,7 @@ describe('Mpak facade', () => {
       );
     });
 
-    it('resolves a python server from local bundle', async () => {
+    it('resolves a python server from local bundle, honoring the manifest command (issue #90)', async () => {
       const pythonManifest: McpbManifest = {
         ...nodeManifest,
         server: {
@@ -960,12 +977,15 @@ describe('Mpak facade', () => {
           mcp_config: { command: 'python', args: ['${__dirname}/main.py'], env: {} },
         },
       };
-      const sdk = new Mpak({ mpakHome: testDir });
+      const sdk = new Mpak({
+        mpakHome: testDir,
+        pythonProbe: () => ({ cacheTag: 'cpython-313', version: '3.13.0' }),
+      });
       const mcpbPath = createMcpbBundle(testDir, pythonManifest);
 
       const result = await sdk.prepareServer({ local: mcpbPath });
 
-      expect(['python', 'python3']).toContain(result.command);
+      expect(result.command).toBe('python');
       expect(result.args).toEqual([`${result.cwd}/main.py`]);
       expect(result.env['PYTHONPATH']).toContain(join(result.cwd, 'deps'));
     });
