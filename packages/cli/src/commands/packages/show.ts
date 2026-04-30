@@ -136,7 +136,7 @@ export async function handleShow(packageName: string, options: ShowOptions = {})
 
     // Install instructions
     logger.info('Pull (download only):');
-    logger.info(`  mpak pull ${bundle.name}`);
+    logger.info(`  mpak bundle pull ${bundle.name}`);
   } catch (error) {
     logger.error(error instanceof Error ? error.message : 'Failed to get bundle details');
   }
