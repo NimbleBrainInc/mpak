@@ -408,7 +408,12 @@ export class Mpak {
     cacheDir: string,
     userConfigValues: Record<string, string>,
   ): { command: string; args: string[]; env: Record<string, string> } {
-    const { type, entry_point, mcp_config } = manifest.server;
+    const { type, entry_point } = manifest.server;
+    // `mcp_config` is optional (MCPB v0.4 lets `type: "uv"` bundles omit it);
+    // normalize to an empty object so each case can reach for command/args/env
+    // without re-guarding undefined.
+    const mcp_config = manifest.server.mcp_config ?? {};
+    const userArgs = mcp_config.args ?? [];
 
     // Substitute user_config placeholders in manifest env
     const env = Mpak.substituteEnvVars(mcp_config.env, userConfigValues);
@@ -419,7 +424,7 @@ export class Mpak {
     switch (type) {
       case 'binary': {
         command = join(cacheDir, entry_point);
-        args = Mpak.resolveArgs(mcp_config.args ?? [], cacheDir);
+        args = Mpak.resolveArgs(userArgs, cacheDir);
         try {
           chmodSync(command, 0o755);
         } catch {
@@ -431,8 +436,8 @@ export class Mpak {
       case 'node': {
         command = mcp_config.command || 'node';
         args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+          userArgs.length > 0
+            ? Mpak.resolveArgs(userArgs, cacheDir)
             : [join(cacheDir, entry_point)];
         break;
       }
@@ -443,8 +448,8 @@ export class Mpak {
             ? Mpak.findPythonCommand()
             : mcp_config.command || Mpak.findPythonCommand();
         args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+          userArgs.length > 0
+            ? Mpak.resolveArgs(userArgs, cacheDir)
             : [join(cacheDir, entry_point)];
 
         // Set PYTHONPATH to deps/ directory
@@ -456,8 +461,8 @@ export class Mpak {
       case 'uv': {
         command = mcp_config.command || 'uv';
         args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+          userArgs.length > 0
+            ? Mpak.resolveArgs(userArgs, cacheDir)
             : ['run', join(cacheDir, entry_point)];
         break;
       }

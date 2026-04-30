@@ -57,12 +57,50 @@ export const UserConfigFieldSchema = z.object({
   default: z.union([z.string(), z.number(), z.boolean()]).optional(),
 });
 
-/** MCP server launch configuration (command, args, env). */
+/**
+ * MCP server launch configuration (command, args, env).
+ *
+ * `command` is optional per MCPB v0.4 — for `type: "uv"` the spec lets the
+ * host manage execution, in which case the bundle may omit `mcp_config`
+ * entirely. When present and `command` is omitted, the resolver supplies a
+ * sensible default for the server type.
+ */
 export const McpConfigSchema = z.object({
-  command: z.string(),
-  args: z.array(z.string()),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
 });
+
+/**
+ * Runtime version requirements (`compatibility.runtimes`).
+ *
+ * Each value is a semver range (e.g. `">=3.13,<4.0"`). Bundle authors only
+ * declare runtimes their bundle actually uses.
+ */
+export const CompatibilityRuntimesSchema = z.object({
+  python: z.string().optional(),
+  node: z.string().optional(),
+});
+
+/**
+ * Compatibility block.
+ *
+ * Known fields (`platforms`, `runtimes`) are typed; unknown keys are treated
+ * as client version constraints (e.g. `claude_desktop: ">=1.0.0"`,
+ * `my_client: ">1.0.0"`) and pass through as semver strings, per MCPB spec.
+ */
+export const CompatibilitySchema = z
+  .object({
+    // Inlined `z.enum(["darwin", "win32", "linux"])` — the same enum exists as
+    // `PlatformSchema` in package.ts but importing it here would create a
+    // module cycle (package.ts already imports `ServerTypeSchema` from this
+    // file). Three strings; not worth a shared module.
+    platforms: z
+      .array(z.enum(["darwin", "win32", "linux"]))
+      .optional(),
+    runtimes: CompatibilityRuntimesSchema.optional(),
+  })
+  .catchall(z.string());
 
 /** Author information. */
 export const ManifestAuthorSchema = z.object({
@@ -71,11 +109,18 @@ export const ManifestAuthorSchema = z.object({
   url: z.string().optional(),
 });
 
-/** Server configuration block. */
+/**
+ * Server configuration block.
+ *
+ * `mcp_config` is optional per MCPB v0.4 — `type: "uv"` bundles may omit it
+ * entirely and let the host manage execution.
+ */
 export const ManifestServerSchema = z.object({
   type: ServerTypeSchema,
   entry_point: SafeRelativePathSchema,
-  mcp_config: McpConfigSchema,
+  // Optional per MCPB v0.4 — `type: "uv"` bundles may omit and let
+  // the host manage execution.
+  mcp_config: McpConfigSchema.optional(),
 });
 
 /** MCP capability descriptor (tool, prompt, or resource). */
@@ -112,6 +157,7 @@ export const McpbManifestSchema = z.object({
     .optional(),
   user_config: z.record(z.string(), UserConfigFieldSchema).optional(),
   server: ManifestServerSchema,
+  compatibility: CompatibilitySchema.optional(),
   tools: z.array(CapabilitySchema).optional(),
   prompts: z.array(CapabilitySchema).optional(),
   resources: z.array(CapabilitySchema).optional(),
@@ -125,6 +171,8 @@ export const McpbManifestSchema = z.object({
 export type ServerType = z.infer<typeof ServerTypeSchema>;
 export type UserConfigField = z.infer<typeof UserConfigFieldSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
+export type CompatibilityRuntimes = z.infer<typeof CompatibilityRuntimesSchema>;
+export type Compatibility = z.infer<typeof CompatibilitySchema>;
 export type ManifestAuthor = z.infer<typeof ManifestAuthorSchema>;
 export type ManifestServer = z.infer<typeof ManifestServerSchema>;
 export type Capability = z.infer<typeof CapabilitySchema>;

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CompatibilityRuntimesSchema,
+  CompatibilitySchema,
   ManifestServerSchema,
   McpbManifestSchema,
+  McpConfigSchema,
   SafeRelativePathSchema,
 } from "../src/manifest.js";
 
@@ -57,6 +60,35 @@ describe("SafeRelativePathSchema", () => {
   });
 });
 
+describe("McpConfigSchema", () => {
+  it("accepts a fully populated mcp_config", () => {
+    const result = McpConfigSchema.safeParse({
+      command: "uv",
+      args: ["run", "src/server.py"],
+      env: { FOO: "bar" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts mcp_config with no command (MCPB v0.4 — host-managed)", () => {
+    const result = McpConfigSchema.safeParse({
+      args: ["run", "src/server.py"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts mcp_config with no args", () => {
+    // Some uv bundles supply only `command` and rely on resolver defaults for args.
+    const result = McpConfigSchema.safeParse({ command: "uv" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an empty mcp_config object", () => {
+    const result = McpConfigSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("ManifestServerSchema", () => {
   const validServer = {
     type: "node" as const,
@@ -99,6 +131,88 @@ describe("ManifestServerSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts type:uv server with no mcp_config (host-managed execution)", () => {
+    const result = ManifestServerSchema.safeParse({
+      type: "uv",
+      entry_point: "src/server.py",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts type:python server with full mcp_config", () => {
+    const result = ManifestServerSchema.safeParse({
+      type: "python",
+      entry_point: "src/server.py",
+      mcp_config: {
+        command: "python",
+        args: ["-m", "my_pkg.server"],
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects servers missing entry_point", () => {
+    const result = ManifestServerSchema.safeParse({ type: "node" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("CompatibilityRuntimesSchema", () => {
+  it("accepts python and node version constraints", () => {
+    const result = CompatibilityRuntimesSchema.safeParse({
+      python: ">=3.13,<4.0",
+      node: ">=20.0.0",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts only python (bundle authors declare what they use)", () => {
+    const result = CompatibilityRuntimesSchema.safeParse({
+      python: ">=3.10",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an empty runtimes block", () => {
+    const result = CompatibilityRuntimesSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("CompatibilitySchema", () => {
+  it("accepts the spec's full example shape", () => {
+    const result = CompatibilitySchema.safeParse({
+      claude_desktop: ">=1.0.0",
+      my_client: ">1.0.0",
+      other_client: ">=2.0.0 <3.0.0",
+      platforms: ["darwin", "win32", "linux"],
+      runtimes: {
+        python: ">=3.8",
+        node: ">=16.0.0",
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // Unknown client constraints pass through via catchall.
+      expect(result.data.claude_desktop).toBe(">=1.0.0");
+      expect(result.data.runtimes?.python).toBe(">=3.8");
+    }
+  });
+
+  it("rejects invalid platform values", () => {
+    const result = CompatibilitySchema.safeParse({
+      platforms: ["beos"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-string client version constraints (catchall enforces string)", () => {
+    const result = CompatibilitySchema.safeParse({
+      claude_desktop: 123,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("McpbManifestSchema", () => {
@@ -127,5 +241,75 @@ describe("McpbManifestSchema", () => {
       server: { ...baseManifest.server, entry_point: "../../../../etc/passwd" },
     });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts a v0.3 type:python manifest (backward compatibility)", () => {
+    const result = McpbManifestSchema.safeParse({
+      manifest_version: "0.3",
+      name: "legacy-bundle",
+      version: "1.0.0",
+      description: "v0.3 bundle with vendored deps",
+      server: {
+        type: "python",
+        entry_point: "src/server.py",
+        mcp_config: {
+          command: "python",
+          args: ["-m", "legacy.server"],
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts the canonical hello-world-uv manifest from the MCPB spec", () => {
+    // Verbatim from anthropics/mcpb examples/hello-world-uv/manifest.json.
+    // If this stops parsing, mpak has drifted from the upstream spec.
+    const result = McpbManifestSchema.safeParse({
+      manifest_version: "0.4",
+      name: "hello-world-uv",
+      display_name: "Hello World (UV Runtime)",
+      version: "1.0.0",
+      description: "Simple MCP server using UV runtime",
+      author: { name: "Anthropic" },
+      icon: "icon.png",
+      server: {
+        type: "uv",
+        entry_point: "src/server.py",
+        mcp_config: {
+          command: "uv",
+          args: ["run", "--directory", "${__dirname}", "src/server.py"],
+        },
+      },
+      compatibility: {
+        platforms: ["darwin", "linux", "win32"],
+        runtimes: { python: ">=3.10" },
+      },
+      keywords: ["example", "hello-world", "uv"],
+      license: "MIT",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.compatibility?.runtimes?.python).toBe(">=3.10");
+      expect(result.data.compatibility?.platforms).toEqual([
+        "darwin",
+        "linux",
+        "win32",
+      ]);
+    }
+  });
+
+  it("accepts a host-managed type:uv bundle that omits mcp_config entirely", () => {
+    const result = McpbManifestSchema.safeParse({
+      manifest_version: "0.4",
+      name: "minimal-uv",
+      version: "0.1.0",
+      description: "uv bundle delegating execution to the host",
+      server: {
+        type: "uv",
+        entry_point: "src/server.py",
+      },
+      compatibility: { runtimes: { python: ">=3.13" } },
+    });
+    expect(result.success).toBe(true);
   });
 });
