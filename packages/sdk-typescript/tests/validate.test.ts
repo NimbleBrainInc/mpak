@@ -1,9 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { validateMcpb } from '../src/validate.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES_DIR = join(__dirname, 'fixtures');
 
 // ---------------------------------------------------------------------------
 // Helpers — create .mcpb test fixtures (zip archives)
@@ -201,6 +205,31 @@ describe('validateMcpb', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors!.some((e) => /entry.point/i.test(e))).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Real-world bundle fixtures
+  // -------------------------------------------------------------------------
+
+  it('returns valid for a real .mcpb bundle (mcp-obsidian-cli manifest)', async () => {
+    const result = await validateMcpb(join(FIXTURES_DIR, 'valid.mcpb'));
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toBeUndefined();
+    expect(result.manifest).toMatchObject({
+      manifest_version: '0.4',
+      name: '@ovaculos/obsidian-cli',
+      version: '0.1.5',
+    });
+    expect(result.manifest!.server.entry_point).toBe('build/index.js');
+  });
+
+  it('returns invalid for a real .mcpb bundle with corrupted manifest', async () => {
+    const result = await validateMcpb(join(FIXTURES_DIR, 'broken.mcpb'));
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toBeDefined();
+    expect(result.errors!.some((e) => /manifest|json/i.test(e))).toBe(true);
   });
 
   // -------------------------------------------------------------------------
