@@ -53,9 +53,7 @@ export async function validateMcpb(mcpbPath: string): Promise<McpbValidationResu
     } catch (err) {
       return {
         valid: false,
-        errors: [
-          `Invalid manifest.json: ${err instanceof Error ? err.message : String(err)}`,
-        ],
+        errors: [`Invalid manifest.json: ${err instanceof Error ? err.message : String(err)}`],
       };
     }
 

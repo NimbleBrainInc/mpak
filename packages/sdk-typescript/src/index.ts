@@ -36,7 +36,11 @@ export type { MpakClientConfig } from './types.js';
 
 // Validation
 export { validateMcpb } from './validate.js';
-export type { McpbValidationResult, McpbValidationSuccess, McpbValidationFailure } from './validate.js';
+export type {
+  McpbValidationResult,
+  McpbValidationSuccess,
+  McpbValidationFailure,
+} from './validate.js';
 
 // Utilities
 export { parsePackageSpec } from './utils.js';
