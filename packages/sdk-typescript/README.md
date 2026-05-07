@@ -295,6 +295,7 @@ Standalone functions exported from the package (not methods on any class):
 | `extractZip(zipPath, destDir, options?)` | Async. Stream-extract a ZIP with zip-bomb, path-traversal, and symlink protection. Pass `{ maxUncompressedSize }` to override the default cap. |
 | `MAX_UNCOMPRESSED_SIZE` | Default uncompressed-size cap applied by `extractZip` (2 GB). |
 | `isSemverEqual(a, b)` | Compare semver strings (ignores `v` prefix) |
+| `validateMcpb(path)` | Async. Validate a local `.mcpb` file (manifest schema + entry-point existence) without touching the cache. Returns `{ valid: true, manifest }` or `{ valid: false, errors }`. |
 
 ### ConfigManager (`mpak.config`)
 

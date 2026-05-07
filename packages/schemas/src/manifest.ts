@@ -7,6 +7,39 @@ import { z } from "zod";
 /** Server runtime type (v0.4 added "uv"). */
 export const ServerTypeSchema = z.enum(["node", "python", "binary", "uv"]);
 
+/**
+ * A path that must resolve to a location within the bundle root.
+ *
+ * Rejects empty strings, NUL bytes, absolute paths (POSIX `/foo`, Windows
+ * drive `C:\foo`, UNC `\\server\share`), and any segment equal to `..`.
+ *
+ * The MCPB spec defines path-typed manifest fields (e.g. `server.entry_point`)
+ * as relative to the bundle root. Enforcing that at the schema layer means
+ * every consumer — validators, runtime launchers, registry, scanner — gets
+ * the same guarantee without duplicating the check.
+ *
+ * Pure-JS (no `node:path`) so this package stays browser-safe.
+ */
+export const SafeRelativePathSchema = z
+  .string()
+  .min(1, "must not be empty")
+  .refine((p) => !p.includes("\0"), {
+    message: "must not contain NUL bytes",
+  })
+  .refine(
+    (p) => {
+      if (p.startsWith("/")) return false; // POSIX absolute
+      if (/^[a-zA-Z]:[\\/]/.test(p)) return false; // Windows drive
+      if (p.startsWith("\\\\")) return false; // Windows UNC
+      if (p.split(/[\\/]/).includes("..")) return false; // traversal segment
+      return true;
+    },
+    {
+      message:
+        'must be a relative path within the bundle (no absolute paths or ".." segments)',
+    },
+  );
+
 /** User-configurable field declared by a bundle author. */
 export const UserConfigFieldSchema = z.object({
   type: z.enum(["string", "number", "boolean"]),
@@ -34,7 +67,7 @@ export const ManifestAuthorSchema = z.object({
 /** Server configuration block. */
 export const ManifestServerSchema = z.object({
   type: ServerTypeSchema,
-  entry_point: z.string(),
+  entry_point: SafeRelativePathSchema,
   mcp_config: McpConfigSchema,
 });
 

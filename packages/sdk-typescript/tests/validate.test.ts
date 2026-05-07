@@ -208,6 +208,52 @@ describe('validateMcpb', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Path-safety: schema rejects unsafe entry_point values end-to-end
+  //
+  // Hardening lives in `SafeRelativePathSchema` (packages/schemas) so every
+  // manifest consumer (validator, runtime launcher, registry, scanner)
+  // inherits the guarantee. These tests confirm the end-to-end behavior at
+  // the validateMcpb layer.
+  // -------------------------------------------------------------------------
+
+  it('returns invalid when entry_point uses .. to escape the bundle', async () => {
+    const evilManifest = {
+      ...validManifest,
+      server: { ...validManifest.server, entry_point: '../../../../etc/passwd' },
+    };
+    const mcpbPath = createMcpb(testDir, 'traversal', evilManifest);
+
+    const result = await validateMcpb(mcpbPath);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors!.some((e) => /relative path|manifest/i.test(e))).toBe(true);
+  });
+
+  it('returns invalid when entry_point is an absolute path', async () => {
+    const evilManifest = {
+      ...validManifest,
+      server: { ...validManifest.server, entry_point: '/etc/passwd' },
+    };
+    const mcpbPath = createMcpb(testDir, 'absolute', evilManifest);
+
+    const result = await validateMcpb(mcpbPath);
+
+    expect(result.valid).toBe(false);
+  });
+
+  it('returns invalid when entry_point is empty', async () => {
+    const evilManifest = {
+      ...validManifest,
+      server: { ...validManifest.server, entry_point: '' },
+    };
+    const mcpbPath = createMcpb(testDir, 'empty-entry', evilManifest);
+
+    const result = await validateMcpb(mcpbPath);
+
+    expect(result.valid).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
   // Real-world bundle fixtures
   // -------------------------------------------------------------------------
 
