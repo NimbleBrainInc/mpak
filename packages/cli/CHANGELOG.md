@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-06
+
+### Changed
+
+- Bumped SDK dependency to `0.7.0` and schemas to `0.3.0`. The schema layer now
+  rejects manifests whose `server.entry_point` is absolute, contains `..`, or
+  uses backslashes — closes a path-traversal vector at the manifest contract
+  layer. ([#94])
+
+### Fixed
+
+- `mpak bundle show` and `mpak bundle search` output now uses namespaced
+  command examples. ([#91])
+
+## [0.4.1] - 2026-04-09
+
+### Fixed
+
+- Use published `@nimblebrain/mpak-schemas` instead of workspace reference so
+  the published CLI resolves the schemas dependency correctly. ([#77])
+
+## [0.4.0] - 2026-04-09
+
+### Added
+
+- CLI now uses the TypeScript SDK internally for bundle runtime, config, and
+  cache operations (dogfooding). ([#35])
+
 ## [0.3.4] - 2026-04-07
 
 ### Added
@@ -69,7 +97,10 @@ Initial public release.
 - Platform-aware bundle resolution (os/arch matching)
 - Python auto-detection (`python3` → `python` fallback) for Python-based bundles
 
-[Unreleased]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.4...HEAD
+[Unreleased]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.2...HEAD
+[0.4.2]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.1...cli-v0.4.2
+[0.4.1]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.0...cli-v0.4.1
+[0.4.0]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.4...cli-v0.4.0
 [0.3.4]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.3...cli-v0.3.4
 [0.3.3]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.2...cli-v0.3.3
 [0.3.2]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.1...cli-v0.3.2
@@ -78,5 +109,9 @@ Initial public release.
 [0.1.0]: https://github.com/NimbleBrainInc/mpak/releases/tag/v0.1.0
 
 [#30]: https://github.com/NimbleBrainInc/mpak/issues/30
+[#35]: https://github.com/NimbleBrainInc/mpak/issues/35
 [#37]: https://github.com/NimbleBrainInc/mpak/issues/37
 [#72]: https://github.com/NimbleBrainInc/mpak/issues/72
+[#77]: https://github.com/NimbleBrainInc/mpak/issues/77
+[#91]: https://github.com/NimbleBrainInc/mpak/issues/91
+[#94]: https://github.com/NimbleBrainInc/mpak/issues/94
