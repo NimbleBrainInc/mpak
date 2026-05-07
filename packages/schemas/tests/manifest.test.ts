@@ -39,8 +39,11 @@ describe("SafeRelativePathSchema", () => {
       ["windows drive", "C:\\evil"],
       ["windows drive forward slash", "C:/evil"],
       ["windows drive lowercase", "c:\\evil"],
+      ["windows drive without separator", "C:foo"],
+      ["windows drive-root-relative", "\\foo"],
       ["windows UNC", "\\\\server\\share"],
       ["dotdot via backslash", "foo\\..\\bar"],
+      ["any backslash", "foo\\bar"],
     ])("rejects %s (%j)", (_label, path) => {
       expect(SafeRelativePathSchema.safeParse(path).success).toBe(false);
     });

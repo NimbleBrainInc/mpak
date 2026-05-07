@@ -10,8 +10,9 @@ export const ServerTypeSchema = z.enum(["node", "python", "binary", "uv"]);
 /**
  * A path that must resolve to a location within the bundle root.
  *
- * Rejects empty strings, NUL bytes, absolute paths (POSIX `/foo`, Windows
- * drive `C:\foo`, UNC `\\server\share`), and any segment equal to `..`.
+ * Rejects empty strings, NUL bytes, any backslash (MCPB bundles are zip
+ * archives that use forward slashes), absolute paths (POSIX `/foo`, any
+ * Windows drive prefix `C:`), and any segment equal to `..`.
  *
  * The MCPB spec defines path-typed manifest fields (e.g. `server.entry_point`)
  * as relative to the bundle root. Enforcing that at the schema layer means
@@ -26,12 +27,18 @@ export const SafeRelativePathSchema = z
   .refine((p) => !p.includes("\0"), {
     message: "must not contain NUL bytes",
   })
+  .refine((p) => !p.includes("\\"), {
+    // MCPB bundles are zip archives; ZIP central directories use forward slashes.
+    // Rejecting all backslashes blocks Windows-style traversal forms (`\foo`,
+    // `C:\foo`, `\\server\share`, `foo\..\bar`) without needing per-form rules.
+    message:
+      "must use forward slashes only (backslashes are not permitted)",
+  })
   .refine(
     (p) => {
       if (p.startsWith("/")) return false; // POSIX absolute
-      if (/^[a-zA-Z]:[\\/]/.test(p)) return false; // Windows drive
-      if (p.startsWith("\\\\")) return false; // Windows UNC
-      if (p.split(/[\\/]/).includes("..")) return false; // traversal segment
+      if (/^[a-zA-Z]:/.test(p)) return false; // Windows drive (with or without separator)
+      if (p.split("/").includes("..")) return false; // traversal segment
       return true;
     },
     {
