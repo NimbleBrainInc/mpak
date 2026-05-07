@@ -58,3 +58,21 @@ jobs:
           pnpm pack
           npm publish nimblebrain-mpak-sdk-*.tgz --provenance --access public
         working-directory: packages/sdk-typescript
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#sdk-typescript-v}"
+          gh release create "$TAG" \
+            --title "@nimblebrain/mpak-sdk v$VERSION" \
+            --generate-notes \
+            --verify-tag
