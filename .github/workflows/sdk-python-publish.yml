@@ -5,6 +5,10 @@ on:
     tags:
       - 'sdk-python-v*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -55,3 +59,30 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk-python/dist/
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags so we can find the previous same-prefix tag
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#sdk-python-v}"
+          # Find the previous same-prefix tag so notes don't include sibling-package commits
+          PREV_TAG=$(git tag -l 'sdk-python-v*' --sort=-v:refname | grep -v "^${TAG}$" | head -n1)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, skipping create"
+          else
+            gh release create "$TAG" \
+              --title "mpak (Python SDK) v$VERSION" \
+              --generate-notes \
+              ${PREV_TAG:+--notes-start-tag "$PREV_TAG"} \
+              --verify-tag
+          fi
