@@ -16,6 +16,7 @@ describe('SDK exports resolve', () => {
     expect(sdk.MpakBundleCache).toBeDefined();
     expect(sdk.MpakConfigManager).toBeDefined();
     expect(sdk.parsePackageSpec).toBeDefined();
+    expect(sdk.validateMcpb).toBeDefined();
 
     // Error classes
     expect(sdk.MpakError).toBeDefined();

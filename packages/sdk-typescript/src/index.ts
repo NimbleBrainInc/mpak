@@ -34,6 +34,14 @@ export type { MpakBundleCacheOptions } from './cache.js';
 export { MpakClient } from './client.js';
 export type { MpakClientConfig } from './types.js';
 
+// Validation
+export { validateMcpb } from './validate.js';
+export type {
+  McpbValidationResult,
+  McpbValidationSuccess,
+  McpbValidationFailure,
+} from './validate.js';
+
 // Utilities
 export { parsePackageSpec } from './utils.js';
 export { MAX_UNCOMPRESSED_SIZE, extractZip, isSemverEqual } from './helpers.js';
