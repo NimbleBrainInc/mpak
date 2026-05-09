@@ -1,54 +1,53 @@
-# Build stage
+# Build stage — full monorepo install + build the registry + flatten its
+# closure into /deploy via `pnpm deploy`. Workspace deps (e.g. the
+# `workspace:*` link to @nimblebrain/mpak-schemas) and any future
+# additions are handled automatically — pnpm walks the dependency
+# graph and copies what's needed.
 FROM node:22-alpine AS builder
 
 RUN corepack enable pnpm
 
 WORKDIR /app
 
-# Copy workspace config
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+# Whole monorepo lands here. `.dockerignore` keeps the context small
+# (no node_modules, dist, .git, etc.).
+COPY . .
 
-# Copy the registry app
-COPY apps/registry/package.json apps/registry/tsconfig.json apps/registry/prisma.config.ts ./apps/registry/
-COPY apps/registry/prisma/ ./apps/registry/prisma/
-COPY apps/registry/src/ ./apps/registry/src/
-
-# Install dependencies
+# One install resolves every workspace package's deps + workspace links.
 RUN pnpm install --frozen-lockfile
 
-# Generate Prisma client
-RUN cd apps/registry && npx prisma generate
+# Generate the Prisma client into the pnpm hoisted store. tsc downstream
+# consumes its types; the runtime stage copies the generated artifacts
+# explicitly (see below).
+RUN pnpm --filter @nimblebrain/mpak-registry exec prisma generate
 
-# Build
-RUN cd apps/registry && pnpm build
+# Build registry + every transitive workspace dep (schemas, etc.).
+RUN pnpm --filter @nimblebrain/mpak-registry... build
 
-# Production stage
+# Flatten registry + production deps into /deploy. pnpm walks the
+# dependency closure and copies every workspace package's `dist/` plus
+# every external prod dep — single-stage output, no per-dep COPY pairs
+# in the runtime stage as the workspace grows.
+RUN pnpm deploy --filter=@nimblebrain/mpak-registry --prod /deploy
+
+# Production stage — minimal runtime image.
 FROM node:22-alpine AS production
-
-RUN corepack enable pnpm
 
 WORKDIR /app
 
-# Copy workspace config
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# Everything the registry needs at runtime, prepared by `pnpm deploy`:
+# its own dist/, its production deps (including @prisma/client base),
+# and every workspace dep's compiled output.
+COPY --from=builder /deploy ./
 
-# Copy the registry app package.json
-COPY apps/registry/package.json ./apps/registry/
-
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
-
-# Copy Prisma schema and generated client (Prisma 7 generates to hoisted node_modules)
-COPY --from=builder /app/apps/registry/prisma/ ./apps/registry/prisma/
-COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/@prisma/client/ ./node_modules/@prisma/client/
+# Prisma's generated client lands in the pnpm hoisted store at
+# `node_modules/.pnpm/@prisma+client*/node_modules/{.prisma,@prisma/client}/`
+# during `prisma generate`. `pnpm deploy` carries the @prisma/client
+# package itself but not the sibling .prisma folder where the
+# *generated* client and engine binaries live. Copy both explicitly so
+# the runtime can find them at the canonical lookup paths.
 COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma/ ./node_modules/.prisma/
-COPY --from=builder /app/node_modules/.pnpm/@prisma+client-runtime-utils*/node_modules/@prisma/client-runtime-utils/ ./node_modules/@prisma/client-runtime-utils/
-COPY --from=builder /app/node_modules/.pnpm/@prisma+client-runtime-utils*/node_modules/@prisma/client-runtime-utils/ ./node_modules/@prisma/client-runtime-utils/
-
-# Copy built output
-COPY --from=builder /app/apps/registry/dist/ ./apps/registry/dist/
-
-WORKDIR /app/apps/registry
+COPY --from=builder /app/node_modules/.pnpm/@prisma+client*/node_modules/@prisma/client/ ./node_modules/@prisma/client/
 
 # Environment
 ENV NODE_ENV=production
