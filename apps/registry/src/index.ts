@@ -152,9 +152,17 @@ async function start() {
     // depends on them) but consumers fetching read shapes should
     // migrate. Skip POST /announce — that's a publish path, not a
     // consumer-read path.
+    //
+    // RFC 8594 specifies `Deprecation = HTTP-date / "@" 1*DIGIT`. The
+    // boolean string "true" is a common shortcut from a superseded
+    // draft but isn't conformant; strict parsers ignore it. Emit an
+    // IMF-fixdate equal to when the deprecation took effect (the
+    // first commit of this PR's day) so the header round-trips
+    // through any conforming client.
+    const DEPRECATION_DATE = 'Fri, 09 May 2026 00:00:00 GMT';
     instance.addHook('onSend', async (request, reply) => {
       if (request.method === 'GET' || request.method === 'HEAD') {
-        reply.header('Deprecation', 'true');
+        reply.header('Deprecation', DEPRECATION_DATE);
         reply.header('Link', '</v1/servers>; rel="successor-version"');
       }
     });

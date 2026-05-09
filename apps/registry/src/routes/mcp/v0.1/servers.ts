@@ -200,14 +200,13 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       cursor?: string;
       limit?: string;
       search?: string;
-      version?: string;
       updated_since?: string;
     };
   }>('/servers', {
     schema: {
       tags: ['mcp-registry'],
       description:
-        'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec)',
+        'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec). Each item is the latest published version of a server; per-version listings live under /servers/{name}/versions.',
       querystring: {
         type: 'object',
         properties: {
@@ -217,14 +216,10 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
             type: 'string',
             description: 'Case-insensitive substring search on name/displayName/description',
           },
-          version: {
-            type: 'string',
-            enum: ['latest'],
-            description: 'Filter to latest versions only',
-          },
           updated_since: {
             type: 'string',
-            description: 'RFC 3339 timestamp filter for recently updated servers',
+            description:
+              'RFC 3339 timestamp. Returns servers with at least one version published since the given time. Filtered at the database; pagination math reflects the filter.',
           },
         },
       },

@@ -116,13 +116,39 @@ describe('composeServerDetail', () => {
     });
   });
 
-  it('honors author reverse-DNS name override at _meta["dev.mpak/registry"].name', () => {
+  it('honors author reverse-DNS override under the publisher\'s curated org-mapped namespace', () => {
+    // @nimblebraininc → ai.nimblebrain (per ORG_REVERSE_DNS_MAP),
+    // so this publisher may claim any ai.nimblebrain/* name.
+    const m = {
+      ...FULL_MANIFEST,
+      _meta: { 'dev.mpak/registry': { name: 'ai.nimblebrain/custom-name' } },
+    };
+    const detail = composeServerDetail(input({ version: { ...input().version, manifest: m } }));
+    expect(detail?.name).toBe('ai.nimblebrain/custom-name');
+  });
+
+  it('honors author override under the publisher\'s mechanical-default namespace', () => {
+    // Any publisher implicitly owns `dev.mpak.<their-scope>/*`.
+    const m = {
+      ...FULL_MANIFEST,
+      _meta: { 'dev.mpak/registry': { name: 'dev.mpak.nimblebraininc/relabeled' } },
+    };
+    const detail = composeServerDetail(input({ version: { ...input().version, manifest: m } }));
+    expect(detail?.name).toBe('dev.mpak.nimblebraininc/relabeled');
+  });
+
+  it('silently ignores a squatted override (publisher claiming a namespace they don\'t own)', () => {
+    // @nimblebraininc trying to label themselves under com.acme — not
+    // their org, not their mechanical default. Override drops; record
+    // falls back to the curated/mechanical default. Prevents
+    // `@evil/spam` from publishing as `io.modelcontextprotocol/legit`
+    // and squatting in registry listings.
     const m = {
       ...FULL_MANIFEST,
       _meta: { 'dev.mpak/registry': { name: 'com.acme/custom-name' } },
     };
     const detail = composeServerDetail(input({ version: { ...input().version, manifest: m } }));
-    expect(detail?.name).toBe('com.acme/custom-name');
+    expect(detail?.name).toBe('ai.nimblebrain/echo');
   });
 
   it('falls back to the npm name for title when display_name is missing', () => {
@@ -143,6 +169,19 @@ describe('composeServerDetail', () => {
     const detail = composeServerDetail(input({ version: { ...input().version, manifest: m } }));
     expect(detail?.description.length).toBe(100);
     expect(detail?.description.endsWith('…')).toBe(true);
+  });
+
+  it('truncates title longer than the upstream 100-char cap (no schema reject + 500)', () => {
+    // A long display_name used to bubble up to ServerDetailSchema.title's
+    // max(100), reject the entire record via safeParse, return null,
+    // and 500 the route. Truncate at the projection so the rest of the
+    // record still serves.
+    const longTitle = 'A'.repeat(150);
+    const m = { ...FULL_MANIFEST, display_name: longTitle };
+    const detail = composeServerDetail(input({ version: { ...input().version, manifest: m } }));
+    expect(detail).not.toBeNull();
+    expect(detail?.title?.length).toBe(100);
+    expect(detail?.title?.endsWith('…')).toBe(true);
   });
 
   it('returns null when the manifest is too malformed to project (invalid name)', () => {

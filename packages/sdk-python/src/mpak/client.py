@@ -4,6 +4,7 @@ import json
 import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -305,12 +306,17 @@ class MpakClient:
         (``@scope/pkg``) and the reverse-DNS form
         (``ai.nimblebrain/echo``); either form returns the same record.
 
+        Both ``@`` and ``/`` are URL-encoded — Fastify's ``:name``
+        parameter is single-segment, so an unencoded ``/`` would land
+        on the wrong route and 404.
+
         Raises:
             MpakNotFoundError: If the server is not registered.
             MpakNetworkError: If the network request fails.
         """
+        encoded = quote(name, safe="")
         try:
-            response = self._client.get(f"/v1/servers/{name}")
+            response = self._client.get(f"/v1/servers/{encoded}")
             if response.status_code == 404:
                 raise MpakNotFoundError(name)
             response.raise_for_status()
@@ -330,12 +336,17 @@ class MpakClient:
         Pass ``version="latest"`` to alias the most recent published
         version.
 
+        Both ``name`` and ``version`` are URL-encoded — see
+        :meth:`get_server` for the encoding rationale.
+
         Raises:
             MpakNotFoundError: If the server or version is not found.
             MpakNetworkError: If the network request fails.
         """
+        encoded_name = quote(name, safe="")
+        encoded_version = quote(version, safe="")
         try:
-            response = self._client.get(f"/v1/servers/{name}/versions/{version}")
+            response = self._client.get(f"/v1/servers/{encoded_name}/versions/{encoded_version}")
             if response.status_code == 404:
                 raise MpakNotFoundError(f"{name}@{version}")
             response.raise_for_status()

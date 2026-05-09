@@ -213,7 +213,26 @@ export function defaultReverseDnsName(npmName: string): string {
 /**
  * Resolve the reverse-DNS name for a bundle: author override (when the
  * manifest sets `_meta["dev.mpak/registry"].name`) wins over the
- * org-mapped default.
+ * org-mapped default — but only when the override is one the publisher
+ * is allowed to claim. Without authorization the override would let a
+ * publisher of `@evil/spam` label themselves
+ * `io.modelcontextprotocol/legitimate-tool` in registry listings.
+ *
+ * Authorization rules:
+ *
+ *   - The override's namespace must match the publisher's curated
+ *     org-mapped reverse-DNS prefix (e.g. `@nimblebraininc/*` may
+ *     override to anything starting with `ai.nimblebrain/`), OR
+ *   - The override's namespace must start with `dev.mpak.<scope>`
+ *     where `<scope>` is the publisher's npm scope (the mechanical
+ *     namespace they already own implicitly).
+ *
+ * Anything else falls back to the mechanical default with no error —
+ * the override is silently ignored. (Registry-side validation can
+ * upgrade this to a publish-time rejection once we route author
+ * overrides through OIDC-claim verification; this composer-side
+ * gate prevents the squatted label from reaching consumer listings
+ * in the meantime.)
  */
 export function resolveReverseDnsName(
   npmName: string,
@@ -222,9 +241,34 @@ export function resolveReverseDnsName(
   const meta = manifestMeta?.["dev.mpak/registry"];
   if (meta && typeof meta === "object") {
     const override = (meta as { name?: unknown }).name;
-    if (typeof override === "string" && SERVER_NAME_PATTERN.test(override)) {
+    if (
+      typeof override === "string" &&
+      SERVER_NAME_PATTERN.test(override) &&
+      isOverrideAuthorized(npmName, override)
+    ) {
       return override;
     }
   }
   return defaultReverseDnsName(npmName);
+}
+
+/**
+ * Decide whether `override` is one the publisher of `npmName` is
+ * allowed to claim. See {@link resolveReverseDnsName} for the rules.
+ */
+function isOverrideAuthorized(npmName: string, override: string): boolean {
+  const m = /^@([^/]+)\//.exec(npmName);
+  if (!m) {
+    // Unscoped npm names can only override under `dev.mpak/`.
+    return override.startsWith("dev.mpak/");
+  }
+  const scope = (m[1] ?? "").toLowerCase();
+  const overrideNamespace = override.split("/")[0] ?? "";
+  // Curated org-mapped namespace: must match exactly.
+  const mapped = ORG_REVERSE_DNS_MAP[scope];
+  if (mapped && overrideNamespace === mapped) return true;
+  // Mechanical-default namespace: any publisher implicitly owns
+  // `dev.mpak.<their-scope>`.
+  if (overrideNamespace === `dev.mpak.${scope}`) return true;
+  return false;
 }

@@ -12,8 +12,10 @@
  *                 curated org map applied first when applicable)
  *   title         manifest.display_name ?? manifest.name
  *   description   manifest.description (truncated to 100 chars; upstream cap)
- *   version       manifest.version (PackageVersion.version on the rare
- *                 occasion the two diverge)
+ *   version       PackageVersion.version (the DB row, source of truth
+ *                 post-publish — manifest.version is intentionally
+ *                 ignored so top-level `version` and per-package
+ *                 `packages[].version` can never disagree)
  *   websiteUrl    manifest.homepage
  *   repository    manifest.repository
  *   icons[]       manifest.icons[] when set, else [{ src: manifest.icon }]
@@ -120,7 +122,13 @@ function buildDetail(input: ComposerInput): Record<string, unknown> {
   const description = truncate(stringField(manifest, "description") ?? input.pkg.name, 100);
   const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
   const display = stringField(manifest, "display_name");
-  const title = display && display.trim().length > 0 ? display.trim() : input.pkg.name;
+  // Upstream `Title` caps at 100 chars; truncate so a long display_name
+  // (or a long npm scope/name when it falls back) doesn't reject the
+  // entire record at the schema boundary and 500 the route.
+  const title = truncate(
+    display && display.trim().length > 0 ? display.trim() : input.pkg.name,
+    100,
+  );
 
   const detail: Record<string, unknown> = {
     $schema: UPSTREAM_SCHEMA_URL,
