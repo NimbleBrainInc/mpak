@@ -146,6 +146,18 @@ async function start() {
       max: 10,
       timeWindow: '1 minute',
     });
+    // Mark every /v1/bundles response as deprecated per RFC 8594. The
+    // successor is the MCP-spec-aligned /v1/servers family; the legacy
+    // bundle-shape endpoints stay alive (announce / publish flow still
+    // depends on them) but consumers fetching read shapes should
+    // migrate. Skip POST /announce — that's a publish path, not a
+    // consumer-read path.
+    instance.addHook('onSend', async (request, reply) => {
+      if (request.method === 'GET' || request.method === 'HEAD') {
+        reply.header('Deprecation', 'true');
+        reply.header('Link', '</v1/servers>; rel="successor-version"');
+      }
+    });
     await instance.register(bundleRoutes);
     await instance.register(securityRoutes); // /@:scope/:package/security routes
   }, { prefix: '/v1/bundles' });
@@ -165,7 +177,10 @@ async function start() {
     await instance.register(skillRoutes);
   }, { prefix: '/v1/skills' });
 
-  // MCP Registry API
+  // MCP Registry API — mounted at both /v0.1 (the upstream MCP Registry
+  // public API prefix) and /v1 (mpak's `/v1/...` family). Same routes,
+  // same handlers; consumers pick whichever URL space is conventional
+  // for their stack.
   await fastify.register(async (instance) => {
     await instance.register(cors, {
       origin: true,
@@ -174,6 +189,15 @@ async function start() {
     });
     await instance.register(mcpRegistryRoutes);
   }, { prefix: '/v0.1' });
+
+  await fastify.register(async (instance) => {
+    await instance.register(cors, {
+      origin: true,
+      methods: ['GET', 'HEAD'],
+      credentials: false,
+    });
+    await instance.register(mcpRegistryRoutes);
+  }, { prefix: '/v1' });
 
   // Health check endpoint
   fastify.get('/health', {

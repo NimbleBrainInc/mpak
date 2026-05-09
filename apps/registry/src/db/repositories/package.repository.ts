@@ -373,6 +373,94 @@ export class PackageRepository {
     });
   }
 
+  /**
+   * Find a package by its npm-style scoped name with all versions and
+   * artifacts. Variant of {@link findPackageWithServerJsonByName} that
+   * doesn't require the deprecated `serverJson` column to be set —
+   * server.json metadata is now composed from the manifest, so any
+   * indexed bundle can be served as an MCP `ServerDetail`.
+   */
+  async findPackageForServerLookup(
+    name: string,
+    tx?: TransactionClient
+  ): Promise<(Package & { versions: (PackageVersion & { artifacts: Artifact[] })[] }) | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findUnique({
+      where: { name },
+      include: {
+        versions: {
+          orderBy: { publishedAt: 'desc' },
+          include: {
+            artifacts: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * List packages with their latest version + artifacts. Variant of
+   * {@link findPackagesWithServerJson} without the deprecated
+   * `serverJson` filter — server.json metadata composes from the
+   * manifest, so every indexed package can be served. Honors a
+   * case-insensitive substring search on name / displayName /
+   * description.
+   */
+  async findPackagesForServerListing(
+    filters: { search?: string },
+    options: { skip?: number; take?: number },
+    tx?: TransactionClient
+  ): Promise<{ packages: (Package & { versions: (PackageVersion & { artifacts: Artifact[] })[] })[]; total: number }> {
+    const client = tx ?? getPrismaClient();
+
+    const where: Prisma.PackageWhereInput = filters.search
+      ? {
+          OR: [
+            { name: { contains: filters.search, mode: 'insensitive' } },
+            { displayName: { contains: filters.search, mode: 'insensitive' } },
+            { description: { contains: filters.search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
+
+    const [packages, total] = await Promise.all([
+      client.package.findMany({
+        where,
+        skip: options.skip,
+        take: options.take,
+        orderBy: { name: 'asc' },
+        include: {
+          versions: {
+            orderBy: { publishedAt: 'desc' },
+            take: 1,
+            include: {
+              artifacts: true,
+            },
+          },
+        },
+      }),
+      client.package.count({ where }),
+    ]);
+
+    return { packages, total };
+  }
+
+  /**
+   * Latest completed security scan for a version, when present.
+   * Returned for the registry's MTF certification fields (level,
+   * controls passed/failed/total) on `_meta["dev.mpak/registry"].certification`.
+   */
+  async findLatestCompletedScan(
+    versionId: string,
+    tx?: TransactionClient
+  ): Promise<SecurityScan | null> {
+    const client = tx ?? getPrismaClient();
+    return client.securityScan.findFirst({
+      where: { versionId, status: 'completed' },
+      orderBy: { startedAt: 'desc' },
+    });
+  }
+
   // ==================== Package Version Methods ====================
 
   /**
