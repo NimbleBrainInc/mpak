@@ -596,4 +596,127 @@ describe('MpakClient', () => {
       await expect(client.searchBundles()).rejects.toThrow(MpakNetworkError);
     });
   });
+
+  // ===========================================================================
+  // ServerDetail (MCP registry) endpoints
+  // ===========================================================================
+
+  describe('searchServers', () => {
+    const SERVER: Record<string, unknown> = {
+      name: 'ai.nimblebrain/echo',
+      title: 'Echo',
+      description: 'Echo server for testing',
+      version: '0.1.6',
+    };
+
+    it('hits /v1/servers/search and returns the ServerListResponse', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse({ servers: [SERVER], metadata: { count: 1 } }));
+
+      const result = await client.searchServers({ q: 'echo' });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/v1\/servers\/search\?q=echo$/),
+        expect.any(Object),
+      );
+      expect(result.servers[0]?.name).toBe('ai.nimblebrain/echo');
+      expect(result.metadata?.count).toBe(1);
+    });
+
+    it('passes limit + cursor through to the URL', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse({ servers: [], metadata: { count: 0 } }));
+
+      await client.searchServers({ limit: 50, cursor: '100' });
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('limit=50');
+      expect(url).toContain('cursor=100');
+    });
+
+    it('throws MpakNotFoundError on 404', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('not found', { status: 404 }));
+      await expect(client.searchServers()).rejects.toThrow(MpakNotFoundError);
+    });
+
+    it('throws MpakNetworkError on 5xx', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('boom', { status: 503 }));
+      await expect(client.searchServers()).rejects.toThrow(MpakNetworkError);
+    });
+  });
+
+  describe('getServer', () => {
+    const SERVER: Record<string, unknown> = {
+      name: 'ai.nimblebrain/echo',
+      title: 'Echo',
+      description: 'Echo server',
+      version: '0.1.6',
+    };
+
+    it('URL-encodes the npm-style name (slashes preserved by encodeURIComponent)', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(SERVER));
+
+      await client.getServer('@nimblebraininc/echo');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      // encodeURIComponent escapes both `@` and `/` so the param round-trips.
+      expect(url).toContain('/v1/servers/%40nimblebraininc%2Fecho');
+    });
+
+    it('accepts the reverse-DNS form unchanged', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(SERVER));
+
+      await client.getServer('ai.nimblebrain/echo');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/v1/servers/ai.nimblebrain%2Fecho');
+    });
+
+    it('throws MpakNotFoundError on 404', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('not found', { status: 404 }));
+      await expect(client.getServer('ai.nimblebrain/missing')).rejects.toThrow(MpakNotFoundError);
+    });
+  });
+
+  describe('getServerVersion', () => {
+    const SERVER: Record<string, unknown> = {
+      name: 'ai.nimblebrain/echo',
+      title: 'Echo',
+      description: 'Echo server',
+      version: '0.1.6',
+    };
+
+    it('URL-encodes both the name and the version', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(SERVER));
+
+      await client.getServerVersion('@nimblebraininc/echo', '0.1.6');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/v1/servers/%40nimblebraininc%2Fecho/versions/0.1.6');
+    });
+
+    it('passes through the literal "latest"', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(SERVER));
+
+      await client.getServerVersion('ai.nimblebrain/echo', 'latest');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/versions/latest');
+    });
+
+    it('throws MpakNotFoundError on 404 with name@version in the message', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('not found', { status: 404 }));
+      await expect(client.getServerVersion('ai.nimblebrain/echo', '99.0.0')).rejects.toThrow(
+        /ai.nimblebrain\/echo@99\.0\.0/,
+      );
+    });
+  });
 });

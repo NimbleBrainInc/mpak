@@ -9,6 +9,17 @@
 export type { BundleSearchParamsInput as BundleSearchParams } from '@nimblebrain/mpak-schemas';
 export type { SkillSearchParamsInput as SkillSearchParams } from '@nimblebrain/mpak-schemas';
 
+/**
+ * Query params for `MpakClient.searchServers`. Mirrors the
+ * `/v1/servers/search` query string. `cursor` is the registry's
+ * pagination handle returned in `metadata.next_cursor`.
+ */
+export interface ServerSearchParams {
+  q?: string;
+  limit?: number;
+  cursor?: string;
+}
+
 // =============================================================================
 // Client Configuration
 // =============================================================================

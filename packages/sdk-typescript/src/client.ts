@@ -3,6 +3,8 @@ import type {
   BundleSearchResponse,
   DownloadInfo,
   PlatformInfo,
+  ServerDetail,
+  ServerListResponse,
   SkillDetail,
   SkillDownloadInfo,
   SkillSearchResponse,
@@ -11,7 +13,12 @@ import type {
 } from '@nimblebrain/mpak-schemas';
 import { createHash } from 'node:crypto';
 import { MpakError, MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
-import type { BundleSearchParams, MpakClientConfig, SkillSearchParams } from './types.js';
+import type {
+  BundleSearchParams,
+  MpakClientConfig,
+  ServerSearchParams,
+  SkillSearchParams,
+} from './types.js';
 
 const DEFAULT_REGISTRY_URL = 'https://registry.mpak.dev';
 const DEFAULT_TIMEOUT = 30000;
@@ -155,6 +162,72 @@ export class MpakClient {
     }
 
     return response.json() as Promise<DownloadInfo>;
+  }
+
+  // ===========================================================================
+  // MCP Registry (ServerDetail) API
+  // ===========================================================================
+
+  /**
+   * Search servers by substring on name / displayName / description.
+   * Returns ServerDetail entries per the upstream MCP registry shape;
+   * pair with `metadata.next_cursor` for pagination.
+   *
+   * Note: this hits `/v1/servers/search`, the MCP-spec-aligned read
+   * surface. The `searchBundles` method targets the legacy
+   * `/v1/bundles/search` shape and is being deprecated server-side
+   * (responses now carry `Deprecation: true` + `Link: rel="successor-version"`).
+   */
+  async searchServers(params: ServerSearchParams = {}): Promise<ServerListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.q) searchParams.set('q', params.q);
+    if (params.limit) searchParams.set('limit', String(params.limit));
+    if (params.cursor) searchParams.set('cursor', params.cursor);
+
+    const queryString = searchParams.toString();
+    const url = `${this.registryUrl}/v1/servers/search${queryString ? `?${queryString}` : ''}`;
+
+    const response = await this.fetchWithTimeout(url);
+    if (response.status === 404) {
+      throw new MpakNotFoundError('servers/search endpoint');
+    }
+    if (!response.ok) {
+      throw new MpakNetworkError(`Failed to search servers: HTTP ${response.status}`);
+    }
+    return response.json() as Promise<ServerListResponse>;
+  }
+
+  /**
+   * Latest `ServerDetail` for a server. `name` accepts both the
+   * npm-style scoped name (`@scope/pkg`) and the reverse-DNS form
+   * (`ai.nimblebrain/echo`). Either form returns the same record.
+   */
+  async getServer(name: string): Promise<ServerDetail> {
+    const url = `${this.registryUrl}/v1/servers/${encodeURIComponent(name)}`;
+    const response = await this.fetchWithTimeout(url);
+    if (response.status === 404) {
+      throw new MpakNotFoundError(name);
+    }
+    if (!response.ok) {
+      throw new MpakNetworkError(`Failed to get server: HTTP ${response.status}`);
+    }
+    return response.json() as Promise<ServerDetail>;
+  }
+
+  /**
+   * Version-specific `ServerDetail`. `version` accepts the literal
+   * `"latest"` to alias the most recent published version.
+   */
+  async getServerVersion(name: string, version: string): Promise<ServerDetail> {
+    const url = `${this.registryUrl}/v1/servers/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`;
+    const response = await this.fetchWithTimeout(url);
+    if (response.status === 404) {
+      throw new MpakNotFoundError(`${name}@${version}`);
+    }
+    if (!response.ok) {
+      throw new MpakNetworkError(`Failed to get server version: HTTP ${response.status}`);
+    }
+    return response.json() as Promise<ServerDetail>;
   }
 
   // ===========================================================================

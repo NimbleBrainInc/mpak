@@ -1,0 +1,400 @@
+/**
+ * Compose an upstream MCP `ServerDetail` from a bundle's stored
+ * mcpb v0.4 manifest plus mpak-side registry data (downloads,
+ * provenance, certification, artifacts).
+ *
+ * Pure projection — no I/O, no async work. Every output field has
+ * exactly one source:
+ *
+ *   $schema       constant URL pointer to the upstream draft schema
+ *   name          manifest._meta["dev.mpak/registry"].name override, else
+ *                 mechanical default (`dev.mpak.<scope>/<name>`, with
+ *                 curated org map applied first when applicable)
+ *   title         manifest.display_name ?? manifest.name
+ *   description   manifest.description (truncated to 100 chars; upstream cap)
+ *   version       PackageVersion.version (the DB row, source of truth
+ *                 post-publish — manifest.version is intentionally
+ *                 ignored so top-level `version` and per-package
+ *                 `packages[].version` can never disagree)
+ *   websiteUrl    manifest.homepage
+ *   repository    manifest.repository
+ *   icons[]       manifest.icons[] when set, else [{ src: manifest.icon }]
+ *                 when icon is set, else omitted; non-http(s) icons dropped
+ *   packages[]    one entry per platform artifact (registryType: "mpak",
+ *                 identifier: manifest.name, version, transport: stdio,
+ *                 environmentVariables derived from manifest.user_config),
+ *                 plus fileSha256 from each artifact
+ *   _meta         manifest._meta verbatim + dev.mpak/registry block
+ *                 (npmName, downloads, published_at, provenance,
+ *                 certification, artifacts[])
+ *
+ * Validates the result against the Zod `ServerDetailSchema` before
+ * returning. The throw-variant fails loud with the issue list when the
+ * projection produces an invalid record — operator-side bug, surfaces
+ * in logs, never reaches consumers.
+ */
+
+import type { Artifact, Package as DbPackage, PackageVersion } from "@prisma/client";
+import {
+  resolveReverseDnsName,
+  type ServerDetail,
+  ServerDetailSchema,
+  type ServerPackage,
+} from "@nimblebrain/mpak-schemas";
+
+const UPSTREAM_SCHEMA_URL =
+  "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/docs/reference/server-json/draft/server.schema.json";
+
+/**
+ * Inputs to {@link composeServerDetail}. Carries everything mpak knows
+ * about a single bundle version.
+ */
+export interface ComposerInput {
+  /**
+   * Package row. Only `name` and `latestVersion` are used by the
+   * projection itself; the rest of the row is here so callers can
+   * pass the live record without additional selection.
+   */
+  pkg: Pick<DbPackage, "name" | "latestVersion" | "totalDownloads"> & {
+    githubRepo?: string | null;
+  };
+  /**
+   * The version row. `manifest` is the canonical authoring surface;
+   * `provenance`, `publishedAt`, `releaseTag`, etc. enrich the
+   * dev.mpak/registry meta block.
+   */
+  version: Pick<
+    PackageVersion,
+    "version" | "manifest" | "publishedAt" | "publishMethod" | "provenance" | "downloadCount"
+  >;
+  /** Per-platform artifacts. Empty array is fine — packages[] is omitted. */
+  artifacts: Pick<Artifact, "os" | "arch" | "digest" | "sizeBytes" | "sourceUrl" | "storagePath">[];
+  /** Top certification record for this version, if any. */
+  certification?: {
+    level: number;
+    levelName?: string | null;
+    controlsPassed?: number | null;
+    controlsFailed?: number | null;
+    controlsTotal?: number | null;
+  } | null;
+}
+
+/**
+ * Project a bundle into the upstream `ServerDetail` shape and validate
+ * the output against `ServerDetailSchema`.
+ *
+ * Returns the validated `ServerDetail` on success, or null if the
+ * manifest is too malformed to project (missing required fields,
+ * upstream schema-rejected). Callers handle null by logging the
+ * rejection (operator-facing) — consumers never see a half-projected
+ * record.
+ */
+export function composeServerDetail(input: ComposerInput): ServerDetail | null {
+  const result = ServerDetailSchema.safeParse(buildDetail(input));
+  return result.success ? result.data : null;
+}
+
+/**
+ * Same as {@link composeServerDetail} but throws (with the Zod issue
+ * list) instead of returning null. Intended for ingest-time validation
+ * where a malformed projection should fail loudly.
+ */
+export function composeServerDetailOrThrow(input: ComposerInput): ServerDetail {
+  return ServerDetailSchema.parse(buildDetail(input));
+}
+
+/**
+ * Build the unvalidated `ServerDetail` candidate. The two public
+ * functions differ only in how they handle the schema check
+ * ({@link composeServerDetail} returns null on failure;
+ * {@link composeServerDetailOrThrow} throws). Pulled out so both share
+ * one projection body.
+ *
+ * Single source of truth for `version`: the DB row's
+ * `input.version.version`. The manifest's `version` field is ignored
+ * here so the top-level `ServerDetail.version` and per-package
+ * `packages[].version` can never disagree on a record.
+ */
+function buildDetail(input: ComposerInput): Record<string, unknown> {
+  const manifest = (input.version.manifest ?? {}) as Record<string, unknown>;
+  const manifestMeta = (manifest["_meta"] as Record<string, unknown> | undefined) ?? null;
+
+  const description = truncate(stringField(manifest, "description") ?? input.pkg.name, 100);
+  const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
+  const display = stringField(manifest, "display_name");
+  // Upstream `Title` caps at 100 chars; truncate so a long display_name
+  // (or a long npm scope/name when it falls back) doesn't reject the
+  // entire record at the schema boundary and 500 the route.
+  const title = truncate(
+    display && display.trim().length > 0 ? display.trim() : input.pkg.name,
+    100,
+  );
+
+  const detail: Record<string, unknown> = {
+    $schema: UPSTREAM_SCHEMA_URL,
+    name: reverseDnsName,
+    title,
+    description,
+    version: input.version.version,
+  };
+
+  const homepage = stringField(manifest, "homepage");
+  if (homepage && isHttpUrl(homepage)) detail["websiteUrl"] = homepage;
+
+  const repository = projectRepository(manifest, input.pkg.githubRepo);
+  if (repository) detail["repository"] = repository;
+
+  const icons = projectIcons(manifest);
+  if (icons.length > 0) detail["icons"] = icons;
+
+  const packages = projectPackages(input, manifest);
+  if (packages.length > 0) detail["packages"] = packages;
+
+  detail["_meta"] = composeMeta(input, manifest, manifestMeta);
+
+  return detail;
+}
+
+// ── building blocks ────────────────────────────────────────────────────
+
+function projectRepository(
+  manifest: Record<string, unknown>,
+  fallbackGithubRepo: string | null | undefined,
+): { url: string; source: string; id?: string; subfolder?: string } | null {
+  const repo = manifest["repository"];
+  if (repo && typeof repo === "object") {
+    const url = stringField(repo as Record<string, unknown>, "url");
+    if (url && isHttpUrl(url)) {
+      return { url, source: "github" };
+    }
+  }
+  // Fall back to the package's tracked GitHub repo when the manifest
+  // omits it — keeps source-link visibility on legacy bundles whose
+  // manifests pre-date the repository field.
+  if (fallbackGithubRepo) {
+    const url = `https://github.com/${fallbackGithubRepo}`;
+    return { url, source: "github" };
+  }
+  return null;
+}
+
+/**
+ * Project the manifest's icons to the upstream `Icon[]` shape. Filters
+ * out anything the upstream schema would reject so a single bad icon
+ * doesn't propagate to the schema boundary and 500 the whole record:
+ *
+ *   - `src` must be http(s) (no `javascript:` / `data:` injection)
+ *   - `src` must be ≤ 255 chars (upstream `Icon.src` `maxLength`)
+ *   - `sizes[]` entries must match `^(\d+x\d+|any)$` (upstream pattern);
+ *     entries that don't match get dropped, the rest survive
+ *   - `mimeType` must be one of the upstream-defined image types,
+ *     otherwise the field is dropped (icon survives)
+ *   - `theme` must be `light` or `dark`; otherwise dropped
+ */
+function projectIcons(
+  manifest: Record<string, unknown>,
+): { src: string; sizes?: string[]; mimeType?: string; theme?: string }[] {
+  const icons = manifest["icons"];
+  if (Array.isArray(icons)) {
+    return icons
+      .map(projectIcon)
+      .filter((i): i is { src: string; sizes?: string[]; mimeType?: string; theme?: string } => i !== null);
+  }
+  // Single-icon legacy field.
+  const single = stringField(manifest, "icon");
+  if (single && isHttpUrl(single) && single.length <= 255) {
+    return [{ src: single, sizes: ["any"] }];
+  }
+  return [];
+}
+
+const ICON_SIZE_PATTERN = /^(\d+x\d+|any)$/;
+const ICON_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/svg+xml",
+  "image/webp",
+]);
+
+function projectIcon(
+  raw: unknown,
+): { src: string; sizes?: string[]; mimeType?: string; theme?: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const src = stringField(obj, "src");
+  if (!src || !isHttpUrl(src) || src.length > 255) return null;
+  const out: { src: string; sizes?: string[]; mimeType?: string; theme?: string } = { src };
+  const sizes = obj["sizes"];
+  if (Array.isArray(sizes)) {
+    const valid = sizes.filter(
+      (s): s is string => typeof s === "string" && ICON_SIZE_PATTERN.test(s),
+    );
+    if (valid.length > 0) out.sizes = valid;
+  }
+  const mimeType = stringField(obj, "mimeType");
+  if (mimeType && ICON_MIME_TYPES.has(mimeType)) out.mimeType = mimeType;
+  const theme = stringField(obj, "theme");
+  if (theme === "light" || theme === "dark") out.theme = theme;
+  return out;
+}
+
+function projectPackages(input: ComposerInput, manifest: Record<string, unknown>): ServerPackage[] {
+  const envVars = projectEnvironmentVariables(manifest);
+  // Per-platform artifact download URLs live in
+  // `_meta.dev.mpak/registry.artifacts[]`, NOT in packages[].identifier
+  // — `identifier` is the package-registry name (the npm-style scoped
+  // name), not the artifact location. We emit one packages[] entry per
+  // artifact carrying the file hash and a stdio transport marker;
+  // consumers that care about platform selection read the meta block.
+  if (input.artifacts.length === 0) {
+    return [
+      {
+        registryType: "mpak",
+        identifier: input.pkg.name,
+        version: input.version.version,
+        transport: { type: "stdio" },
+        ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
+      },
+    ];
+  }
+  return input.artifacts.map((art) => {
+    const sha = art.digest.replace(/^sha256:/, "");
+    const pkg: ServerPackage = {
+      registryType: "mpak",
+      identifier: input.pkg.name,
+      version: input.version.version,
+      transport: { type: "stdio" },
+      ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
+    };
+    // Upstream `fileSha256` requires 64 hex chars. A malformed digest
+    // would otherwise reject the entire ServerDetail at the schema
+    // boundary; better to drop the integrity field on this entry and
+    // surface the rest of the record.
+    if (/^[a-f0-9]{64}$/.test(sha)) pkg.fileSha256 = sha;
+    return pkg;
+  });
+}
+
+/**
+ * Project `manifest.user_config` into upstream KeyValueInput entries
+ * for `packages[].environmentVariables[]`. The env-var `name` comes
+ * from `manifest.server.mcp_config.env` mapping when present (the
+ * manifest declares which user_config field maps to which env var);
+ * falls back to the field's upper-snake-cased key.
+ */
+function projectEnvironmentVariables(
+  manifest: Record<string, unknown>,
+): { name: string; description?: string; isSecret?: boolean; isRequired?: boolean; default?: string }[] {
+  const userConfig = manifest["user_config"];
+  if (!userConfig || typeof userConfig !== "object") return [];
+  const envMap = readEnvMap(manifest);
+  const out: ReturnType<typeof projectEnvironmentVariables> = [];
+  for (const [field, raw] of Object.entries(userConfig)) {
+    if (!raw || typeof raw !== "object") continue;
+    const f = raw as Record<string, unknown>;
+    const envName = envMap[field] ?? field.toUpperCase();
+    const entry: ReturnType<typeof projectEnvironmentVariables>[number] = { name: envName };
+    const description = stringField(f, "description");
+    if (description) entry.description = description;
+    if (typeof f["sensitive"] === "boolean") entry.isSecret = f["sensitive"] as boolean;
+    if (typeof f["required"] === "boolean") entry.isRequired = f["required"] as boolean;
+    const def = f["default"];
+    if (typeof def === "string") entry.default = def;
+    else if (typeof def === "number" || typeof def === "boolean") entry.default = String(def);
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Read the manifest's `server.mcp_config.env` map. Each value is a
+ * placeholder string like `"${user_config.api_key}"`; we extract the
+ * field name on the right side so we can map field → env var name.
+ */
+function readEnvMap(manifest: Record<string, unknown>): Record<string, string> {
+  const server = manifest["server"];
+  if (!server || typeof server !== "object") return {};
+  const mcpConfig = (server as Record<string, unknown>)["mcp_config"];
+  if (!mcpConfig || typeof mcpConfig !== "object") return {};
+  const env = (mcpConfig as Record<string, unknown>)["env"];
+  if (!env || typeof env !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [envName, value] of Object.entries(env)) {
+    if (typeof value !== "string") continue;
+    const m = /\$\{?user_config\.([a-zA-Z0-9_]+)\}?/.exec(value);
+    if (m?.[1]) {
+      out[m[1]] = envName;
+    }
+  }
+  return out;
+}
+
+/**
+ * Compose the `_meta` field:
+ *   - every author-provided `_meta` block carried verbatim
+ *   - mpak adds its own `dev.mpak/registry` block with npmName,
+ *     downloads, published_at, provenance, certification, artifacts[]
+ */
+function composeMeta(
+  input: ComposerInput,
+  _manifest: Record<string, unknown>,
+  manifestMeta: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const meta: Record<string, unknown> = { ...(manifestMeta ?? {}) };
+  const mpakBlock: Record<string, unknown> = {
+    npmName: input.pkg.name,
+  };
+  // Carry author overrides under `dev.mpak/registry` (e.g. their reverse-DNS
+  // `name`) verbatim alongside our enrichment.
+  const authorMpak = manifestMeta?.["dev.mpak/registry"];
+  if (authorMpak && typeof authorMpak === "object") {
+    Object.assign(mpakBlock, authorMpak);
+    mpakBlock["npmName"] = input.pkg.name; // mpak source-of-truth wins
+  }
+  const downloads = Number(input.pkg.totalDownloads ?? input.version.downloadCount ?? 0);
+  if (Number.isFinite(downloads)) mpakBlock["downloads"] = downloads;
+  if (input.version.publishedAt) {
+    mpakBlock["published_at"] = input.version.publishedAt.toISOString();
+  }
+  if (input.version.publishMethod) {
+    mpakBlock["publishMethod"] = input.version.publishMethod;
+  }
+  if (input.version.provenance) {
+    mpakBlock["provenance"] = input.version.provenance;
+  }
+  if (input.certification) {
+    mpakBlock["certification"] = input.certification;
+  }
+  if (input.artifacts.length > 0) {
+    mpakBlock["artifacts"] = input.artifacts.map((a) => ({
+      platform: { os: a.os, arch: a.arch },
+      url: a.sourceUrl,
+      sha256: a.digest.replace(/^sha256:/, ""),
+      size: Number(a.sizeBytes),
+    }));
+  }
+  meta["dev.mpak/registry"] = mpakBlock;
+  return meta;
+}
+
+// ── small helpers ──────────────────────────────────────────────────────
+
+function stringField(obj: Record<string, unknown>, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

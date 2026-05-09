@@ -3,8 +3,7 @@
  * Handles operations for packages and versions
  */
 
-import type { Package, PackageVersion, Artifact, SecurityScan } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import type { Artifact, Package, PackageVersion, Prisma, SecurityScan } from '@prisma/client';
 import { getPrismaClient, type TransactionClient } from '../client.js';
 import type { PackageSearchFilters, FindOptions, PackageWithRelations } from '../types.js';
 
@@ -17,6 +16,20 @@ export type PackageVersionWithArtifacts = PackageVersion & {
 export type PackageVersionWithArtifactsAndScans = PackageVersion & {
   artifacts: Artifact[];
   securityScans: SecurityScan[];
+};
+
+/**
+ * Package row joined with its versions, per-version artifacts, and
+ * (when present) the latest completed security scan per version. The
+ * shape `findPackageForServerLookup` and `findPackagesForServerListing`
+ * return — both pull the same data in one query so the route layer
+ * can compose `ServerDetail` without further round-trips.
+ */
+export type PackageForServerLookup = Package & {
+  versions: (PackageVersion & {
+    artifacts: Artifact[];
+    securityScans: SecurityScan[];
+  })[];
 };
 
 export interface CreatePackageData {
@@ -299,35 +312,69 @@ export class PackageRepository {
   }
 
   /**
-   * Find packages that have server.json set (for MCP Registry /v0.1/servers)
+   * Find a package by its npm-style scoped name with all versions,
+   * artifacts, and the latest completed security scan per version
+   * (joined in one query — avoids the per-version round-trip the
+   * caller used to do for certification metadata).
    */
-  async findPackagesWithServerJson(
-    filters: { search?: string },
-    options: { skip?: number; take?: number },
+  async findPackageForServerLookup(
+    name: string,
     tx?: TransactionClient
-  ): Promise<{ packages: (Package & { versions: (PackageVersion & { artifacts: Artifact[] })[] })[]; total: number }> {
+  ): Promise<PackageForServerLookup | null> {
     const client = tx ?? getPrismaClient();
-
-    // Filter packages that have at least one version with serverJson set
-    const where: Prisma.PackageWhereInput = {
-      versions: {
-        some: {
-          serverJson: { not: Prisma.DbNull },
+    return client.package.findUnique({
+      where: { name },
+      include: {
+        versions: {
+          orderBy: { publishedAt: 'desc' },
+          include: {
+            artifacts: true,
+            securityScans: {
+              where: { status: 'completed' },
+              orderBy: { startedAt: 'desc' },
+              take: 1,
+            },
+          },
         },
       },
-    };
+    });
+  }
 
+  /**
+   * List packages with their latest version, artifacts, and the
+   * latest completed security scan — all in one query. Honors a
+   * case-insensitive substring search on name / displayName /
+   * description and an optional `updatedSince` filter pushed down to
+   * the database so pagination math reflects the filter (a request
+   * like `limit=100&updatedSince=...` returns up to 100 *matching*
+   * packages, not 100 fetched then filtered to a few).
+   */
+  async findPackagesForServerListing(
+    filters: { search?: string; updatedSince?: Date },
+    options: { skip?: number; take?: number },
+    tx?: TransactionClient
+  ): Promise<{ packages: PackageForServerLookup[]; total: number }> {
+    const client = tx ?? getPrismaClient();
+
+    const conditions: Prisma.PackageWhereInput[] = [];
     if (filters.search) {
-      where.AND = [
-        {
-          OR: [
-            { name: { contains: filters.search, mode: 'insensitive' } },
-            { displayName: { contains: filters.search, mode: 'insensitive' } },
-            { description: { contains: filters.search, mode: 'insensitive' } },
-          ],
-        },
-      ];
+      conditions.push({
+        OR: [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { displayName: { contains: filters.search, mode: 'insensitive' } },
+          { description: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (filters.updatedSince) {
+      // "Updated" here means "has at least one version published since".
+      // Filter at the DB so pagination cursor math is consistent.
+      conditions.push({
+        versions: { some: { publishedAt: { gte: filters.updatedSince } } },
+      });
+    }
+    const where: Prisma.PackageWhereInput =
+      conditions.length === 0 ? {} : conditions.length === 1 ? conditions[0]! : { AND: conditions };
 
     const [packages, total] = await Promise.all([
       client.package.findMany({
@@ -337,11 +384,15 @@ export class PackageRepository {
         orderBy: { name: 'asc' },
         include: {
           versions: {
-            where: { serverJson: { not: Prisma.DbNull } },
             orderBy: { publishedAt: 'desc' },
             take: 1,
             include: {
               artifacts: true,
+              securityScans: {
+                where: { status: 'completed' },
+                orderBy: { startedAt: 'desc' },
+                take: 1,
+              },
             },
           },
         },
@@ -352,28 +403,8 @@ export class PackageRepository {
     return { packages, total };
   }
 
-  /**
-   * Find a package with server.json and its version artifacts (for single-server lookup)
-   */
-  async findPackageWithServerJsonByName(
-    name: string,
-    tx?: TransactionClient
-  ): Promise<(Package & { versions: (PackageVersion & { artifacts: Artifact[] })[] }) | null> {
-    const client = tx ?? getPrismaClient();
-    return client.package.findUnique({
-      where: { name },
-      include: {
-        versions: {
-          orderBy: { publishedAt: 'desc' },
-          include: {
-            artifacts: true,
-          },
-        },
-      },
-    });
-  }
-
   // ==================== Package Version Methods ====================
+
 
   /**
    * Find version by package ID and version string, including latest completed security scan
