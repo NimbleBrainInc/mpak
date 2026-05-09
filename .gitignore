@@ -54,6 +54,9 @@ apps/registry/data/
 # Implementation tasks
 .tasks/
 
+# Per-session Claude Code worktrees
+.claude/worktrees/
+
 # Misc
 *.bak
 *.tmp
