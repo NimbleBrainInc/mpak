@@ -611,9 +611,7 @@ describe('MpakClient', () => {
 
     it('hits /v1/servers/search and returns the ServerListResponse', async () => {
       const client = new MpakClient();
-      fetchMock.mockResolvedValueOnce(
-        mockResponse({ servers: [SERVER], metadata: { count: 1 } }),
-      );
+      fetchMock.mockResolvedValueOnce(mockResponse({ servers: [SERVER], metadata: { count: 1 } }));
 
       const result = await client.searchServers({ q: 'echo' });
 

@@ -230,18 +230,15 @@ def test_get_server_url_encodes_npm_style_name():
     different route and 404 (verified against the live registry).
     Mock at the encoded URL and assert the raw_path the SDK actually
     sent — protects against a regression to unencoded f-strings."""
-    route = respx.get(
-        "https://registry.mpak.dev/v1/servers/%40nimblebraininc%2Fecho"
-    ).mock(return_value=Response(200, json=_SERVER_DETAIL))
+    route = respx.get("https://registry.mpak.dev/v1/servers/%40nimblebraininc%2Fecho").mock(
+        return_value=Response(200, json=_SERVER_DETAIL)
+    )
 
     client = MpakClient()
     result = client.get_server("@nimblebraininc/echo")
 
     assert route.called
-    assert (
-        route.calls[0].request.url.raw_path
-        == b"/v1/servers/%40nimblebraininc%2Fecho"
-    )
+    assert route.calls[0].request.url.raw_path == b"/v1/servers/%40nimblebraininc%2Fecho"
     assert result["name"] == "ai.nimblebrain/echo"
 
 
@@ -249,25 +246,23 @@ def test_get_server_url_encodes_npm_style_name():
 def test_get_server_url_encodes_reverse_dns_name():
     """The reverse-DNS form has the same `/` separator and needs the
     same encoding."""
-    route = respx.get(
-        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho"
-    ).mock(return_value=Response(200, json=_SERVER_DETAIL))
+    route = respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho").mock(
+        return_value=Response(200, json=_SERVER_DETAIL)
+    )
 
     client = MpakClient()
     result = client.get_server("ai.nimblebrain/echo")
 
     assert route.called
-    assert (
-        route.calls[0].request.url.raw_path == b"/v1/servers/ai.nimblebrain%2Fecho"
-    )
+    assert route.calls[0].request.url.raw_path == b"/v1/servers/ai.nimblebrain%2Fecho"
     assert result["name"] == "ai.nimblebrain/echo"
 
 
 @respx.mock
 def test_get_server_404_raises_not_found_with_name():
-    respx.get(
-        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fmissing"
-    ).mock(return_value=Response(404, json={"error": "Not found"}))
+    respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fmissing").mock(
+        return_value=Response(404, json={"error": "Not found"})
+    )
 
     client = MpakClient()
     with pytest.raises(MpakNotFoundError) as exc_info:
@@ -281,26 +276,23 @@ def test_get_server_404_raises_not_found_with_name():
 def test_get_server_version_url_encodes_both_segments():
     """Both name and version are URL-encoded; "latest" passes through
     as a literal the registry resolves server-side."""
-    route = respx.get(
-        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/latest"
-    ).mock(return_value=Response(200, json=_SERVER_DETAIL))
+    route = respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/latest").mock(
+        return_value=Response(200, json=_SERVER_DETAIL)
+    )
 
     client = MpakClient()
     result = client.get_server_version("ai.nimblebrain/echo", "latest")
 
     assert route.called
-    assert (
-        route.calls[0].request.url.raw_path
-        == b"/v1/servers/ai.nimblebrain%2Fecho/versions/latest"
-    )
+    assert route.calls[0].request.url.raw_path == b"/v1/servers/ai.nimblebrain%2Fecho/versions/latest"
     assert result["version"] == "0.1.6"
 
 
 @respx.mock
 def test_get_server_version_404_raises_not_found_with_version():
-    respx.get(
-        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/99.0.0"
-    ).mock(return_value=Response(404))
+    respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/99.0.0").mock(
+        return_value=Response(404)
+    )
 
     client = MpakClient()
     with pytest.raises(MpakNotFoundError) as exc_info:
