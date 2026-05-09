@@ -1,11 +1,11 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // =============================================================================
 // Manifest Building Blocks
 // =============================================================================
 
 /** Server runtime type (v0.4 added "uv"). */
-export const ServerTypeSchema = z.enum(["node", "python", "binary", "uv"]);
+export const ServerTypeSchema = z.enum(['node', 'python', 'binary', 'uv']);
 
 /**
  * A path that must resolve to a location within the bundle root.
@@ -23,33 +23,31 @@ export const ServerTypeSchema = z.enum(["node", "python", "binary", "uv"]);
  */
 export const SafeRelativePathSchema = z
   .string()
-  .min(1, "must not be empty")
-  .refine((p) => !p.includes("\0"), {
-    message: "must not contain NUL bytes",
+  .min(1, 'must not be empty')
+  .refine((p) => !p.includes('\0'), {
+    message: 'must not contain NUL bytes',
   })
-  .refine((p) => !p.includes("\\"), {
+  .refine((p) => !p.includes('\\'), {
     // MCPB bundles are zip archives; ZIP central directories use forward slashes.
     // Rejecting all backslashes blocks Windows-style traversal forms (`\foo`,
     // `C:\foo`, `\\server\share`, `foo\..\bar`) without needing per-form rules.
-    message:
-      "must use forward slashes only (backslashes are not permitted)",
+    message: 'must use forward slashes only (backslashes are not permitted)',
   })
   .refine(
     (p) => {
-      if (p.startsWith("/")) return false; // POSIX absolute
+      if (p.startsWith('/')) return false; // POSIX absolute
       if (/^[a-zA-Z]:/.test(p)) return false; // Windows drive (with or without separator)
-      if (p.split("/").includes("..")) return false; // traversal segment
+      if (p.split('/').includes('..')) return false; // traversal segment
       return true;
     },
     {
-      message:
-        'must be a relative path within the bundle (no absolute paths or ".." segments)',
+      message: 'must be a relative path within the bundle (no absolute paths or ".." segments)',
     },
   );
 
 /** User-configurable field declared by a bundle author. */
 export const UserConfigFieldSchema = z.object({
-  type: z.enum(["string", "number", "boolean"]),
+  type: z.enum(['string', 'number', 'boolean']),
   title: z.string().optional(),
   description: z.string().optional(),
   sensitive: z.boolean().optional(),
@@ -95,9 +93,7 @@ export const CompatibilitySchema = z
     // `PlatformSchema` in package.ts but importing it here would create a
     // module cycle (package.ts already imports `ServerTypeSchema` from this
     // file). Three strings; not worth a shared module.
-    platforms: z
-      .array(z.enum(["darwin", "win32", "linux"]))
-      .optional(),
+    platforms: z.array(z.enum(['darwin', 'win32', 'linux'])).optional(),
     runtimes: CompatibilityRuntimesSchema.optional(),
   })
   .catchall(z.string());

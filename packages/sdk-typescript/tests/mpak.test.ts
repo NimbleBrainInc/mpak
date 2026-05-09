@@ -364,12 +364,7 @@ describe('Mpak facade', () => {
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
       expect(result.command).toBe('uv');
-      expect(result.args).toEqual([
-        'run',
-        '--directory',
-        cacheDir,
-        'src/server.py',
-      ]);
+      expect(result.args).toEqual(['run', '--directory', cacheDir, 'src/server.py']);
     });
 
     it('throws when uv mode is requested but uv is not installed', async () => {
@@ -384,9 +379,7 @@ describe('Mpak facade', () => {
         uvProbe: () => null,
       });
 
-      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(
-        /not on PATH/,
-      );
+      await expect(sdk.prepareServer({ name: '@scope/echo' })).rejects.toThrow(/not on PATH/);
     });
 
     it('passes version from spec to loadBundle', async () => {

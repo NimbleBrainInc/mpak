@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Required Python ABI inferred from a bundle's vendored extension modules.
@@ -35,7 +35,7 @@ export function parseCpythonTag(filename: string): RequiredAbi | null {
   const abi3WithFloor = /\.cpython-(\d+)\.(\d+)-abi3[-.]/.exec(filename);
   if (abi3WithFloor) {
     return {
-      tag: "abi3",
+      tag: 'abi3',
       abi3: true,
       floor: {
         major: Number(abi3WithFloor[1]),
@@ -47,7 +47,7 @@ export function parseCpythonTag(filename: string): RequiredAbi | null {
   // practice cpython has only shipped abi3 wheels from 3.7+. Use 3.7 as the
   // pragmatic floor — narrower than the spec, broader than any modern host.
   if (/\.abi3\.(so|pyd|dylib)$/.test(filename)) {
-    return { tag: "abi3", abi3: true, floor: { major: 3, minor: 7 } };
+    return { tag: 'abi3', abi3: true, floor: { major: 3, minor: 7 } };
   }
   // Specific: cpython-XY-... or cpython-XYZ-... (concatenated major+minor)
   const specific = /\.cpython-(\d{2,3})[-.]/.exec(filename);
@@ -66,7 +66,7 @@ export function parseCpythonTag(filename: string): RequiredAbi | null {
  * Returns `null` for pure-Python bundles (no `.so`/`.pyd`/`.dylib` found).
  */
 export function findRequiredAbi(cacheDir: string): RequiredAbi | null {
-  const depsDir = join(cacheDir, "deps");
+  const depsDir = join(cacheDir, 'deps');
   if (!existsSync(depsDir)) return null;
 
   let abi3Hit: RequiredAbi | null = null;
@@ -115,19 +115,17 @@ export function findRequiredAbi(cacheDir: string): RequiredAbi | null {
  * the expected two-line output. We don't distinguish "not found" from
  * "broken" — both reduce to "this interpreter cannot serve the bundle."
  */
-export function probeInterpreter(
-  command: string,
-): { cacheTag: string; version: string } | null {
+export function probeInterpreter(command: string): { cacheTag: string; version: string } | null {
   const probe = spawnSync(
     command,
     [
-      "-c",
+      '-c',
       "import sys; print(sys.implementation.cache_tag); print('.'.join(map(str, sys.version_info[:3])))",
     ],
-    { stdio: "pipe", timeout: 5_000 },
+    { stdio: 'pipe', timeout: 5_000 },
   );
   if (probe.status !== 0) return null;
-  const lines = probe.stdout.toString().trim().split("\n");
+  const lines = probe.stdout.toString().trim().split('\n');
   if (lines.length < 2) return null;
   const [cacheTag, version] = lines as [string, string];
   if (!cacheTag || !version) return null;
@@ -169,7 +167,10 @@ export function abiMatches(probedTag: string, required: RequiredAbi): boolean {
 export function satisfiesPythonRange(version: string, range: string): boolean {
   const v = parseVersion(version);
   if (!v) return true;
-  const clauses = range.split(",").map((s) => s.trim()).filter(Boolean);
+  const clauses = range
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (clauses.length === 0) return true;
   for (const clause of clauses) {
     if (!evaluateClause(v, clause)) return false;
@@ -200,20 +201,20 @@ function compareVersions(a: SemVer, b: SemVer): number {
 function evaluateClause(v: SemVer, clause: string): boolean {
   const m = /^(>=|<=|>|<|==|=)?\s*(\d+\.\d+(?:\.\d+)?)$/.exec(clause);
   if (!m) return true; // unparseable clause → don't reject
-  const op = m[1] ?? "==";
+  const op = m[1] ?? '==';
   const target = parseVersion(m[2]!)!;
   const cmp = compareVersions(v, target);
   switch (op) {
-    case ">=":
+    case '>=':
       return cmp >= 0;
-    case ">":
+    case '>':
       return cmp > 0;
-    case "<=":
+    case '<=':
       return cmp <= 0;
-    case "<":
+    case '<':
       return cmp < 0;
-    case "==":
-    case "=":
+    case '==':
+    case '=':
       // Exact-on-major.minor when patch wasn't specified in target — treats
       // `==3.13` as "any 3.13.x".
       if (!/\.\d+\.\d+/.test(m[2]!)) {
@@ -256,7 +257,7 @@ export interface ResolvedPython {
   command: string;
   cacheTag: string;
   version: string;
-  source: "MPAK_PYTHON" | "manifest" | "default";
+  source: 'MPAK_PYTHON' | 'manifest' | 'default';
 }
 
 /**
@@ -272,30 +273,26 @@ export function resolvePython(options: ResolvePythonOptions): ResolvedPython {
   const { cacheDir, manifestCommand, declaredRange, env, probe = probeInterpreter } = options;
 
   let command: string;
-  let source: ResolvedPython["source"];
-  if (env["MPAK_PYTHON"] && env["MPAK_PYTHON"].trim().length > 0) {
-    command = env["MPAK_PYTHON"];
-    source = "MPAK_PYTHON";
+  let source: ResolvedPython['source'];
+  if (env['MPAK_PYTHON'] && env['MPAK_PYTHON'].trim().length > 0) {
+    command = env['MPAK_PYTHON'];
+    source = 'MPAK_PYTHON';
   } else if (manifestCommand && manifestCommand.length > 0) {
     command = manifestCommand;
-    source = "manifest";
+    source = 'manifest';
   } else {
-    command = "python3";
-    source = "default";
+    command = 'python3';
+    source = 'default';
   }
 
   const probed = probe(command);
   if (!probed) {
-    throw new PythonResolutionError(
-      formatNotFoundMessage(command, source, cacheDir),
-    );
+    throw new PythonResolutionError(formatNotFoundMessage(command, source, cacheDir));
   }
 
   const required = findRequiredAbi(cacheDir);
   if (required && !abiMatches(probed.cacheTag, required)) {
-    throw new PythonResolutionError(
-      formatAbiMismatchMessage(command, source, probed, required),
-    );
+    throw new PythonResolutionError(formatAbiMismatchMessage(command, source, probed, required));
   }
 
   if (declaredRange && !satisfiesPythonRange(probed.version, declaredRange)) {
@@ -314,32 +311,32 @@ export function resolvePython(options: ResolvePythonOptions): ResolvedPython {
 export class PythonResolutionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "PythonResolutionError";
+    this.name = 'PythonResolutionError';
   }
 }
 
 function formatNotFoundMessage(
   command: string,
-  source: ResolvedPython["source"],
+  source: ResolvedPython['source'],
   _cacheDir: string,
 ): string {
   const origin =
-    source === "MPAK_PYTHON"
-      ? "MPAK_PYTHON env var"
-      : source === "manifest"
-        ? "bundle manifest"
-        : "default";
+    source === 'MPAK_PYTHON'
+      ? 'MPAK_PYTHON env var'
+      : source === 'manifest'
+        ? 'bundle manifest'
+        : 'default';
   return [
     `Python interpreter '${command}' (from ${origin}) is not runnable.`,
     `  Set MPAK_PYTHON to a working interpreter:`,
     `    export MPAK_PYTHON=$(which python3)`,
     `  Or install Python: https://www.python.org/downloads/`,
-  ].join("\n");
+  ].join('\n');
 }
 
 function formatAbiMismatchMessage(
   command: string,
-  source: ResolvedPython["source"],
+  source: ResolvedPython['source'],
   probed: { cacheTag: string; version: string },
   required: RequiredAbi,
 ): string {
@@ -347,36 +344,36 @@ function formatAbiMismatchMessage(
     ? `Python ${required.floor!.major}.${required.floor!.minor}+ (stable ABI)`
     : `Python ${cpythonTagToHuman(required.tag)} (${required.tag})`;
   const originLabel =
-    source === "MPAK_PYTHON"
-      ? "MPAK_PYTHON"
-      : source === "manifest"
-        ? "manifest mcp_config.command"
+    source === 'MPAK_PYTHON'
+      ? 'MPAK_PYTHON'
+      : source === 'manifest'
+        ? 'manifest mcp_config.command'
         : "default 'python3'";
   return [
     `Bundle requires ${requiredHuman}.`,
     `  Found: ${command} = ${probed.version} (${probed.cacheTag}), via ${originLabel}.`,
     `  Fix: export MPAK_PYTHON=$(which ${suggestBinary(required)})`,
     `  Or install: pyenv install ${suggestVersion(required)} | brew install python@${suggestVersion(required)} | uv python install ${suggestVersion(required)}`,
-  ].join("\n");
+  ].join('\n');
 }
 
 function formatRangeMismatchMessage(
   command: string,
-  source: ResolvedPython["source"],
+  source: ResolvedPython['source'],
   probed: { cacheTag: string; version: string },
   range: string,
 ): string {
   const originLabel =
-    source === "MPAK_PYTHON"
-      ? "MPAK_PYTHON"
-      : source === "manifest"
-        ? "manifest mcp_config.command"
+    source === 'MPAK_PYTHON'
+      ? 'MPAK_PYTHON'
+      : source === 'manifest'
+        ? 'manifest mcp_config.command'
         : "default 'python3'";
   return [
     `Bundle declares compatibility.runtimes.python: '${range}'.`,
     `  Found: ${command} = ${probed.version}, via ${originLabel}.`,
     `  Fix: install a satisfying Python and set MPAK_PYTHON to its path.`,
-  ].join("\n");
+  ].join('\n');
 }
 
 function cpythonTagToHuman(tag: string): string {

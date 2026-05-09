@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync } from 'node:child_process';
 
 /**
  * Probe `uv` (or any uv-compatible binary path) for its version.
@@ -8,8 +8,8 @@ import { spawnSync } from "node:child_process";
  * collapse to "this uv cannot serve the bundle."
  */
 export function probeUv(command: string): { version: string } | null {
-  const probe = spawnSync(command, ["--version"], {
-    stdio: "pipe",
+  const probe = spawnSync(command, ['--version'], {
+    stdio: 'pipe',
     timeout: 5_000,
   });
   if (probe.status !== 0) return null;
@@ -28,7 +28,7 @@ export function probeUv(command: string): { version: string } | null {
 export class UvResolutionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "UvResolutionError";
+    this.name = 'UvResolutionError';
   }
 }
 
@@ -77,7 +77,7 @@ export interface ResolvedUv {
 export function resolveUv(options: ResolveUvOptions): ResolvedUv {
   const { cacheDir, entryPoint, manifestCommand, userArgs, probe = probeUv } = options;
 
-  const command = manifestCommand && manifestCommand.length > 0 ? manifestCommand : "uv";
+  const command = manifestCommand && manifestCommand.length > 0 ? manifestCommand : 'uv';
 
   const probed = probe(command);
   if (!probed) {
@@ -88,12 +88,11 @@ export function resolveUv(options: ResolveUvOptions): ResolvedUv {
         `    macOS / Linux: curl -LsSf https://astral.sh/uv/install.sh | sh`,
         `    Windows:       irm https://astral.sh/uv/install.ps1 | iex`,
         `  Docs: https://docs.astral.sh/uv/`,
-      ].join("\n"),
+      ].join('\n'),
     );
   }
 
-  const args =
-    userArgs.length > 0 ? userArgs : ["run", "--directory", cacheDir, entryPoint];
+  const args = userArgs.length > 0 ? userArgs : ['run', '--directory', cacheDir, entryPoint];
 
   return { command, args, version: probed.version };
 }

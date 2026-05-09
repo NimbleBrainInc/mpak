@@ -150,9 +150,9 @@ export class Mpak {
   /** Local bundle cache. */
   readonly bundleCache: MpakBundleCache;
   /** Optional probe override for `type: "python"` resolution (test seam). */
-  private readonly pythonProbe: MpakOptions["pythonProbe"];
+  private readonly pythonProbe: MpakOptions['pythonProbe'];
   /** Optional probe override for `type: "uv"` resolution (test seam). */
-  private readonly uvProbe: MpakOptions["uvProbe"];
+  private readonly uvProbe: MpakOptions['uvProbe'];
 
   constructor(options?: MpakOptions) {
     // initialize config
@@ -516,9 +516,7 @@ export class Mpak {
         });
         command = resolvedUv.command;
         args = resolvedUv.args;
-        process.stderr.write(
-          `[mpak] uv: ${resolvedUv.command} (${resolvedUv.version})\n`,
-        );
+        process.stderr.write(`[mpak] uv: ${resolvedUv.command} (${resolvedUv.version})\n`);
         break;
       }
 
@@ -573,7 +571,6 @@ export class Mpak {
     }
     return result;
   }
-
 }
 
 /**
