@@ -1,0 +1,51 @@
+# Keep the docker build context small. The Dockerfile uses `COPY . .` to
+# pull the whole monorepo in (so `pnpm deploy` can walk the workspace
+# graph); this file makes sure that doesn't include build artifacts,
+# installed deps, or local-only state.
+
+# Installed deps — pnpm reinstalls inside the image.
+**/node_modules
+.pnpm-store
+
+# Build outputs — recreated by `pnpm install` + per-package build.
+**/dist
+**/build
+**/*.tsbuildinfo
+**/.astro
+**/.turbo
+**/.next
+
+# VCS + workspace state.
+.git
+.github
+.claude
+
+# Local environment + secrets — must never enter the image.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Test + coverage outputs.
+**/coverage
+**/.nyc_output
+**/.pytest_cache
+**/.ruff_cache
+
+# Editor / OS noise.
+.vscode
+.idea
+.DS_Store
+**/*.swp
+**/*.swo
+
+# Misc large or sensitive paths that don't need to ship to the registry
+# image specifically.
+apps/registry/data
+apps/web/dist
+apps/web/.astro
+apps/docs/dist
+apps/docs/.astro
+
+# Existing implementation-tracking dirs.
+.tasks
