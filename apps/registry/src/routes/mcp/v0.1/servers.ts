@@ -14,28 +14,26 @@
  */
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import type { Artifact, Package, PackageVersion, SecurityScan } from '@prisma/client';
+import { resolveReverseDnsName, type ServerDetail } from '@nimblebrain/mpak-schemas';
+import type { PackageForServerLookup } from '../../../db/repositories/package.repository.js';
 import { composeServerDetail } from '../../../services/server-detail-composer.js';
-import { resolveReverseDnsName } from '@nimblebrain/mpak-schemas';
-import type { ServerDetail } from '@nimblebrain/mpak-schemas';
 
 const REGISTRY_VERSION = 'v1.0.0';
-
-type PackageWithVersions = Package & {
-  versions: (PackageVersion & { artifacts: Artifact[] })[];
-};
 
 /**
  * Project a security-scan row into the certification meta block carried
  * on `_meta["dev.mpak/registry"].certification`.
  */
-function scanToCertification(scan: SecurityScan | null): {
-  level: number;
-  levelName?: string | null;
-  controlsPassed?: number | null;
-  controlsFailed?: number | null;
-  controlsTotal?: number | null;
-} | undefined {
+function scanToCertification(
+  scan: { certificationLevel: number | null; controlsPassed: number | null; controlsFailed: number | null; controlsTotal: number | null } | null,
+):
+  | {
+      level: number;
+      controlsPassed?: number | null;
+      controlsFailed?: number | null;
+      controlsTotal?: number | null;
+    }
+  | undefined {
   if (!scan || scan.certificationLevel == null) return undefined;
   return {
     level: scan.certificationLevel,
@@ -45,13 +43,16 @@ function scanToCertification(scan: SecurityScan | null): {
   };
 }
 
-async function buildServerDetailWithScan(
-  fastify: FastifyInstance,
-  pkg: PackageWithVersions,
-  version: PackageVersion & { artifacts: Artifact[] },
-): Promise<ServerDetail | null> {
-  const { packages: packageRepo } = fastify.repositories;
-  const scan = await packageRepo.findLatestCompletedScan(version.id);
+/**
+ * Compose a `ServerDetail` from a fully-loaded package + version. The
+ * latest completed scan is pre-joined into `version.securityScans` by
+ * the repository methods, so this is pure CPU work — no DB round-trip.
+ */
+function buildServerDetail(
+  pkg: PackageForServerLookup,
+  version: PackageForServerLookup['versions'][number],
+): ServerDetail | null {
+  const scan = version.securityScans?.[0] ?? null;
   return composeServerDetail({
     pkg: {
       name: pkg.name,
@@ -80,13 +81,17 @@ async function buildServerDetailWithScan(
  * overrides via `manifest._meta["dev.mpak/registry"].name` resolve via
  * scan-then-match (cheap at current registry size; an indexed
  * `reverseDnsName` column would replace this when scale demands it).
+ *
+ * Names are lowercased before lookup — npm package names are
+ * case-insensitive at the registry, and the stored `Package.name`
+ * column is canonical-lowercase.
  */
 async function resolveByName(
   fastify: FastifyInstance,
   rawName: string,
-): Promise<PackageWithVersions | null> {
+): Promise<PackageForServerLookup | null> {
   const { packages: packageRepo } = fastify.repositories;
-  const decodedName = decodeURIComponent(rawName);
+  const decodedName = decodeURIComponent(rawName).toLowerCase();
 
   // Direct npm-style lookup — fastest path.
   const direct = await packageRepo.findPackageForServerLookup(decodedName);
@@ -146,6 +151,24 @@ function reverseDnsToNpmCandidates(reverseDns: string): string[] {
 }
 
 /**
+ * Parse an integer query param, defaulting and clamping. NaN inputs
+ * (garbage cursors / limits from a malformed query string) coerce to
+ * the default rather than reaching Prisma where they'd error out.
+ */
+function parseIntParam(raw: string | undefined, defaultValue: number): number {
+  if (raw === undefined) return defaultValue;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : defaultValue;
+}
+
+/** Parse `updated_since` query string to a Date, or null when absent / invalid. */
+function parseUpdatedSince(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Build the route handlers shared between `/v0.1/servers` (MCP
  * Registry public API prefix) and `/v1/servers` (mpak `/v1/...`
  * family). Wrapped in a plugin so consumers can `fastify.register()`
@@ -183,54 +206,55 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/servers', {
     schema: {
       tags: ['mcp-registry'],
-      description: 'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec)',
+      description:
+        'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec)',
       querystring: {
         type: 'object',
         properties: {
           cursor: { type: 'string', description: 'Pagination cursor (offset as string)' },
           limit: { type: 'string', description: 'Maximum results (default 100, max 500)' },
-          search: { type: 'string', description: 'Case-insensitive substring search on name/displayName/description' },
-          version: { type: 'string', enum: ['latest'], description: 'Filter to latest versions only' },
-          updated_since: { type: 'string', description: 'RFC 3339 timestamp filter for recently updated servers' },
+          search: {
+            type: 'string',
+            description: 'Case-insensitive substring search on name/displayName/description',
+          },
+          version: {
+            type: 'string',
+            enum: ['latest'],
+            description: 'Filter to latest versions only',
+          },
+          updated_since: {
+            type: 'string',
+            description: 'RFC 3339 timestamp filter for recently updated servers',
+          },
         },
       },
     },
   }, async (request) => {
-    const limit = Math.min(parseInt(request.query.limit ?? '100', 10), 500);
-    const skip = request.query.cursor ? parseInt(request.query.cursor, 10) : 0;
+    const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
+    const skip = parseIntParam(request.query.cursor, 0);
+    const updatedSince = parseUpdatedSince(request.query.updated_since);
 
     const { packages, total } = await packageRepo.findPackagesForServerListing(
-      { search: request.query.search },
-      { skip, take: limit }
+      {
+        ...(request.query.search ? { search: request.query.search } : {}),
+        ...(updatedSince ? { updatedSince } : {}),
+      },
+      { skip, take: limit },
     );
 
     const servers: ServerDetail[] = [];
     for (const pkg of packages) {
       const latest = pkg.versions[0];
       if (!latest) continue;
-      const detail = await buildServerDetailWithScan(fastify, pkg, latest);
+      const detail = buildServerDetail(pkg, latest);
       if (detail) servers.push(detail);
     }
 
-    let filtered = servers;
-    if (request.query.updated_since) {
-      const sinceDate = new Date(request.query.updated_since);
-      if (!Number.isNaN(sinceDate.getTime())) {
-        filtered = servers.filter((s) => {
-          const meta = s._meta?.['dev.mpak/registry'] as Record<string, unknown> | undefined;
-          const publishedAt = meta?.['published_at'];
-          if (typeof publishedAt === 'string') {
-            return new Date(publishedAt) >= sinceDate;
-          }
-          return true;
-        });
-      }
-    }
-
-    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } = {
-      servers: filtered,
-      metadata: { count: filtered.length },
-    };
+    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } =
+      {
+        servers,
+        metadata: { count: servers.length },
+      };
     const nextIdx = skip + limit;
     if (nextIdx < total) {
       response.metadata.next_cursor = String(nextIdx);
@@ -255,23 +279,24 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, async (request) => {
-    const limit = Math.min(parseInt(request.query.limit ?? '100', 10), 500);
-    const skip = request.query.cursor ? parseInt(request.query.cursor, 10) : 0;
+    const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
+    const skip = parseIntParam(request.query.cursor, 0);
     const { packages, total } = await packageRepo.findPackagesForServerListing(
-      { search: request.query.q },
-      { skip, take: limit }
+      request.query.q ? { search: request.query.q } : {},
+      { skip, take: limit },
     );
     const servers: ServerDetail[] = [];
     for (const pkg of packages) {
       const latest = pkg.versions[0];
       if (!latest) continue;
-      const detail = await buildServerDetailWithScan(fastify, pkg, latest);
+      const detail = buildServerDetail(pkg, latest);
       if (detail) servers.push(detail);
     }
-    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } = {
-      servers,
-      metadata: { count: servers.length },
-    };
+    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } =
+      {
+        servers,
+        metadata: { count: servers.length },
+      };
     const nextIdx = skip + limit;
     if (nextIdx < total) {
       response.metadata.next_cursor = String(nextIdx);
@@ -285,7 +310,8 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/servers/:name', {
     schema: {
       tags: ['mcp-registry'],
-      description: 'Get the latest ServerDetail for a server. Accepts both npm-style (@scope/name) and reverse-DNS forms.',
+      description:
+        'Get the latest ServerDetail for a server. Accepts both npm-style (@scope/name) and reverse-DNS forms.',
       params: {
         type: 'object',
         required: ['name'],
@@ -303,7 +329,7 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       reply.code(404);
       return { error: `Server '${pkg.name}' has no versions` };
     }
-    const detail = await buildServerDetailWithScan(fastify, pkg, latest);
+    const detail = buildServerDetail(pkg, latest);
     if (!detail) {
       reply.code(500);
       return { error: `Server '${pkg.name}' manifest could not be projected` };
@@ -342,10 +368,12 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       reply.code(404);
       return { error: `Version '${requestedVersion}' not found for server '${pkg.name}'` };
     }
-    const detail = await buildServerDetailWithScan(fastify, pkg, matchedVersion);
+    const detail = buildServerDetail(pkg, matchedVersion);
     if (!detail) {
       reply.code(500);
-      return { error: `Server '${pkg.name}' version '${matchedVersion.version}' manifest could not be projected` };
+      return {
+        error: `Server '${pkg.name}' version '${matchedVersion.version}' manifest could not be projected`,
+      };
     }
     return detail;
   });
@@ -381,7 +409,9 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
     };
   });
 
-  // GET /health - Health check
+  // GET /health - Registry-specific health probe (counts servers).
+  // The top-level /health route is the LB liveness probe with a
+  // simpler `{ status: "ok" }` shape — kept distinct on purpose.
   fastify.get('/health', async () => {
     const { total } = await packageRepo.findPackagesForServerListing({}, { take: 0 });
     return {

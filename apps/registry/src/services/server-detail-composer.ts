@@ -88,48 +88,8 @@ export interface ComposerInput {
  * record.
  */
 export function composeServerDetail(input: ComposerInput): ServerDetail | null {
-  const manifest = (input.version.manifest ?? {}) as Record<string, unknown>;
-
-  const description = stringField(manifest, "description") ?? input.pkg.name;
-  const truncatedDescription = truncate(description, 100);
-  const version =
-    stringField(manifest, "version") ?? input.version.version ?? input.pkg.latestVersion ?? "0.0.0";
-
-  const manifestMeta = (manifest["_meta"] as Record<string, unknown> | undefined) ?? null;
-  const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
-
-  const display = stringField(manifest, "display_name");
-  const title = display && display.trim().length > 0 ? display.trim() : input.pkg.name;
-
-  const detail: Record<string, unknown> = {
-    $schema: UPSTREAM_SCHEMA_URL,
-    name: reverseDnsName,
-    title,
-    description: truncatedDescription,
-    version,
-  };
-
-  const homepage = stringField(manifest, "homepage");
-  if (homepage && isHttpUrl(homepage)) {
-    detail["websiteUrl"] = homepage;
-  }
-
-  const repository = projectRepository(manifest, input.pkg.githubRepo);
-  if (repository) detail["repository"] = repository;
-
-  const icons = projectIcons(manifest);
-  if (icons.length > 0) detail["icons"] = icons;
-
-  const packages = projectPackages(input, manifest);
-  if (packages.length > 0) detail["packages"] = packages;
-
-  detail["_meta"] = composeMeta(input, manifest, manifestMeta);
-
-  const result = ServerDetailSchema.safeParse(detail);
-  if (!result.success) {
-    return null;
-  }
-  return result.data;
+  const result = ServerDetailSchema.safeParse(buildDetail(input));
+  return result.success ? result.data : null;
 }
 
 /**
@@ -138,16 +98,27 @@ export function composeServerDetail(input: ComposerInput): ServerDetail | null {
  * where a malformed projection should fail loudly.
  */
 export function composeServerDetailOrThrow(input: ComposerInput): ServerDetail {
+  return ServerDetailSchema.parse(buildDetail(input));
+}
+
+/**
+ * Build the unvalidated `ServerDetail` candidate. The two public
+ * functions differ only in how they handle the schema check
+ * ({@link composeServerDetail} returns null on failure;
+ * {@link composeServerDetailOrThrow} throws). Pulled out so both share
+ * one projection body.
+ *
+ * Single source of truth for `version`: the DB row's
+ * `input.version.version`. The manifest's `version` field is ignored
+ * here so the top-level `ServerDetail.version` and per-package
+ * `packages[].version` can never disagree on a record.
+ */
+function buildDetail(input: ComposerInput): Record<string, unknown> {
   const manifest = (input.version.manifest ?? {}) as Record<string, unknown>;
-
-  const description = stringField(manifest, "description") ?? input.pkg.name;
-  const truncatedDescription = truncate(description, 100);
-  const version =
-    stringField(manifest, "version") ?? input.version.version ?? input.pkg.latestVersion ?? "0.0.0";
-
   const manifestMeta = (manifest["_meta"] as Record<string, unknown> | undefined) ?? null;
-  const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
 
+  const description = truncate(stringField(manifest, "description") ?? input.pkg.name, 100);
+  const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
   const display = stringField(manifest, "display_name");
   const title = display && display.trim().length > 0 ? display.trim() : input.pkg.name;
 
@@ -155,21 +126,25 @@ export function composeServerDetailOrThrow(input: ComposerInput): ServerDetail {
     $schema: UPSTREAM_SCHEMA_URL,
     name: reverseDnsName,
     title,
-    description: truncatedDescription,
-    version,
+    description,
+    version: input.version.version,
   };
 
   const homepage = stringField(manifest, "homepage");
   if (homepage && isHttpUrl(homepage)) detail["websiteUrl"] = homepage;
+
   const repository = projectRepository(manifest, input.pkg.githubRepo);
   if (repository) detail["repository"] = repository;
+
   const icons = projectIcons(manifest);
   if (icons.length > 0) detail["icons"] = icons;
+
   const packages = projectPackages(input, manifest);
   if (packages.length > 0) detail["packages"] = packages;
+
   detail["_meta"] = composeMeta(input, manifest, manifestMeta);
 
-  return ServerDetailSchema.parse(detail);
+  return detail;
 }
 
 // ── building blocks ────────────────────────────────────────────────────
@@ -195,29 +170,65 @@ function projectRepository(
   return null;
 }
 
-function projectIcons(manifest: Record<string, unknown>): { src: string; sizes?: string[] }[] {
+/**
+ * Project the manifest's icons to the upstream `Icon[]` shape. Filters
+ * out anything the upstream schema would reject so a single bad icon
+ * doesn't propagate to the schema boundary and 500 the whole record:
+ *
+ *   - `src` must be http(s) (no `javascript:` / `data:` injection)
+ *   - `src` must be ≤ 255 chars (upstream `Icon.src` `maxLength`)
+ *   - `sizes[]` entries must match `^(\d+x\d+|any)$` (upstream pattern);
+ *     entries that don't match get dropped, the rest survive
+ *   - `mimeType` must be one of the upstream-defined image types,
+ *     otherwise the field is dropped (icon survives)
+ *   - `theme` must be `light` or `dark`; otherwise dropped
+ */
+function projectIcons(
+  manifest: Record<string, unknown>,
+): { src: string; sizes?: string[]; mimeType?: string; theme?: string }[] {
   const icons = manifest["icons"];
   if (Array.isArray(icons)) {
     return icons
-      .map((i) => {
-        if (!i || typeof i !== "object") return null;
-        const src = stringField(i as Record<string, unknown>, "src");
-        if (!src || !isHttpUrl(src)) return null;
-        const out: { src: string; sizes?: string[] } = { src };
-        const sizes = (i as Record<string, unknown>)["sizes"];
-        if (Array.isArray(sizes) && sizes.every((s) => typeof s === "string")) {
-          out.sizes = sizes as string[];
-        }
-        return out;
-      })
-      .filter((i): i is { src: string; sizes?: string[] } => i !== null);
+      .map(projectIcon)
+      .filter((i): i is { src: string; sizes?: string[]; mimeType?: string; theme?: string } => i !== null);
   }
   // Single-icon legacy field.
   const single = stringField(manifest, "icon");
-  if (single && isHttpUrl(single)) {
+  if (single && isHttpUrl(single) && single.length <= 255) {
     return [{ src: single, sizes: ["any"] }];
   }
   return [];
+}
+
+const ICON_SIZE_PATTERN = /^(\d+x\d+|any)$/;
+const ICON_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/svg+xml",
+  "image/webp",
+]);
+
+function projectIcon(
+  raw: unknown,
+): { src: string; sizes?: string[]; mimeType?: string; theme?: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const src = stringField(obj, "src");
+  if (!src || !isHttpUrl(src) || src.length > 255) return null;
+  const out: { src: string; sizes?: string[]; mimeType?: string; theme?: string } = { src };
+  const sizes = obj["sizes"];
+  if (Array.isArray(sizes)) {
+    const valid = sizes.filter(
+      (s): s is string => typeof s === "string" && ICON_SIZE_PATTERN.test(s),
+    );
+    if (valid.length > 0) out.sizes = valid;
+  }
+  const mimeType = stringField(obj, "mimeType");
+  if (mimeType && ICON_MIME_TYPES.has(mimeType)) out.mimeType = mimeType;
+  const theme = stringField(obj, "theme");
+  if (theme === "light" || theme === "dark") out.theme = theme;
+  return out;
 }
 
 function projectPackages(input: ComposerInput, manifest: Record<string, unknown>): ServerPackage[] {
@@ -239,14 +250,22 @@ function projectPackages(input: ComposerInput, manifest: Record<string, unknown>
       },
     ];
   }
-  return input.artifacts.map((art) => ({
-    registryType: "mpak",
-    identifier: input.pkg.name,
-    version: input.version.version,
-    transport: { type: "stdio" } as const,
-    fileSha256: art.digest.replace(/^sha256:/, ""),
-    ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
-  }));
+  return input.artifacts.map((art) => {
+    const sha = art.digest.replace(/^sha256:/, "");
+    const pkg: ServerPackage = {
+      registryType: "mpak",
+      identifier: input.pkg.name,
+      version: input.version.version,
+      transport: { type: "stdio" },
+      ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
+    };
+    // Upstream `fileSha256` requires 64 hex chars. A malformed digest
+    // would otherwise reject the entire ServerDetail at the schema
+    // boundary; better to drop the integrity field on this entry and
+    // surface the rest of the record.
+    if (/^[a-f0-9]{64}$/.test(sha)) pkg.fileSha256 = sha;
+    return pkg;
+  });
 }
 
 /**
