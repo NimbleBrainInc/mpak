@@ -170,3 +170,122 @@ def test_load_bundle_from_url_uses_configured_client(tmp_path):
     assert route.called
     request = route.calls[0].request
     assert request.headers["user-agent"] == "test-agent/2.0"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# MCP Registry (ServerDetail) endpoints
+# ─────────────────────────────────────────────────────────────────────
+
+
+_SERVER_DETAIL: dict = {
+    "name": "ai.nimblebrain/echo",
+    "title": "Echo",
+    "description": "Echo server",
+    "version": "0.1.6",
+}
+
+
+@respx.mock
+def test_search_servers_returns_list_response():
+    """search_servers hits /v1/servers/search and returns the raw JSON envelope."""
+    route = respx.get("https://registry.mpak.dev/v1/servers/search", params={"q": "echo"}).mock(
+        return_value=Response(200, json={"servers": [_SERVER_DETAIL], "metadata": {"count": 1}})
+    )
+
+    client = MpakClient()
+    result = client.search_servers(q="echo")
+
+    assert route.called
+    assert result["servers"][0]["name"] == "ai.nimblebrain/echo"
+    assert result["metadata"]["count"] == 1
+
+
+@respx.mock
+def test_search_servers_passes_limit_and_cursor():
+    """Optional pagination params reach the URL untouched."""
+    route = respx.get(
+        "https://registry.mpak.dev/v1/servers/search",
+        params={"limit": "50", "cursor": "100"},
+    ).mock(return_value=Response(200, json={"servers": [], "metadata": {"count": 0}}))
+
+    client = MpakClient()
+    client.search_servers(limit=50, cursor="100")
+
+    assert route.called
+
+
+@respx.mock
+def test_search_servers_404_raises_not_found():
+    respx.get("https://registry.mpak.dev/v1/servers/search").mock(return_value=Response(404))
+
+    client = MpakClient()
+    with pytest.raises(MpakNotFoundError):
+        client.search_servers()
+
+
+@respx.mock
+def test_get_server_accepts_npm_style_name():
+    """@scope/pkg is passed through verbatim — the registry handles both
+    npm-style and reverse-DNS forms."""
+    route = respx.get("https://registry.mpak.dev/v1/servers/@nimblebraininc/echo").mock(
+        return_value=Response(200, json=_SERVER_DETAIL)
+    )
+
+    client = MpakClient()
+    result = client.get_server("@nimblebraininc/echo")
+
+    assert route.called
+    assert result["name"] == "ai.nimblebrain/echo"
+
+
+@respx.mock
+def test_get_server_accepts_reverse_dns_name():
+    route = respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain/echo").mock(
+        return_value=Response(200, json=_SERVER_DETAIL)
+    )
+
+    client = MpakClient()
+    result = client.get_server("ai.nimblebrain/echo")
+
+    assert route.called
+    assert result["name"] == "ai.nimblebrain/echo"
+
+
+@respx.mock
+def test_get_server_404_raises_not_found_with_name():
+    respx.get("https://registry.mpak.dev/v1/servers/ai.nimblebrain/missing").mock(
+        return_value=Response(404, json={"error": "Not found"})
+    )
+
+    client = MpakClient()
+    with pytest.raises(MpakNotFoundError) as exc_info:
+        client.get_server("ai.nimblebrain/missing")
+
+    assert "ai.nimblebrain/missing" in str(exc_info.value)
+
+
+@respx.mock
+def test_get_server_version_passes_through_latest():
+    """`version="latest"` is a literal the registry resolves server-side."""
+    route = respx.get(
+        "https://registry.mpak.dev/v1/servers/ai.nimblebrain/echo/versions/latest"
+    ).mock(return_value=Response(200, json=_SERVER_DETAIL))
+
+    client = MpakClient()
+    result = client.get_server_version("ai.nimblebrain/echo", "latest")
+
+    assert route.called
+    assert result["version"] == "0.1.6"
+
+
+@respx.mock
+def test_get_server_version_404_raises_not_found_with_version():
+    respx.get(
+        "https://registry.mpak.dev/v1/servers/ai.nimblebrain/echo/versions/99.0.0"
+    ).mock(return_value=Response(404))
+
+    client = MpakClient()
+    with pytest.raises(MpakNotFoundError) as exc_info:
+        client.get_server_version("ai.nimblebrain/echo", "99.0.0")
+
+    assert "ai.nimblebrain/echo@99.0.0" in str(exc_info.value)

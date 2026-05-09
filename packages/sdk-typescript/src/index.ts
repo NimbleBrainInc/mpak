@@ -32,7 +32,7 @@ export type { MpakConfigManagerOptions, PackageConfig } from './config-manager.j
 export { MpakBundleCache } from './cache.js';
 export type { MpakBundleCacheOptions } from './cache.js';
 export { MpakClient } from './client.js';
-export type { MpakClientConfig } from './types.js';
+export type { MpakClientConfig, ServerSearchParams } from './types.js';
 
 // Validation
 export { validateMcpb } from './validate.js';

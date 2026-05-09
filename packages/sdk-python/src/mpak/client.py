@@ -237,6 +237,118 @@ class MpakClient:
         print(f"Loaded: {manifest['name']} v{manifest['version']}")
         return manifest
 
+    # ──────────────────────────────────────────────────────────────────
+    # MCP Registry (ServerDetail) endpoints
+    # ──────────────────────────────────────────────────────────────────
+
+    def search_servers(
+        self,
+        q: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Search the MCP registry for servers.
+
+        Hits ``/v1/servers/search`` and returns the raw JSON response —
+        a ``ServerListResponse`` per the upstream MCP registry shape:
+
+        .. code-block:: python
+
+            {
+                "servers": [ServerDetail, ...],
+                "metadata": {"count": int, "next_cursor": str | None},
+            }
+
+        Args:
+            q: Optional substring filter on name / displayName /
+                description.
+            limit: Maximum results (server caps at 500; default 100).
+            cursor: Pagination cursor from a previous response's
+                ``metadata.next_cursor``.
+
+        Raises:
+            MpakNetworkError: If the network request fails.
+
+        Notes:
+            ``search_bundles`` (currently exposed only via
+            ``get_bundle_download``) targets the legacy
+            ``/v1/bundles/...`` shape, which is being deprecated
+            server-side. Prefer ``search_servers`` for new code.
+        """
+        params: dict[str, str | int] = {}
+        if q is not None:
+            params["q"] = q
+        if limit is not None:
+            params["limit"] = limit
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        try:
+            response = self._client.get("/v1/servers/search", params=params)
+            if response.status_code == 404:
+                raise MpakNotFoundError("servers/search endpoint")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise MpakError(
+                f"HTTP {e.response.status_code}: {e.response.text}",
+                "HTTP_ERROR",
+                e.response.status_code,
+            ) from e
+        except httpx.RequestError as e:
+            raise MpakNetworkError(f"Network error: {e}") from e
+
+    def get_server(self, name: str) -> dict[str, Any]:
+        """Fetch the latest ``ServerDetail`` for a server.
+
+        ``name`` accepts both the npm-style scoped name
+        (``@scope/pkg``) and the reverse-DNS form
+        (``ai.nimblebrain/echo``); either form returns the same record.
+
+        Raises:
+            MpakNotFoundError: If the server is not registered.
+            MpakNetworkError: If the network request fails.
+        """
+        try:
+            response = self._client.get(f"/v1/servers/{name}")
+            if response.status_code == 404:
+                raise MpakNotFoundError(name)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise MpakError(
+                f"HTTP {e.response.status_code}: {e.response.text}",
+                "HTTP_ERROR",
+                e.response.status_code,
+            ) from e
+        except httpx.RequestError as e:
+            raise MpakNetworkError(f"Network error: {e}") from e
+
+    def get_server_version(self, name: str, version: str) -> dict[str, Any]:
+        """Fetch a version-specific ``ServerDetail``.
+
+        Pass ``version="latest"`` to alias the most recent published
+        version.
+
+        Raises:
+            MpakNotFoundError: If the server or version is not found.
+            MpakNetworkError: If the network request fails.
+        """
+        try:
+            response = self._client.get(f"/v1/servers/{name}/versions/{version}")
+            if response.status_code == 404:
+                raise MpakNotFoundError(f"{name}@{version}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise MpakError(
+                f"HTTP {e.response.status_code}: {e.response.text}",
+                "HTTP_ERROR",
+                e.response.status_code,
+            ) from e
+        except httpx.RequestError as e:
+            raise MpakNetworkError(f"Network error: {e}") from e
+
     @staticmethod
     def _parse_package_name(package: str) -> tuple[str, str]:
         """Parse a scoped package name into scope and name.
