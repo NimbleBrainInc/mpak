@@ -275,6 +275,38 @@ export class MpakBundleCache {
     }
   }
 
+  /**
+   * Extract pre-downloaded bundle bytes into the cache.
+   * Use this when bytes are already in memory (e.g. after `bundle pull`) to
+   * avoid a second download.
+   */
+  async extractBundle(
+    name: string,
+    data: Uint8Array,
+    bundle: DownloadInfo['bundle'],
+  ): Promise<void> {
+    const cacheDir = this.getBundleCacheDirName(name);
+    const tempPath = join(tmpdir(), `mpak-${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
+
+    try {
+      writeFileSync(tempPath, data);
+
+      if (existsSync(cacheDir)) {
+        rmSync(cacheDir, { recursive: true, force: true });
+      }
+
+      await extractZip(tempPath, cacheDir, this.extractOptions());
+
+      this.writeCacheMetadata(name, {
+        version: bundle.version,
+        pulledAt: new Date().toISOString(),
+        platform: bundle.platform,
+      });
+    } finally {
+      rmSync(tempPath, { force: true });
+    }
+  }
+
   // ===========================================================================
   // Private methods
   // ===========================================================================

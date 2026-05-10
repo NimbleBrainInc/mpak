@@ -11,11 +11,13 @@ import { handlePull } from '../../src/commands/packages/pull.js';
 vi.mock('fs', () => ({ writeFileSync: vi.fn() }));
 
 let mockDownloadBundle: ReturnType<typeof vi.fn>;
+let mockExtractBundle: ReturnType<typeof vi.fn>;
 
 vi.mock('../../src/utils/config.js', () => ({
   get mpak() {
     return {
       client: { downloadBundle: mockDownloadBundle } as unknown as MpakClient,
+      bundleCache: { extractBundle: mockExtractBundle },
     };
   },
 }));
@@ -55,6 +57,7 @@ describe('handlePull', () => {
   beforeEach(() => {
     vi.mocked(writeFileSync).mockClear();
     mockDownloadBundle = vi.fn().mockResolvedValue({ data: bundleData, metadata });
+    mockExtractBundle = vi.fn().mockResolvedValue(undefined);
     stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -140,4 +143,5 @@ describe('handlePull', () => {
 
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Bundle not found'));
   });
+
 });

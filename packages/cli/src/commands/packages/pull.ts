@@ -45,6 +45,7 @@ export async function handlePull(packageSpec: string, options: PullOptions = {})
 
     logger.info(`\n=> Downloading to ${outputPath}...`);
     writeFileSync(outputPath, data);
+    await mpak.bundleCache.extractBundle(name, data, metadata);
 
     logger.info(`\n=> Bundle downloaded successfully!`);
     logger.info(`   File: ${outputPath}`);
