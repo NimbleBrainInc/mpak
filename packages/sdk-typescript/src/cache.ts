@@ -183,7 +183,9 @@ export class MpakBundleCache {
     options?: { version?: string; force?: boolean },
   ): Promise<{ cacheDir: string; version: string; pulled: boolean }> {
     const { version: requestedVersion, force = false } = options ?? {};
+
     const cacheDir = this.getBundleCacheDirName(name);
+    const platform = MpakClient.detectPlatform();
 
     let cachedMeta: CacheMetadata | null = null;
     try {
@@ -203,13 +205,14 @@ export class MpakBundleCache {
     if (
       !options?.force &&
       !!cachedMeta &&
+      cachedMeta.platform.os === platform.os &&
+      cachedMeta.platform.arch === platform.arch &&
       (!requestedVersion || isSemverEqual(cachedMeta.version, requestedVersion))
     ) {
       return { cacheDir, version: cachedMeta.version, pulled: false };
     }
 
     // Get download info from registry
-    const platform = MpakClient.detectPlatform();
     const downloadInfo = await this.mpakClient.getBundleDownload(
       name,
       requestedVersion ?? 'latest',
@@ -217,7 +220,13 @@ export class MpakBundleCache {
     );
 
     // Registry resolved to the same version we already have — skip download
-    if (!force && cachedMeta && isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)) {
+    if (
+      !force &&
+      cachedMeta &&
+      cachedMeta.platform.os === platform.os &&
+      cachedMeta.platform.arch === platform.arch &&
+      isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)
+    ) {
       // Update lastCheckedAt since we just verified with the registry
       this.writeCacheMetadata(name, {
         ...cachedMeta,

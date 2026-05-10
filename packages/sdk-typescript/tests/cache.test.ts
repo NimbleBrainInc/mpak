@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MpakBundleCache } from '../src/cache.js';
-import type { MpakClient } from '../src/client.js';
+import { MpakClient } from '../src/client.js';
 import { MpakCacheCorruptedError } from '../src/errors.js';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,7 @@ describe('MpakBundleCache', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(testDir, { recursive: true, force: true });
   });
 
@@ -408,6 +409,76 @@ describe('MpakBundleCache', () => {
 
       const meta = cache.getBundleMetadata('@scope/name');
       expect(meta?.lastCheckedAt).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // loadBundle — platform guard fixes (#78)
+  // -------------------------------------------------------------------------
+
+  describe('loadBundle', () => {
+    const fakeDownloadInfo = {
+      url: 'https://example.com/bundle.mcpb',
+      bundle: {
+        name: '@scope/name',
+        version: '1.0.0',
+        platform: { os: 'linux', arch: 'x64' },
+        sha256: 'deadbeef',
+        size: 1000,
+      },
+    };
+
+    it('re-downloads when cached platform does not match current platform', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn().mockResolvedValue(fakeDownloadInfo),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host is linux/x64
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'linux', arch: 'x64' });
+      vi.spyOn(cache as any, 'downloadAndExtract').mockResolvedValue(undefined);
+
+      await cache.loadBundle('@scope/name');
+
+      expect(client.getBundleDownload).toHaveBeenCalled();
+    });
+
+    it('uses cache and skips registry when platform and version match', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn(),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host is also darwin/arm64
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'darwin', arch: 'arm64' });
+
+      await cache.loadBundle('@scope/name');
+
+      expect(client.getBundleDownload).not.toHaveBeenCalled();
+    });
+
+    it('re-downloads when force is true even if platform and version match', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn().mockResolvedValue(fakeDownloadInfo),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host matches cache platform
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'darwin', arch: 'arm64' });
+      vi.spyOn(cache as any, 'downloadAndExtract').mockResolvedValue(undefined);
+
+      await cache.loadBundle('@scope/name', { force: true });
+
+      expect(client.getBundleDownload).toHaveBeenCalled();
     });
   });
 });
