@@ -300,12 +300,12 @@ describe('MpakBundleCache', () => {
   // -------------------------------------------------------------------------
 
   describe('checkForUpdate', () => {
-    it('returns null when bundle is not cached', async () => {
+    it('returns up-to-date when bundle is not cached', async () => {
       const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
     });
 
-    it('returns latest version when update is available', async () => {
+    it('returns update-available with latest version when update exists', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '2.0.0' }),
       });
@@ -315,10 +315,11 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBe('2.0.0');
+      const result = await cache.checkForUpdate('@scope/name');
+      expect(result).toEqual({ status: 'update-available', latestVersion: '2.0.0' });
     });
 
-    it('returns null when already up to date', async () => {
+    it('returns up-to-date when already on latest version', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
       });
@@ -328,10 +329,10 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
     });
 
-    it('returns null when within TTL window', async () => {
+    it('returns up-to-date within TTL window without calling registry', async () => {
       const client = mockClient({
         getBundle: vi.fn(),
       });
@@ -344,12 +345,11 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
-      // Should not have called the API
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
       expect(client.getBundle).not.toHaveBeenCalled();
     });
 
-    it('returns null on network error', async () => {
+    it('returns check-failed with reason on network error', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockRejectedValue(new Error('network down')),
       });
@@ -359,7 +359,8 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      const result = await cache.checkForUpdate('@scope/name');
+      expect(result).toEqual({ status: 'check-failed', reason: 'network down' });
     });
 
     it('bypasses TTL when force is true', async () => {
@@ -375,11 +376,12 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBe('2.0.0');
+      const result = await cache.checkForUpdate('@scope/name', { force: true });
+      expect(result).toEqual({ status: 'update-available', latestVersion: '2.0.0' });
       expect(client.getBundle).toHaveBeenCalledWith('@scope/name');
     });
 
-    it('returns null when force is true but already up to date', async () => {
+    it('returns up-to-date when force is true but already on latest version', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
       });
@@ -392,7 +394,7 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name', { force: true })).status).toBe('up-to-date');
     });
 
     it('updates lastCheckedAt after successful check', async () => {

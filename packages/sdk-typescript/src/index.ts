@@ -30,7 +30,7 @@ export type {
 export { MpakConfigManager } from './config-manager.js';
 export type { MpakConfigManagerOptions, PackageConfig } from './config-manager.js';
 export { MpakBundleCache } from './cache.js';
-export type { MpakBundleCacheOptions } from './cache.js';
+export type { MpakBundleCacheOptions, UpdateCheckResult } from './cache.js';
 export { MpakClient } from './client.js';
 export type { MpakClientConfig, ServerSearchParams } from './types.js';
 

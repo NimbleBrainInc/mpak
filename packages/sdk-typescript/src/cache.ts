@@ -13,6 +13,11 @@ import { MpakClient } from './client.js';
 import { MpakCacheCorruptedError } from './errors.js';
 import { extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from './helpers.js';
 
+export type UpdateCheckResult =
+  | { status: 'up-to-date' }
+  | { status: 'update-available'; latestVersion: string }
+  | { status: 'check-failed'; reason: string };
+
 export interface MpakBundleCacheOptions {
   mpakHome?: string;
   /**
@@ -241,22 +246,28 @@ export class MpakBundleCache {
   }
 
   /**
-   * Fire-and-forget background check for bundle updates.
-   * Return the latest version string if an update is available, null otherwise (not cached, skipped, up-to-date, or error).
-   * The caller can just check `if (result) { console.log("update available: " + result) }`
+   * Check whether a newer version of a cached bundle is available in the registry.
+   *
+   * Returns a discriminated union so callers can distinguish "up to date",
+   * "update available", and "check failed" — unlike a `string | null` return
+   * where `null` is ambiguous between "up to date" and "network error".
+   *
    * @param packageName - Scoped package name (e.g. `@scope/bundle`)
    */
-  async checkForUpdate(packageName: string, options?: { force?: boolean }): Promise<string | null> {
-    const cachedMeta = this.getBundleMetadata(packageName);
-    if (!cachedMeta) return null;
-
-    // Skip if checked within the TTL (unless force is set)
-    if (!options?.force && cachedMeta.lastCheckedAt) {
-      const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
-      if (elapsed < UPDATE_CHECK_TTL_MS) return null;
-    }
-
+  async checkForUpdate(
+    packageName: string,
+    options?: { force?: boolean },
+  ): Promise<UpdateCheckResult> {
     try {
+      const cachedMeta = this.getBundleMetadata(packageName);
+      if (!cachedMeta) return { status: 'up-to-date' };
+
+      // Skip if checked within the TTL (unless force is set)
+      if (!options?.force && cachedMeta.lastCheckedAt) {
+        const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
+        if (elapsed < UPDATE_CHECK_TTL_MS) return { status: 'up-to-date' };
+      }
+
       const detail = await this.mpakClient.getBundle(packageName);
 
       // Update lastCheckedAt regardless of whether there's an update
@@ -266,12 +277,15 @@ export class MpakBundleCache {
       });
 
       if (!isSemverEqual(detail.latest_version, cachedMeta.version)) {
-        return detail.latest_version;
+        return { status: 'update-available', latestVersion: detail.latest_version };
       }
 
-      return null;
-    } catch {
-      return null;
+      return { status: 'up-to-date' };
+    } catch (err) {
+      return {
+        status: 'check-failed',
+        reason: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 

@@ -145,7 +145,7 @@ describe('getOutdatedBundles', () => {
     expect(result[1]!.name).toBe('@scope/zebra');
   });
 
-  it('skips bundles that fail to resolve from registry', async () => {
+  it('warns and skips bundles that fail to resolve from registry', async () => {
     seedCacheEntry(testDir, 'scope-exists', {
       manifest: validManifest('@scope/exists', '1.0.0'),
       metadata: validMetadata('1.0.0'),
@@ -159,9 +159,15 @@ describe('getOutdatedBundles', () => {
       { mpakHome: testDir },
     );
 
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
     const result = await getOutdatedBundles();
+
     expect(result).toHaveLength(1);
     expect(result[0]!.name).toBe('@scope/exists');
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('could not check @scope/deleted'),
+    );
   });
 
   it('ignores TTL and always checks the registry', async () => {
