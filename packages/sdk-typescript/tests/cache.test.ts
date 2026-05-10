@@ -483,4 +483,83 @@ describe('MpakBundleCache', () => {
       expect(client.getBundleDownload).toHaveBeenCalled();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // getCacheInfo
+  // -------------------------------------------------------------------------
+
+  describe('getCacheInfo', () => {
+    it('returns empty lists when cache does not exist', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const info = cache.getCacheInfo();
+      expect(info.registryBundles).toEqual([]);
+      expect(info.localBundles).toEqual([]);
+      expect(info.totalBytes).toBe(0);
+    });
+
+    it('reports registry bundles with size', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+      writeFileSync(join(dir, 'index.js'), 'x'.repeat(100));
+
+      const info = cache.getCacheInfo();
+
+      expect(info.registryBundles).toHaveLength(1);
+      expect(info.registryBundles[0].name).toBe('@scope/name');
+      expect(info.registryBundles[0].version).toBe('1.0.0');
+      expect(info.registryBundles[0].bytes).toBeGreaterThan(0);
+    });
+
+    it('reports local bundles with size', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const localDir = join(testDir, 'cache', '_local', 'abc123');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(
+        join(localDir, '.mpak-local-meta.json'),
+        JSON.stringify({ localPath: '/some/bundle.mcpb', extractedAt: '2026-05-10T00:00:00.000Z' }),
+      );
+      writeFileSync(join(localDir, 'index.js'), 'x'.repeat(200));
+
+      const info = cache.getCacheInfo();
+
+      expect(info.localBundles).toHaveLength(1);
+      expect(info.localBundles[0].hash).toBe('abc123');
+      expect(info.localBundles[0].localPath).toBe('/some/bundle.mcpb');
+      expect(info.localBundles[0].bytes).toBeGreaterThan(0);
+    });
+
+    it('totalBytes is the sum of all entries', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+
+      const registryDir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+      writeFileSync(join(registryDir, 'data.bin'), Buffer.alloc(500));
+
+      const localDir = join(testDir, 'cache', '_local', 'def456');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(
+        join(localDir, '.mpak-local-meta.json'),
+        JSON.stringify({ localPath: '/some/bundle.mcpb', extractedAt: '2026-05-10T00:00:00.000Z' }),
+      );
+      writeFileSync(join(localDir, 'data.bin'), Buffer.alloc(300));
+
+      const info = cache.getCacheInfo();
+      expect(info.totalBytes).toBe(info.registryBundles[0].bytes + info.localBundles[0].bytes);
+    });
+
+    it('skips local entries with missing or corrupt meta', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const localDir = join(testDir, 'cache', '_local', 'corrupt');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(join(localDir, '.mpak-local-meta.json'), 'not json');
+
+      const info = cache.getCacheInfo();
+      expect(info.localBundles).toHaveLength(0);
+    });
+  });
 });

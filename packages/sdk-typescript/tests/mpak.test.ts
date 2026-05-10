@@ -996,6 +996,27 @@ describe('Mpak facade', () => {
 
       await expect(sdk.prepareServer({ local: mcpbPath })).rejects.toThrow(MpakConfigError);
     });
+
+    it('evicts stale _local entries for the same bundle name when path changes', async () => {
+      const sdk = new Mpak({ mpakHome: testDir });
+
+      const v1Dir = join(testDir, 'v1');
+      const v2Dir = join(testDir, 'v2');
+      mkdirSync(v1Dir);
+      mkdirSync(v2Dir);
+
+      const v1Path = createMcpbBundle(v1Dir, nodeManifest);
+      const v2Path = createMcpbBundle(v2Dir, nodeManifest);
+
+      const result1 = await sdk.prepareServer({ local: v1Path });
+      expect(existsSync(result1.cwd)).toBe(true);
+
+      const result2 = await sdk.prepareServer({ local: v2Path });
+      expect(existsSync(result2.cwd)).toBe(true);
+
+      // v1 entry should have been evicted since v2 has the same bundle name
+      expect(existsSync(result1.cwd)).toBe(false);
+    });
   });
 
   // ===========================================================================

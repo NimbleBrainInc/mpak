@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -11,12 +11,32 @@ import type {
 import { CacheMetadataSchema, McpbManifestSchema } from '@nimblebrain/mpak-schemas';
 import { MpakClient } from './client.js';
 import { MpakCacheCorruptedError } from './errors.js';
-import { extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from './helpers.js';
+import { dirSizeBytes, extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from './helpers.js';
 
 export type UpdateCheckResult =
   | { status: 'up-to-date' }
   | { status: 'update-available'; latestVersion: string }
   | { status: 'check-failed'; reason: string };
+
+export interface RegistryCacheEntry {
+  name: string;
+  version: string;
+  pulledAt: string;
+  bytes: number;
+}
+
+export interface LocalCacheEntry {
+  hash: string;
+  localPath: string;
+  extractedAt: string;
+  bytes: number;
+}
+
+export interface CacheInfo {
+  registryBundles: RegistryCacheEntry[];
+  localBundles: LocalCacheEntry[];
+  totalBytes: number;
+}
 
 export interface MpakBundleCacheOptions {
   mpakHome?: string;
@@ -154,6 +174,78 @@ export class MpakBundleCache {
     }
 
     return bundles;
+  }
+
+  /**
+   * Evict all `_local/` entries for the same bundle name except the current one.
+   * Called after a local bundle is prepared so stale entries from previous path-keyed
+   * extractions (e.g. v0.1.0 → v0.1.1 renames) don't accumulate on disk.
+   */
+  evictOtherLocalBundles(bundleName: string, currentHash: string): void {
+    const localDir = join(this.cacheHome, '_local');
+    if (!existsSync(localDir)) return;
+
+    for (const entry of readdirSync(localDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === currentHash) continue;
+      try {
+        const manifest = readJsonFromFile(
+          join(localDir, entry.name, 'manifest.json'),
+          McpbManifestSchema,
+        );
+        if (manifest.name === bundleName) {
+          rmSync(join(localDir, entry.name), { recursive: true, force: true });
+        }
+      } catch {
+        // corrupt or missing manifest — skip
+      }
+    }
+  }
+
+  /**
+   * Return a snapshot of everything in the cache: registry bundles, local bundles,
+   * and their disk usage. Skips entries with missing or corrupt metadata.
+   */
+  getCacheInfo(): CacheInfo {
+    const registryBundles: RegistryCacheEntry[] = [];
+    const localBundles: LocalCacheEntry[] = [];
+
+    for (const bundle of this.listCachedBundles()) {
+      registryBundles.push({
+        name: bundle.name,
+        version: bundle.version,
+        pulledAt: bundle.pulledAt,
+        bytes: dirSizeBytes(bundle.cacheDir),
+      });
+    }
+
+    const localDir = join(this.cacheHome, '_local');
+    if (existsSync(localDir)) {
+      for (const entry of readdirSync(localDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const entryDir = join(localDir, entry.name);
+        try {
+          const raw = JSON.parse(readFileSync(join(entryDir, '.mpak-local-meta.json'), 'utf8')) as {
+            localPath?: string;
+            extractedAt?: string;
+          };
+          if (!raw.localPath || !raw.extractedAt) continue;
+          localBundles.push({
+            hash: entry.name,
+            localPath: raw.localPath,
+            extractedAt: raw.extractedAt,
+            bytes: dirSizeBytes(entryDir),
+          });
+        } catch {
+          // corrupt or missing meta — skip
+        }
+      }
+    }
+
+    const totalBytes =
+      registryBundles.reduce((s, b) => s + b.bytes, 0) +
+      localBundles.reduce((s, b) => s + b.bytes, 0);
+
+    return { registryBundles, localBundles, totalBytes };
   }
 
   /**

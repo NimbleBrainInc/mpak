@@ -4,6 +4,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   statSync,
 } from 'node:fs';
@@ -332,4 +333,22 @@ export function readJsonFromFile<T extends z.ZodTypeAny>(filePath: string, schem
   }
 
   return result.data;
+}
+
+/**
+ * Recursively sum the byte size of all files under `dir`.
+ * Returns 0 if the directory does not exist.
+ */
+export function dirSizeBytes(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  let total = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += dirSizeBytes(entryPath);
+    } else if (entry.isFile()) {
+      total += statSync(entryPath).size;
+    }
+  }
+  return total;
 }
