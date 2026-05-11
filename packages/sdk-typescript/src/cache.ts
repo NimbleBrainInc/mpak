@@ -11,7 +11,13 @@ import type {
 import { CacheMetadataSchema, McpbManifestSchema } from '@nimblebrain/mpak-schemas';
 import { MpakClient } from './client.js';
 import { MpakCacheCorruptedError } from './errors.js';
-import { dirSizeBytes, extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from './helpers.js';
+import {
+  dirSizeBytes,
+  extractZip,
+  isSemverEqual,
+  readJsonFromFile,
+  UPDATE_CHECK_TTL_MS,
+} from './helpers.js';
 
 export type UpdateCheckResult =
   | { status: 'up-to-date' }

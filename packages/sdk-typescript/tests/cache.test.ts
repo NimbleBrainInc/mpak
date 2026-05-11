@@ -394,7 +394,9 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect((await cache.checkForUpdate('@scope/name', { force: true })).status).toBe('up-to-date');
+      expect((await cache.checkForUpdate('@scope/name', { force: true })).status).toBe(
+        'up-to-date',
+      );
     });
 
     it('updates lastCheckedAt after successful check', async () => {
