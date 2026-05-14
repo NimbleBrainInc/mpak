@@ -181,17 +181,6 @@ Releases are automated via GitHub Actions and PyPI trusted publishing. Pushing a
 
 CI handles PyPI publish and Docker build/push to `ghcr.io/nimblebraininc/mpak-scanner`. See `.github/workflows/scanner-publish.yml`.
 
-### Production Deployment (ECR/K8s)
-
-After the PyPI release, deploy the scanner to production K8s (from `hq/deployments/mpak/`):
-
-```bash
-make deploy-scanner ENV=production
-make apply-scanner-infra ENV=production  # only if RBAC/secrets changed
-```
-
-The Makefile builds from the Dockerfile which pulls the version from PyPI.
-
 ### Schemas and Rules
 
 - **Schemas** (JSON Schema for manifest validation): Fetched at runtime from `mpaktrust.org`. Minimal fallbacks are hardcoded in `schemas.py`. Not bundled in the wheel.
