@@ -328,9 +328,7 @@ def test_get_server_download_returns_download_info():
     ).mock(return_value=Response(200, json=_DOWNLOAD_INFO))
 
     client = MpakClient()
-    download = client.get_server_download(
-        "@nimblebraininc/echo", "0.1.6", platform=("linux", "x64")
-    )
+    download = client.get_server_download("@nimblebraininc/echo", "0.1.6", platform=("linux", "x64"))
 
     assert route.called
     assert download["url"] == "https://cdn.example.com/bundle.mcpb"
@@ -348,9 +346,7 @@ def test_get_server_download_accepts_reverse_dns_name():
     ).mock(return_value=Response(200, json=_DOWNLOAD_INFO))
 
     client = MpakClient()
-    download = client.get_server_download(
-        "ai.nimblebrain/echo", "0.1.6", platform=("linux", "x64")
-    )
+    download = client.get_server_download("ai.nimblebrain/echo", "0.1.6", platform=("linux", "x64"))
 
     assert route.called
     assert download["bundle"]["name"] == "@nimblebraininc/echo"
@@ -380,9 +376,7 @@ def test_get_server_download_404_raises_not_found_with_name_at_version():
 
     client = MpakClient()
     with pytest.raises(MpakNotFoundError) as exc_info:
-        client.get_server_download(
-            "ai.nimblebrain/echo", "99.0.0", platform=("linux", "x64")
-        )
+        client.get_server_download("ai.nimblebrain/echo", "99.0.0", platform=("linux", "x64"))
 
     assert "ai.nimblebrain/echo@99.0.0" in str(exc_info.value)
 
@@ -397,9 +391,7 @@ def test_get_server_download_500_raises_mpak_error():
 
     client = MpakClient()
     with pytest.raises(MpakError) as exc_info:
-        client.get_server_download(
-            "@nimblebraininc/echo", "0.1.6", platform=("linux", "x64")
-        )
+        client.get_server_download("@nimblebraininc/echo", "0.1.6", platform=("linux", "x64"))
 
     assert not isinstance(exc_info.value, MpakNotFoundError)
     assert exc_info.value.status_code == 500

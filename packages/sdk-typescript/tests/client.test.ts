@@ -777,17 +777,17 @@ describe('MpakClient', () => {
       const client = new MpakClient();
       fetchMock.mockResolvedValueOnce(mockResponse('not found', { status: 404 }));
 
-      await expect(
-        client.getServerDownload('ai.nimblebrain/echo', '99.0.0'),
-      ).rejects.toThrow(/ai.nimblebrain\/echo@99\.0\.0/);
+      await expect(client.getServerDownload('ai.nimblebrain/echo', '99.0.0')).rejects.toThrow(
+        /ai.nimblebrain\/echo@99\.0\.0/,
+      );
     });
 
     it('throws MpakNetworkError on 5xx', async () => {
       const client = new MpakClient();
       fetchMock.mockResolvedValueOnce(mockResponse('boom', { status: 503 }));
-      await expect(
-        client.getServerDownload('ai.nimblebrain/echo', '0.1.6'),
-      ).rejects.toThrow(MpakNetworkError);
+      await expect(client.getServerDownload('ai.nimblebrain/echo', '0.1.6')).rejects.toThrow(
+        MpakNetworkError,
+      );
     });
   });
 
@@ -843,9 +843,9 @@ describe('MpakClient', () => {
         .mockResolvedValueOnce(mockResponse(downloadInfo))
         .mockResolvedValueOnce(mockBinaryResponse(tampered));
 
-      await expect(
-        client.downloadServerBundle('@nimblebraininc/echo', '0.1.6'),
-      ).rejects.toThrow(MpakIntegrityError);
+      await expect(client.downloadServerBundle('@nimblebraininc/echo', '0.1.6')).rejects.toThrow(
+        MpakIntegrityError,
+      );
     });
   });
 });
