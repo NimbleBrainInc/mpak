@@ -1,6 +1,7 @@
 # mpak
 
 [![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev) [![CI](https://github.com/NimbleBrainInc/mpak/actions/workflows/ci.yml/badge.svg)](https://github.com/NimbleBrainInc/mpak/actions/workflows/ci.yml)
+[![SafeSkill 20/100](https://img.shields.io/badge/SafeSkill-20%2F100_Blocked-red)](https://safeskill.dev/scan/nimblebraininc-mpak)
 
 The open source package registry for [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) servers. Every bundle scanned, every install scored.
 
