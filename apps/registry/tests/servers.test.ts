@@ -534,5 +534,49 @@ describe('MCP Registry routes', () => {
       const body = JSON.parse(res.payload);
       expect(body.bundle.name).toBe('@nimblebraininc/echo');
     });
+
+    it('streams local file with attachment headers when storage returns a local path', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+      storage.getSignedDownloadUrlFromPath.mockResolvedValueOnce(
+        '/local/@test/mcp-server/1.0.0/linux-x64.mcpb',
+      );
+      const bundleBytes = Buffer.from('fake mcpb bytes');
+      storage.getBundle.mockResolvedValueOnce(bundleBytes);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download?os=linux&arch=x64`,
+        headers: { accept: '*/*' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('application/octet-stream');
+      expect(res.headers['content-disposition']).toBe(
+        'attachment; filename="mcp-server-1.0.0.mcpb"',
+      );
+      expect(res.rawPayload.equals(bundleBytes)).toBe(true);
+      expect(storage.getBundle).toHaveBeenCalledWith(
+        '@test/mcp-server/1.0.0/linux-x64.mcpb',
+      );
+    });
+
+    it('redirects to the signed CDN URL when storage returns an absolute URL', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+      storage.getSignedDownloadUrlFromPath.mockResolvedValueOnce(
+        'https://cdn.example.com/signed?token=xyz',
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download?os=linux&arch=x64`,
+        headers: { accept: '*/*' },
+      });
+
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe('https://cdn.example.com/signed?token=xyz');
+      expect(storage.getBundle).not.toHaveBeenCalled();
+    });
   });
 });
