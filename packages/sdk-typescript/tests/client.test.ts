@@ -719,4 +719,133 @@ describe('MpakClient', () => {
       );
     });
   });
+
+  describe('getServerDownload', () => {
+    const downloadInfo = {
+      url: 'https://storage.example.com/bundle.mcpb',
+      bundle: {
+        name: '@nimblebraininc/echo',
+        version: '0.1.6',
+        platform: { os: 'linux', arch: 'x64' },
+        sha256: 'abc123',
+        size: 17455747,
+      },
+      expires_at: '2026-04-09T12:15:00Z',
+    };
+
+    it('hits /v1/servers/{name}/versions/{version}/download with platform params', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(downloadInfo));
+
+      const result = await client.getServerDownload('@nimblebraininc/echo', '0.1.6', {
+        os: 'linux',
+        arch: 'x64',
+      });
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/v1/servers/%40nimblebraininc%2Fecho/versions/0.1.6/download');
+      expect(url).toContain('os=linux');
+      expect(url).toContain('arch=x64');
+      expect(result.url).toBe('https://storage.example.com/bundle.mcpb');
+      expect(result.bundle.sha256).toBe('abc123');
+    });
+
+    it('omits platform query when not provided', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(downloadInfo));
+
+      await client.getServerDownload('ai.nimblebrain/echo', 'latest');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/v1/servers/ai.nimblebrain%2Fecho/versions/latest/download');
+      expect(url).not.toContain('os=');
+      expect(url).not.toContain('arch=');
+    });
+
+    it('sends Accept: application/json header', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse(downloadInfo));
+
+      await client.getServerDownload('@nimblebraininc/echo', '0.1.6');
+
+      const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+      const headers = init?.headers as Record<string, string> | undefined;
+      expect(headers?.Accept).toBe('application/json');
+    });
+
+    it('throws MpakNotFoundError on 404 with name@version in the message', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('not found', { status: 404 }));
+
+      await expect(
+        client.getServerDownload('ai.nimblebrain/echo', '99.0.0'),
+      ).rejects.toThrow(/ai.nimblebrain\/echo@99\.0\.0/);
+    });
+
+    it('throws MpakNetworkError on 5xx', async () => {
+      const client = new MpakClient();
+      fetchMock.mockResolvedValueOnce(mockResponse('boom', { status: 503 }));
+      await expect(
+        client.getServerDownload('ai.nimblebrain/echo', '0.1.6'),
+      ).rejects.toThrow(MpakNetworkError);
+    });
+  });
+
+  describe('downloadServerBundle', () => {
+    const content = new TextEncoder().encode('fake mcpb bundle bytes');
+    const hash = sha256(content);
+    const downloadInfo = {
+      url: 'https://storage.example.com/bundle.mcpb',
+      bundle: {
+        name: '@nimblebraininc/echo',
+        version: '0.1.6',
+        platform: { os: 'darwin', arch: 'arm64' },
+        sha256: hash,
+        size: content.length,
+      },
+      expires_at: '2026-04-09T12:15:00Z',
+    };
+
+    it('resolves info and returns verified buffer + metadata', async () => {
+      const client = new MpakClient();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(downloadInfo))
+        .mockResolvedValueOnce(mockBinaryResponse(content));
+
+      const result = await client.downloadServerBundle('@nimblebraininc/echo', '0.1.6', {
+        os: 'darwin',
+        arch: 'arm64',
+      });
+
+      expect(new TextDecoder().decode(result.data)).toBe('fake mcpb bundle bytes');
+      expect(result.metadata.sha256).toBe(hash);
+      expect(result.metadata.name).toBe('@nimblebraininc/echo');
+    });
+
+    it('defaults version to latest and auto-detects platform', async () => {
+      const client = new MpakClient();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(downloadInfo))
+        .mockResolvedValueOnce(mockBinaryResponse(content));
+
+      await client.downloadServerBundle('ai.nimblebrain/echo');
+
+      const url = fetchMock.mock.calls[0]?.[0] as string;
+      expect(url).toContain('/versions/latest/download');
+      expect(url).toContain('os=');
+      expect(url).toContain('arch=');
+    });
+
+    it('propagates MpakIntegrityError on SHA-256 mismatch', async () => {
+      const client = new MpakClient();
+      const tampered = new TextEncoder().encode('tampered content');
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(downloadInfo))
+        .mockResolvedValueOnce(mockBinaryResponse(tampered));
+
+      await expect(
+        client.downloadServerBundle('@nimblebraininc/echo', '0.1.6'),
+      ).rejects.toThrow(MpakIntegrityError);
+    });
+  });
 });
