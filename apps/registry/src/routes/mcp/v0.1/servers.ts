@@ -14,8 +14,17 @@
  */
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { resolveReverseDnsName, type ServerDetail } from '@nimblebrain/mpak-schemas';
+import {
+  BundleDownloadParamsSchema,
+  DownloadInfoSchema,
+  resolveReverseDnsName,
+  type BundleDownloadParams,
+  type ServerDetail,
+} from '@nimblebrain/mpak-schemas';
+import { NotFoundError } from '../../../errors/index.js';
+import { toJsonSchema } from '../../../lib/zod-schema.js';
 import type { PackageForServerLookup } from '../../../db/repositories/package.repository.js';
+import { handleArtifactDownload } from '../../../services/download-handler.js';
 import { composeServerDetail } from '../../../services/server-detail-composer.js';
 
 const REGISTRY_VERSION = 'v1.0.0';
@@ -402,6 +411,60 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
         is_latest: v.version === pkg.latestVersion,
       })),
     };
+  });
+
+  // GET /servers/{name}/versions/{version}/download - Signed download
+  // URL + bundle metadata. Mirrors the legacy
+  // `/v1/bundles/.../download` shape so SDK consumers can swap base
+  // paths without changing the response handling. The `Accept` header
+  // selects JSON (CLI/API) vs an HTTP redirect (browser).
+  fastify.get<{
+    Params: { name: string; version: string };
+    Querystring: BundleDownloadParams;
+  }>('/servers/:name/versions/:version/download', {
+    schema: {
+      tags: ['mcp-registry'],
+      description:
+        'Resolve a server version to a signed CDN download URL plus the bundle\'s sha256+size. `os`+`arch` query params select per-platform artifacts; both required when either is set. Without them, returns the universal (any/any) artifact if one exists. Use "latest" as the version to alias the most recent published version.',
+      params: {
+        type: 'object',
+        required: ['name', 'version'],
+        properties: {
+          name: { type: 'string', description: 'URL-encoded server name' },
+          version: { type: 'string', description: 'Server version, or "latest"' },
+        },
+      },
+      querystring: toJsonSchema(BundleDownloadParamsSchema),
+      response: {
+        200: toJsonSchema(DownloadInfoSchema),
+        302: { type: 'null', description: 'Redirect to download URL' },
+      },
+    },
+  }, async (request, reply) => {
+    const { name: rawName, version: versionParam } = request.params;
+    const { os: queryOs, arch: queryArch } = request.query;
+
+    const pkg = await resolveByName(fastify, rawName);
+    if (!pkg) {
+      throw new NotFoundError(`Server '${decodeURIComponent(rawName)}' not found`);
+    }
+
+    const filenameBase = pkg.name.startsWith('@')
+      ? pkg.name.split('/')[1] ?? pkg.name
+      : pkg.name;
+
+    return handleArtifactDownload({
+      fastify,
+      request,
+      reply,
+      pkg,
+      versionParam,
+      queryOs,
+      queryArch,
+      filenameBase,
+      logSurface: 'servers',
+      versionNotFoundMessage: `Version '${versionParam === 'latest' ? pkg.latestVersion : versionParam}' not found for server '${pkg.name}'`,
+    });
   });
 
   // GET /health - Registry-specific health probe (counts servers).

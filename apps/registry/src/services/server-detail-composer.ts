@@ -26,7 +26,7 @@
  *                 plus fileSha256 from each artifact
  *   _meta         manifest._meta verbatim + dev.mpak/registry block
  *                 (npmName, downloads, published_at, provenance,
- *                 certification, artifacts[])
+ *                 certification, artifacts[], tools[])
  *
  * Validates the result against the Zod `ServerDetailSchema` before
  * returning. The throw-variant fails loud with the issue list when the
@@ -334,11 +334,12 @@ function readEnvMap(manifest: Record<string, unknown>): Record<string, string> {
  * Compose the `_meta` field:
  *   - every author-provided `_meta` block carried verbatim
  *   - mpak adds its own `dev.mpak/registry` block with npmName,
- *     downloads, published_at, provenance, certification, artifacts[]
+ *     downloads, published_at, provenance, certification, artifacts[],
+ *     tools[]
  */
 function composeMeta(
   input: ComposerInput,
-  _manifest: Record<string, unknown>,
+  manifest: Record<string, unknown>,
   manifestMeta: Record<string, unknown> | null,
 ): Record<string, unknown> {
   const meta: Record<string, unknown> = { ...(manifestMeta ?? {}) };
@@ -373,6 +374,25 @@ function composeMeta(
       sha256: a.digest.replace(/^sha256:/, ""),
       size: Number(a.sizeBytes),
     }));
+  }
+  // Project manifest.tools[] (mcpb v0.4 Capability[]) so consumers that
+  // moved to `/servers/{name}` retain the tool listing the legacy
+  // `/v1/bundles/{name}` response carried. Unset / non-array values are
+  // skipped — the field is optional in the manifest schema.
+  const manifestTools = manifest["tools"];
+  if (Array.isArray(manifestTools)) {
+    const projected = manifestTools
+      .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
+      .map((t) => {
+        const name = typeof t["name"] === "string" ? t["name"] : null;
+        if (!name) return null;
+        const description = typeof t["description"] === "string" ? t["description"] : undefined;
+        return description !== undefined ? { name, description } : { name };
+      })
+      .filter((t): t is { name: string; description?: string } => t !== null);
+    if (projected.length > 0) {
+      mpakBlock["tools"] = projected;
+    }
   }
   meta["dev.mpak/registry"] = mpakBlock;
   return meta;

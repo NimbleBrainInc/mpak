@@ -230,6 +230,45 @@ export class MpakClient {
     return response.json() as Promise<ServerDetail>;
   }
 
+  /**
+   * Resolve a server version to a signed download URL plus the
+   * bundle's `sha256`/`size`. Counterpart to `getBundleDownload` on
+   * the new `/v1/servers/...` surface; the response shape is
+   * identical so consumers swapping base paths get the same
+   * `DownloadInfo` back.
+   *
+   * `name` accepts both the npm-style scoped name (`@scope/pkg`) and
+   * the reverse-DNS form (`ai.nimblebrain/echo`). Passing
+   * `version = "latest"` aliases the most recent published version.
+   * Omit `platform` only when a universal (any/any) artifact exists
+   * for the server.
+   */
+  async getServerDownload(
+    name: string,
+    version: string,
+    platform?: PlatformInfo,
+  ): Promise<DownloadInfo> {
+    const params = new URLSearchParams();
+    if (platform) {
+      params.set('os', platform.os);
+      params.set('arch', platform.arch);
+    }
+    const queryString = params.toString();
+    const url = `${this.registryUrl}/v1/servers/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}/download${queryString ? `?${queryString}` : ''}`;
+
+    const response = await this.fetchWithTimeout(url, {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (response.status === 404) {
+      throw new MpakNotFoundError(`${name}@${version}`);
+    }
+    if (!response.ok) {
+      throw new MpakNetworkError(`Failed to get server download: HTTP ${response.status}`);
+    }
+    return response.json() as Promise<DownloadInfo>;
+  }
+
   // ===========================================================================
   // Skill API
   // ===========================================================================
@@ -375,6 +414,33 @@ export class MpakClient {
     const resolvedVersion = version ?? 'latest';
 
     const downloadInfo = await this.getBundleDownload(name, resolvedVersion, resolvedPlatform);
+    const data = await this.downloadContent(downloadInfo.url, downloadInfo.bundle.sha256);
+
+    return { data, metadata: downloadInfo.bundle };
+  }
+
+  /**
+   * Download a server bundle by name from the `/v1/servers/...`
+   * surface, with optional version and platform. Defaults to latest
+   * version and auto-detected platform. Verifies the bundle's
+   * sha256 before returning.
+   *
+   * @throws {MpakNotFoundError} If server not found
+   * @throws {MpakIntegrityError} If SHA-256 doesn't match
+   * @throws {MpakNetworkError} For network failures
+   */
+  async downloadServerBundle(
+    name: string,
+    version?: string,
+    platform?: PlatformInfo,
+  ): Promise<{
+    data: Uint8Array;
+    metadata: DownloadInfo['bundle'];
+  }> {
+    const resolvedPlatform = platform ?? MpakClient.detectPlatform();
+    const resolvedVersion = version ?? 'latest';
+
+    const downloadInfo = await this.getServerDownload(name, resolvedVersion, resolvedPlatform);
     const data = await this.downloadContent(downloadInfo.url, downloadInfo.bundle.sha256);
 
     return { data, metadata: downloadInfo.bundle };

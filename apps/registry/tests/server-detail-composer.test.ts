@@ -236,4 +236,30 @@ describe('composeServerDetail', () => {
       },
     ]);
   });
+
+  it('projects manifest.tools[] into _meta["dev.mpak/registry"].tools[]', () => {
+    const manifestWithTools = {
+      ...FULL_MANIFEST,
+      tools: [
+        { name: 'echo', description: 'Echoes back the input string' },
+        { name: 'reverse', description: 'Reverses the input string' },
+        { name: 'no_desc' },
+      ],
+    };
+    const detail = composeServerDetail(
+      input({ version: { manifest: manifestWithTools } as ComposerInput['version'] }),
+    );
+    const mpakMeta = detail?._meta?.['dev.mpak/registry'] as Record<string, unknown>;
+    expect(mpakMeta['tools']).toEqual([
+      { name: 'echo', description: 'Echoes back the input string' },
+      { name: 'reverse', description: 'Reverses the input string' },
+      { name: 'no_desc' },
+    ]);
+  });
+
+  it('omits tools[] from dev.mpak/registry when manifest has no tools', () => {
+    const detail = composeServerDetail(input());
+    const mpakMeta = detail?._meta?.['dev.mpak/registry'] as Record<string, unknown>;
+    expect('tools' in mpakMeta).toBe(false);
+  });
 });
