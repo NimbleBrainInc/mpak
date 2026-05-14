@@ -174,8 +174,6 @@ docker pull ghcr.io/nimblebraininc/mpak-scanner:latest
 docker run --rm -v /path/to/bundle.mcpb:/bundle.mcpb ghcr.io/nimblebraininc/mpak-scanner scan /bundle.mcpb
 ```
 
-For production deployment to ECR/K8s, see `deployments/mpak/`.
-
 ## Related Projects
 
 - [mpak registry](https://mpak.dev) - Search, download, and publish MCP bundles
