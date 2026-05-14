@@ -1,4 +1,3 @@
-import type { Artifact } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import { createHash, randomUUID } from 'crypto';
 import { createWriteStream, createReadStream, promises as fs } from 'fs';
@@ -38,6 +37,7 @@ import {
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
+import { resolveArtifact } from '../../services/artifact-resolver.js';
 
 // GitHub release asset type
 interface GitHubReleaseAsset {
@@ -63,30 +63,6 @@ const SCOPED_REGEX = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/;
 
 function isValidScopedPackageName(name: string): boolean {
   return SCOPED_REGEX.test(name);
-}
-
-/**
- * Resolve the correct artifact given optional platform query params.
- *
- * - Neither os nor arch → return the any/any (universal) artifact, or null
- * - Only one of os/arch → throws BadRequestError
- * - Both os and arch → return exact match, or null
- */
-function resolveArtifact(
-  artifacts: Artifact[],
-  os?: string,
-  arch?: string,
-): Artifact | null {
-  if ((os && !arch) || (!os && arch)) {
-    throw new BadRequestError('Both os and arch are required when specifying platform');
-  }
-
-  if (os && arch) {
-    return artifacts.find((a) => a.os === os && a.arch === arch) ?? null;
-  }
-
-  // No platform params: return universal artifact only
-  return artifacts.find((a) => a.os === 'any' && a.arch === 'any') ?? null;
 }
 
 function parsePackageName(name: string): { scope: string; packageName: string } | null {
