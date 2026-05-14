@@ -299,3 +299,107 @@ def test_get_server_version_404_raises_not_found_with_version():
         client.get_server_version("ai.nimblebrain/echo", "99.0.0")
 
     assert "ai.nimblebrain/echo@99.0.0" in str(exc_info.value)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# get_server_download — /v1/servers/{name}/versions/{version}/download
+# ─────────────────────────────────────────────────────────────────────
+
+
+_DOWNLOAD_INFO: dict = {
+    "url": "https://cdn.example.com/bundle.mcpb",
+    "bundle": {
+        "name": "@nimblebraininc/echo",
+        "version": "0.1.6",
+        "platform": {"os": "linux", "arch": "x64"},
+        "sha256": "abc123def456",
+        "size": 17455747,
+    },
+    "expires_at": "2026-04-09T12:15:00Z",
+}
+
+
+@respx.mock
+def test_get_server_download_returns_download_info():
+    """get_server_download hits the new /v1/servers/.../download endpoint."""
+    route = respx.get(
+        "https://registry.mpak.dev/v1/servers/%40nimblebraininc%2Fecho/versions/0.1.6/download",
+        params={"os": "linux", "arch": "x64"},
+    ).mock(return_value=Response(200, json=_DOWNLOAD_INFO))
+
+    client = MpakClient()
+    download = client.get_server_download(
+        "@nimblebraininc/echo", "0.1.6", platform=("linux", "x64")
+    )
+
+    assert route.called
+    assert download["url"] == "https://cdn.example.com/bundle.mcpb"
+    assert download["bundle"]["sha256"] == "abc123def456"
+    assert download["bundle"]["version"] == "0.1.6"
+
+
+@respx.mock
+def test_get_server_download_accepts_reverse_dns_name():
+    """Reverse-DNS names are URL-encoded and forwarded; the registry
+    resolves them server-side via the reverse-DNS candidate map."""
+    route = respx.get(
+        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/0.1.6/download",
+        params={"os": "linux", "arch": "x64"},
+    ).mock(return_value=Response(200, json=_DOWNLOAD_INFO))
+
+    client = MpakClient()
+    download = client.get_server_download(
+        "ai.nimblebrain/echo", "0.1.6", platform=("linux", "x64")
+    )
+
+    assert route.called
+    assert download["bundle"]["name"] == "@nimblebraininc/echo"
+
+
+@respx.mock
+def test_get_server_download_auto_detects_platform_when_omitted():
+    """Platform tuple defaults to detect_platform() output."""
+    os_name, arch = MpakClient.detect_platform()
+    route = respx.get(
+        "https://registry.mpak.dev/v1/servers/%40nimblebraininc%2Fecho/versions/latest/download",
+        params={"os": os_name, "arch": arch},
+    ).mock(return_value=Response(200, json=_DOWNLOAD_INFO))
+
+    client = MpakClient()
+    client.get_server_download("@nimblebraininc/echo")
+
+    assert route.called
+
+
+@respx.mock
+def test_get_server_download_404_raises_not_found_with_name_at_version():
+    respx.get(
+        "https://registry.mpak.dev/v1/servers/ai.nimblebrain%2Fecho/versions/99.0.0/download",
+        params={"os": "linux", "arch": "x64"},
+    ).mock(return_value=Response(404, json={"error": "Not found"}))
+
+    client = MpakClient()
+    with pytest.raises(MpakNotFoundError) as exc_info:
+        client.get_server_download(
+            "ai.nimblebrain/echo", "99.0.0", platform=("linux", "x64")
+        )
+
+    assert "ai.nimblebrain/echo@99.0.0" in str(exc_info.value)
+
+
+@respx.mock
+def test_get_server_download_500_raises_mpak_error():
+    """Non-404 HTTP errors raise MpakError with status code, not MpakNotFoundError."""
+    respx.get(
+        "https://registry.mpak.dev/v1/servers/%40nimblebraininc%2Fecho/versions/0.1.6/download",
+        params={"os": "linux", "arch": "x64"},
+    ).mock(return_value=Response(500, text="Internal Server Error"))
+
+    client = MpakClient()
+    with pytest.raises(MpakError) as exc_info:
+        client.get_server_download(
+            "@nimblebraininc/echo", "0.1.6", platform=("linux", "x64")
+        )
+
+    assert not isinstance(exc_info.value, MpakNotFoundError)
+    assert exc_info.value.status_code == 500

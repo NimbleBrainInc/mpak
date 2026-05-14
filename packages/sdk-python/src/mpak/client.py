@@ -360,6 +360,67 @@ class MpakClient:
         except httpx.RequestError as e:
             raise MpakNetworkError(f"Network error: {e}") from e
 
+    def get_server_download(
+        self,
+        name: str,
+        version: str = "latest",
+        platform: tuple[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Resolve a server version to a signed download URL and bundle metadata.
+
+        Counterpart to :meth:`get_bundle_download` on the new
+        ``/v1/servers/...`` surface. The response shape is identical
+        — ``{"url", "bundle": {...}, "expires_at"}`` — so callers
+        switching from the legacy bundle endpoint to the server
+        endpoint can drop in the new method without re-handling the
+        payload.
+
+        ``name`` accepts both the npm-style scoped name
+        (``@scope/pkg``) and the reverse-DNS form
+        (``ai.nimblebrain/echo``); the registry resolves both. Both
+        ``name`` and ``version`` are URL-encoded — see
+        :meth:`get_server` for the encoding rationale.
+
+        Args:
+            name: Server name (npm-style or reverse-DNS).
+            version: Version to download. ``"latest"`` aliases the
+                most recent published version.
+            platform: Tuple of (os, arch). If ``None``, auto-detects
+                the current platform via :meth:`detect_platform`.
+
+        Returns:
+            Raw JSON envelope from the registry — typed as ``dict``
+            for parity with :meth:`get_server` and friends.
+
+        Raises:
+            MpakNotFoundError: If the server, version, or matching
+                artifact is not found.
+            MpakNetworkError: If the network request fails.
+        """
+        if platform is None:
+            platform = detect_platform()
+        os_name, arch = platform
+
+        encoded_name = quote(name, safe="")
+        encoded_version = quote(version, safe="")
+        url = f"/v1/servers/{encoded_name}/versions/{encoded_version}/download"
+        params = {"os": os_name, "arch": arch}
+
+        try:
+            response = self._client.get(url, params=params)
+            if response.status_code == 404:
+                raise MpakNotFoundError(f"{name}@{version}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise MpakError(
+                f"HTTP {e.response.status_code}: {e.response.text}",
+                "HTTP_ERROR",
+                e.response.status_code,
+            ) from e
+        except httpx.RequestError as e:
+            raise MpakNetworkError(f"Network error: {e}") from e
+
     @staticmethod
     def _parse_package_name(package: str) -> tuple[str, str]:
         """Parse a scoped package name into scope and name.
