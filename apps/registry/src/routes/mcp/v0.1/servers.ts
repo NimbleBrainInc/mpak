@@ -14,8 +14,19 @@
  */
 
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { resolveReverseDnsName, type ServerDetail } from '@nimblebrain/mpak-schemas';
+import {
+  BundleDownloadParamsSchema,
+  DownloadInfoSchema,
+  resolveReverseDnsName,
+  type BundleDownloadParams,
+  type ServerDetail,
+} from '@nimblebrain/mpak-schemas';
+import { config } from '../../../config.js';
+import { runInTransaction } from '../../../db/index.js';
+import { NotFoundError } from '../../../errors/index.js';
+import { toJsonSchema } from '../../../lib/zod-schema.js';
 import type { PackageForServerLookup } from '../../../db/repositories/package.repository.js';
+import { resolveArtifact } from '../../../services/artifact-resolver.js';
 import { composeServerDetail } from '../../../services/server-detail-composer.js';
 
 const REGISTRY_VERSION = 'v1.0.0';
@@ -402,6 +413,113 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
         is_latest: v.version === pkg.latestVersion,
       })),
     };
+  });
+
+  // GET /servers/{name}/versions/{version}/download - Signed download
+  // URL + bundle metadata. Mirrors the legacy
+  // `/v1/bundles/.../download` shape so SDK consumers can swap base
+  // paths without changing the response handling. The `Accept` header
+  // selects JSON (CLI/API) vs an HTTP redirect (browser).
+  fastify.get<{
+    Params: { name: string; version: string };
+    Querystring: BundleDownloadParams;
+  }>('/servers/:name/versions/:version/download', {
+    schema: {
+      tags: ['mcp-registry'],
+      description:
+        'Resolve a server version to a signed CDN download URL plus the bundle\'s sha256+size. `os`+`arch` query params select per-platform artifacts; both required when either is set. Without them, returns the universal (any/any) artifact if one exists. Use "latest" as the version to alias the most recent published version.',
+      params: {
+        type: 'object',
+        required: ['name', 'version'],
+        properties: {
+          name: { type: 'string', description: 'URL-encoded server name' },
+          version: { type: 'string', description: 'Server version, or "latest"' },
+        },
+      },
+      querystring: toJsonSchema(BundleDownloadParamsSchema),
+      response: {
+        200: toJsonSchema(DownloadInfoSchema),
+        302: { type: 'null', description: 'Redirect to download URL' },
+      },
+    },
+  }, async (request, reply) => {
+    const { name: rawName, version: versionParam } = request.params;
+    const { os: queryOs, arch: queryArch } = request.query;
+
+    const pkg = await resolveByName(fastify, rawName);
+    if (!pkg) {
+      throw new NotFoundError(`Server '${decodeURIComponent(rawName)}' not found`);
+    }
+
+    // Resolve "latest" to the actual version (pkg.latestVersion).
+    const resolvedVersion = versionParam === 'latest' ? pkg.latestVersion : versionParam;
+
+    const { packages: packageRepo } = fastify.repositories;
+    const packageVersion = await packageRepo.findVersionWithArtifacts(pkg.id, resolvedVersion);
+    if (!packageVersion) {
+      throw new NotFoundError(`Version '${resolvedVersion}' not found for server '${pkg.name}'`);
+    }
+
+    // resolveArtifact throws BadRequestError when only one of os/arch
+    // is supplied — Fastify converts that into a 400.
+    const artifact = resolveArtifact(packageVersion.artifacts, queryOs, queryArch);
+    if (!artifact) {
+      throw new NotFoundError('No artifact found for the requested platform');
+    }
+
+    const platform = artifact.os === 'any' ? 'universal' : `${artifact.os}-${artifact.arch}`;
+    fastify.log.info({
+      op: 'download',
+      pkg: pkg.name,
+      version: resolvedVersion,
+      platform,
+      surface: 'servers',
+    }, `download (servers): ${pkg.name}@${resolvedVersion} (${platform})`);
+
+    // Best-effort download count bumps — failures get logged but never
+    // block the response (mirrors the legacy /v1/bundles handler).
+    void runInTransaction(async (tx) => {
+      await packageRepo.incrementArtifactDownloads(artifact.id, tx);
+      await packageRepo.incrementVersionDownloads(pkg.id, resolvedVersion, tx);
+      await packageRepo.incrementDownloads(pkg.id, tx);
+    }).catch((err: unknown) =>
+      fastify.log.error({ err }, 'Failed to update download counts'),
+    );
+
+    const acceptHeader = request.headers.accept ?? '';
+    const wantsJson = acceptHeader.includes('application/json');
+
+    const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
+
+    if (wantsJson) {
+      const expiresAt = new Date();
+      expiresAt.setSeconds(
+        expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
+      );
+      return {
+        url: downloadUrl,
+        bundle: {
+          name: pkg.name,
+          version: resolvedVersion,
+          platform: { os: artifact.os, arch: artifact.arch },
+          sha256: artifact.digest.replace('sha256:', ''),
+          size: Number(artifact.sizeBytes),
+        },
+        expires_at: expiresAt.toISOString(),
+      };
+    }
+
+    // Browser-style download: stream local files directly; redirect to
+    // signed CDN URLs in S3/CloudFront mode.
+    if (downloadUrl.startsWith('/')) {
+      const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
+      const npmPart = pkg.name.startsWith('@') ? pkg.name.split('/')[1] ?? pkg.name : pkg.name;
+      return reply
+        .header('Content-Type', 'application/octet-stream')
+        .header('Content-Disposition', `attachment; filename="${npmPart}-${resolvedVersion}.mcpb"`)
+        .send(fileBuffer);
+    }
+    return reply.code(302).redirect(downloadUrl);
   });
 
   // GET /health - Registry-specific health probe (counts servers).

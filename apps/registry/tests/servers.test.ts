@@ -35,9 +35,11 @@ vi.mock('../src/db/index.js', () => ({
 
 import {
   createMockPackageRepo,
+  createMockStorage,
   mockArtifact,
   mockPackage,
   mockVersion,
+  mockVersionWithArtifacts,
 } from './helpers.js';
 import { errorHandler } from '../src/errors/middleware.js';
 
@@ -66,9 +68,11 @@ function lookupRow(
 describe('MCP Registry routes', () => {
   let app: FastifyInstance;
   let packageRepo: ReturnType<typeof createMockPackageRepo>;
+  let storage: ReturnType<typeof createMockStorage>;
 
   beforeAll(async () => {
     packageRepo = createMockPackageRepo();
+    storage = createMockStorage();
     app = Fastify({ logger: false });
     app.setReplySerializer((payload) => JSON.stringify(payload));
     await app.register(sensible);
@@ -79,6 +83,7 @@ describe('MCP Registry routes', () => {
       users: {},
       skills: {},
     });
+    app.decorate('storage', storage);
 
     const { mcpRegistryRoutes } = await import('../src/routes/mcp/v0.1/servers.js');
     await app.register(mcpRegistryRoutes);
@@ -365,6 +370,169 @@ describe('MCP Registry routes', () => {
       expect(body.name).toBe('@test/mcp-server');
       expect(body.versions[0].version).toBe('1.0.0');
       expect(body.versions[0].is_latest).toBe(true);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // GET /servers/{name}/versions/{version}/download
+  // ─────────────────────────────────────────────────────────────────
+
+  describe('GET /servers/{name}/versions/{version}/download', () => {
+    const NAME_ENCODED = encodeURIComponent('@test/mcp-server');
+
+    it('returns JSON download info when Accept: application/json', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download?os=linux&arch=x64`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.url).toBe('https://cdn.example.com/signed');
+      expect(body.bundle.name).toBe('@test/mcp-server');
+      expect(body.bundle.version).toBe('1.0.0');
+      expect(body.bundle.platform).toEqual({ os: 'linux', arch: 'x64' });
+      expect(body.bundle.sha256).toBe('abc123');
+      expect(body.expires_at).toBeDefined();
+    });
+
+    it('resolves "latest" to the actual latest version', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/latest/download?os=linux&arch=x64`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      // findVersionWithArtifacts called with the resolved latest version
+      expect(packageRepo.findVersionWithArtifacts).toHaveBeenCalledWith('pkg-001', '1.0.0');
+    });
+
+    it('returns 404 when the package is unknown', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${encodeURIComponent('@test/nope')}/versions/1.0.0/download`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 404 when the version is unknown', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(null);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/9.9.9/download?os=linux&arch=x64`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 404 when no artifact matches the requested platform', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce({
+        ...mockVersion,
+        artifacts: [],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 400 when only os is provided without arch', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download?os=linux`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when only arch is provided without os', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(mockVersionWithArtifacts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download?arch=x64`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 200 with any/any artifact when no platform params are provided', async () => {
+      const anyArtifact = {
+        ...mockArtifact,
+        id: 'art-any',
+        os: 'any',
+        arch: 'any',
+        storagePath: '@test/mcp-server/1.0.0/any-any.mcpb',
+      };
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(lookupRow());
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce({
+        ...mockVersion,
+        artifacts: [anyArtifact],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${NAME_ENCODED}/versions/1.0.0/download`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.bundle.platform).toEqual({ os: 'any', arch: 'any' });
+    });
+
+    it('resolves a reverse-DNS name to its npm-style origin', async () => {
+      // Reverse-DNS form `ai.nimblebrain/echo` → `@nimblebraininc/echo`
+      const pkg = {
+        ...mockPackage,
+        id: 'pkg-nb',
+        name: '@nimblebraininc/echo',
+        latestVersion: '0.1.0',
+      };
+      const ver = { ...mockVersion, packageId: 'pkg-nb', version: '0.1.0' };
+      const verWithArts = { ...ver, artifacts: [mockArtifact] };
+      // resolveByName performs a direct lookup first; that misses for the
+      // reverse-DNS form, then falls back to candidate lookups.
+      packageRepo.findPackageForServerLookup
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ ...pkg, versions: [{ ...ver, artifacts: [], securityScans: [] }] });
+      packageRepo.findVersionWithArtifacts.mockResolvedValueOnce(verWithArts);
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${encodeURIComponent('ai.nimblebrain/echo')}/versions/0.1.0/download?os=linux&arch=x64`,
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.bundle.name).toBe('@nimblebraininc/echo');
     });
   });
 });
