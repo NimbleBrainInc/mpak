@@ -293,6 +293,8 @@ export class Mpak {
       );
     }
 
+    this.bundleCache.evictOtherLocalBundles(manifest.name, hash);
+
     return { cacheDir, name: manifest.name, version: manifest.version, manifest };
   }
 

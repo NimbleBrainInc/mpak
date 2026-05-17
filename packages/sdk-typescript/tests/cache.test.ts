@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MpakBundleCache } from '../src/cache.js';
-import type { MpakClient } from '../src/client.js';
+import { MpakClient } from '../src/client.js';
 import { MpakCacheCorruptedError } from '../src/errors.js';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,7 @@ describe('MpakBundleCache', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(testDir, { recursive: true, force: true });
   });
 
@@ -299,12 +300,12 @@ describe('MpakBundleCache', () => {
   // -------------------------------------------------------------------------
 
   describe('checkForUpdate', () => {
-    it('returns null when bundle is not cached', async () => {
+    it('returns up-to-date when bundle is not cached', async () => {
       const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
     });
 
-    it('returns latest version when update is available', async () => {
+    it('returns update-available with latest version when update exists', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '2.0.0' }),
       });
@@ -314,10 +315,11 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBe('2.0.0');
+      const result = await cache.checkForUpdate('@scope/name');
+      expect(result).toEqual({ status: 'update-available', latestVersion: '2.0.0' });
     });
 
-    it('returns null when already up to date', async () => {
+    it('returns up-to-date when already on latest version', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
       });
@@ -327,10 +329,10 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
     });
 
-    it('returns null when within TTL window', async () => {
+    it('returns up-to-date within TTL window without calling registry', async () => {
       const client = mockClient({
         getBundle: vi.fn(),
       });
@@ -343,12 +345,11 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
-      // Should not have called the API
+      expect((await cache.checkForUpdate('@scope/name')).status).toBe('up-to-date');
       expect(client.getBundle).not.toHaveBeenCalled();
     });
 
-    it('returns null on network error', async () => {
+    it('returns check-failed with reason on network error', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockRejectedValue(new Error('network down')),
       });
@@ -358,7 +359,8 @@ describe('MpakBundleCache', () => {
         metadata: validMetadata,
       });
 
-      expect(await cache.checkForUpdate('@scope/name')).toBeNull();
+      const result = await cache.checkForUpdate('@scope/name');
+      expect(result).toEqual({ status: 'check-failed', reason: 'network down' });
     });
 
     it('bypasses TTL when force is true', async () => {
@@ -374,11 +376,12 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBe('2.0.0');
+      const result = await cache.checkForUpdate('@scope/name', { force: true });
+      expect(result).toEqual({ status: 'update-available', latestVersion: '2.0.0' });
       expect(client.getBundle).toHaveBeenCalledWith('@scope/name');
     });
 
-    it('returns null when force is true but already up to date', async () => {
+    it('returns up-to-date when force is true but already on latest version', async () => {
       const client = mockClient({
         getBundle: vi.fn().mockResolvedValue({ latest_version: '1.0.0' }),
       });
@@ -391,7 +394,9 @@ describe('MpakBundleCache', () => {
         },
       });
 
-      expect(await cache.checkForUpdate('@scope/name', { force: true })).toBeNull();
+      expect((await cache.checkForUpdate('@scope/name', { force: true })).status).toBe(
+        'up-to-date',
+      );
     });
 
     it('updates lastCheckedAt after successful check', async () => {
@@ -408,6 +413,155 @@ describe('MpakBundleCache', () => {
 
       const meta = cache.getBundleMetadata('@scope/name');
       expect(meta?.lastCheckedAt).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // loadBundle — platform guard fixes (#78)
+  // -------------------------------------------------------------------------
+
+  describe('loadBundle', () => {
+    const fakeDownloadInfo = {
+      url: 'https://example.com/bundle.mcpb',
+      bundle: {
+        name: '@scope/name',
+        version: '1.0.0',
+        platform: { os: 'linux', arch: 'x64' },
+        sha256: 'deadbeef',
+        size: 1000,
+      },
+    };
+
+    it('re-downloads when cached platform does not match current platform', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn().mockResolvedValue(fakeDownloadInfo),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host is linux/x64
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'linux', arch: 'x64' });
+      vi.spyOn(cache as any, 'downloadAndExtract').mockResolvedValue(undefined);
+
+      await cache.loadBundle('@scope/name');
+
+      expect(client.getBundleDownload).toHaveBeenCalled();
+    });
+
+    it('uses cache and skips registry when platform and version match', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn(),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host is also darwin/arm64
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'darwin', arch: 'arm64' });
+
+      await cache.loadBundle('@scope/name');
+
+      expect(client.getBundleDownload).not.toHaveBeenCalled();
+    });
+
+    it('re-downloads when force is true even if platform and version match', async () => {
+      const client = mockClient({
+        getBundleDownload: vi.fn().mockResolvedValue(fakeDownloadInfo),
+      });
+      const cache = new MpakBundleCache(client, { mpakHome: testDir });
+
+      // Cache has darwin/arm64
+      seedCacheEntry(testDir, 'scope-name', { manifest: validManifest, metadata: validMetadata });
+
+      // Host matches cache platform
+      vi.spyOn(MpakClient, 'detectPlatform').mockReturnValue({ os: 'darwin', arch: 'arm64' });
+      vi.spyOn(cache as any, 'downloadAndExtract').mockResolvedValue(undefined);
+
+      await cache.loadBundle('@scope/name', { force: true });
+
+      expect(client.getBundleDownload).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getCacheInfo
+  // -------------------------------------------------------------------------
+
+  describe('getCacheInfo', () => {
+    it('returns empty lists when cache does not exist', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const info = cache.getCacheInfo();
+      expect(info.registryBundles).toEqual([]);
+      expect(info.localBundles).toEqual([]);
+      expect(info.totalBytes).toBe(0);
+    });
+
+    it('reports registry bundles with size', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const dir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+      writeFileSync(join(dir, 'index.js'), 'x'.repeat(100));
+
+      const info = cache.getCacheInfo();
+
+      expect(info.registryBundles).toHaveLength(1);
+      expect(info.registryBundles[0].name).toBe('@scope/name');
+      expect(info.registryBundles[0].version).toBe('1.0.0');
+      expect(info.registryBundles[0].bytes).toBeGreaterThan(0);
+    });
+
+    it('reports local bundles with size', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const localDir = join(testDir, 'cache', '_local', 'abc123');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(
+        join(localDir, '.mpak-local-meta.json'),
+        JSON.stringify({ localPath: '/some/bundle.mcpb', extractedAt: '2026-05-10T00:00:00.000Z' }),
+      );
+      writeFileSync(join(localDir, 'index.js'), 'x'.repeat(200));
+
+      const info = cache.getCacheInfo();
+
+      expect(info.localBundles).toHaveLength(1);
+      expect(info.localBundles[0].hash).toBe('abc123');
+      expect(info.localBundles[0].localPath).toBe('/some/bundle.mcpb');
+      expect(info.localBundles[0].bytes).toBeGreaterThan(0);
+    });
+
+    it('totalBytes is the sum of all entries', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+
+      const registryDir = seedCacheEntry(testDir, 'scope-name', {
+        manifest: validManifest,
+        metadata: validMetadata,
+      });
+      writeFileSync(join(registryDir, 'data.bin'), Buffer.alloc(500));
+
+      const localDir = join(testDir, 'cache', '_local', 'def456');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(
+        join(localDir, '.mpak-local-meta.json'),
+        JSON.stringify({ localPath: '/some/bundle.mcpb', extractedAt: '2026-05-10T00:00:00.000Z' }),
+      );
+      writeFileSync(join(localDir, 'data.bin'), Buffer.alloc(300));
+
+      const info = cache.getCacheInfo();
+      expect(info.totalBytes).toBe(info.registryBundles[0].bytes + info.localBundles[0].bytes);
+    });
+
+    it('skips local entries with missing or corrupt meta', () => {
+      const cache = new MpakBundleCache(mockClient(), { mpakHome: testDir });
+      const localDir = join(testDir, 'cache', '_local', 'corrupt');
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(join(localDir, '.mpak-local-meta.json'), 'not json');
+
+      const info = cache.getCacheInfo();
+      expect(info.localBundles).toHaveLength(0);
     });
   });
 });

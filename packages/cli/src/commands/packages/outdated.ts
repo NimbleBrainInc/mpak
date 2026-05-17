@@ -24,20 +24,16 @@ export async function getOutdatedBundles(): Promise<OutdatedEntry[]> {
 
   await Promise.all(
     cached.map(async (bundle) => {
-      try {
-        const latest = await mpak.bundleCache.checkForUpdate(bundle.name, { force: true });
-        if (latest) {
-          results.push({
-            name: bundle.name,
-            current: bundle.version,
-            latest,
-            pulledAt: bundle.pulledAt,
-          });
-        }
-      } catch {
-        process.stderr.write(
-          `=> Warning: could not check ${bundle.name} (may have been removed from registry)\n`,
-        );
+      const result = await mpak.bundleCache.checkForUpdate(bundle.name, { force: true });
+      if (result.status === 'update-available') {
+        results.push({
+          name: bundle.name,
+          current: bundle.version,
+          latest: result.latestVersion,
+          pulledAt: bundle.pulledAt,
+        });
+      } else if (result.status === 'check-failed') {
+        process.stderr.write(`=> Warning: could not check ${bundle.name}: ${result.reason}\n`);
       }
     }),
   );

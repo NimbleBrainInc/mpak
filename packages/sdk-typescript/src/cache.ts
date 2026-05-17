@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -11,7 +11,38 @@ import type {
 import { CacheMetadataSchema, McpbManifestSchema } from '@nimblebrain/mpak-schemas';
 import { MpakClient } from './client.js';
 import { MpakCacheCorruptedError } from './errors.js';
-import { extractZip, isSemverEqual, readJsonFromFile, UPDATE_CHECK_TTL_MS } from './helpers.js';
+import {
+  dirSizeBytes,
+  extractZip,
+  isSemverEqual,
+  readJsonFromFile,
+  UPDATE_CHECK_TTL_MS,
+} from './helpers.js';
+
+export type UpdateCheckResult =
+  | { status: 'up-to-date' }
+  | { status: 'update-available'; latestVersion: string }
+  | { status: 'check-failed'; reason: string };
+
+export interface RegistryCacheEntry {
+  name: string;
+  version: string;
+  pulledAt: string;
+  bytes: number;
+}
+
+export interface LocalCacheEntry {
+  hash: string;
+  localPath: string;
+  extractedAt: string;
+  bytes: number;
+}
+
+export interface CacheInfo {
+  registryBundles: RegistryCacheEntry[];
+  localBundles: LocalCacheEntry[];
+  totalBytes: number;
+}
 
 export interface MpakBundleCacheOptions {
   mpakHome?: string;
@@ -152,6 +183,78 @@ export class MpakBundleCache {
   }
 
   /**
+   * Evict all `_local/` entries for the same bundle name except the current one.
+   * Called after a local bundle is prepared so stale entries from previous path-keyed
+   * extractions (e.g. v0.1.0 → v0.1.1 renames) don't accumulate on disk.
+   */
+  evictOtherLocalBundles(bundleName: string, currentHash: string): void {
+    const localDir = join(this.cacheHome, '_local');
+    if (!existsSync(localDir)) return;
+
+    for (const entry of readdirSync(localDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === currentHash) continue;
+      try {
+        const manifest = readJsonFromFile(
+          join(localDir, entry.name, 'manifest.json'),
+          McpbManifestSchema,
+        );
+        if (manifest.name === bundleName) {
+          rmSync(join(localDir, entry.name), { recursive: true, force: true });
+        }
+      } catch {
+        // corrupt or missing manifest — skip
+      }
+    }
+  }
+
+  /**
+   * Return a snapshot of everything in the cache: registry bundles, local bundles,
+   * and their disk usage. Skips entries with missing or corrupt metadata.
+   */
+  getCacheInfo(): CacheInfo {
+    const registryBundles: RegistryCacheEntry[] = [];
+    const localBundles: LocalCacheEntry[] = [];
+
+    for (const bundle of this.listCachedBundles()) {
+      registryBundles.push({
+        name: bundle.name,
+        version: bundle.version,
+        pulledAt: bundle.pulledAt,
+        bytes: dirSizeBytes(bundle.cacheDir),
+      });
+    }
+
+    const localDir = join(this.cacheHome, '_local');
+    if (existsSync(localDir)) {
+      for (const entry of readdirSync(localDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const entryDir = join(localDir, entry.name);
+        try {
+          const raw = JSON.parse(readFileSync(join(entryDir, '.mpak-local-meta.json'), 'utf8')) as {
+            localPath?: string;
+            extractedAt?: string;
+          };
+          if (!raw.localPath || !raw.extractedAt) continue;
+          localBundles.push({
+            hash: entry.name,
+            localPath: raw.localPath,
+            extractedAt: raw.extractedAt,
+            bytes: dirSizeBytes(entryDir),
+          });
+        } catch {
+          // corrupt or missing meta — skip
+        }
+      }
+    }
+
+    const totalBytes =
+      registryBundles.reduce((s, b) => s + b.bytes, 0) +
+      localBundles.reduce((s, b) => s + b.bytes, 0);
+
+    return { registryBundles, localBundles, totalBytes };
+  }
+
+  /**
    * Remove a cached bundle from disk.
    * @returns `true` if the bundle was cached and removed, `false` if it wasn't cached.
    */
@@ -183,7 +286,9 @@ export class MpakBundleCache {
     options?: { version?: string; force?: boolean },
   ): Promise<{ cacheDir: string; version: string; pulled: boolean }> {
     const { version: requestedVersion, force = false } = options ?? {};
+
     const cacheDir = this.getBundleCacheDirName(name);
+    const platform = MpakClient.detectPlatform();
 
     let cachedMeta: CacheMetadata | null = null;
     try {
@@ -203,13 +308,14 @@ export class MpakBundleCache {
     if (
       !options?.force &&
       !!cachedMeta &&
+      cachedMeta.platform.os === platform.os &&
+      cachedMeta.platform.arch === platform.arch &&
       (!requestedVersion || isSemverEqual(cachedMeta.version, requestedVersion))
     ) {
       return { cacheDir, version: cachedMeta.version, pulled: false };
     }
 
     // Get download info from registry
-    const platform = MpakClient.detectPlatform();
     const downloadInfo = await this.mpakClient.getBundleDownload(
       name,
       requestedVersion ?? 'latest',
@@ -217,7 +323,13 @@ export class MpakBundleCache {
     );
 
     // Registry resolved to the same version we already have — skip download
-    if (!force && cachedMeta && isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)) {
+    if (
+      !force &&
+      cachedMeta &&
+      cachedMeta.platform.os === platform.os &&
+      cachedMeta.platform.arch === platform.arch &&
+      isSemverEqual(cachedMeta.version, downloadInfo.bundle.version)
+    ) {
       // Update lastCheckedAt since we just verified with the registry
       this.writeCacheMetadata(name, {
         ...cachedMeta,
@@ -232,22 +344,28 @@ export class MpakBundleCache {
   }
 
   /**
-   * Fire-and-forget background check for bundle updates.
-   * Return the latest version string if an update is available, null otherwise (not cached, skipped, up-to-date, or error).
-   * The caller can just check `if (result) { console.log("update available: " + result) }`
+   * Check whether a newer version of a cached bundle is available in the registry.
+   *
+   * Returns a discriminated union so callers can distinguish "up to date",
+   * "update available", and "check failed" — unlike a `string | null` return
+   * where `null` is ambiguous between "up to date" and "network error".
+   *
    * @param packageName - Scoped package name (e.g. `@scope/bundle`)
    */
-  async checkForUpdate(packageName: string, options?: { force?: boolean }): Promise<string | null> {
-    const cachedMeta = this.getBundleMetadata(packageName);
-    if (!cachedMeta) return null;
-
-    // Skip if checked within the TTL (unless force is set)
-    if (!options?.force && cachedMeta.lastCheckedAt) {
-      const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
-      if (elapsed < UPDATE_CHECK_TTL_MS) return null;
-    }
-
+  async checkForUpdate(
+    packageName: string,
+    options?: { force?: boolean },
+  ): Promise<UpdateCheckResult> {
     try {
+      const cachedMeta = this.getBundleMetadata(packageName);
+      if (!cachedMeta) return { status: 'up-to-date' };
+
+      // Skip if checked within the TTL (unless force is set)
+      if (!options?.force && cachedMeta.lastCheckedAt) {
+        const elapsed = Date.now() - new Date(cachedMeta.lastCheckedAt).getTime();
+        if (elapsed < UPDATE_CHECK_TTL_MS) return { status: 'up-to-date' };
+      }
+
       const detail = await this.mpakClient.getBundle(packageName);
 
       // Update lastCheckedAt regardless of whether there's an update
@@ -257,12 +375,47 @@ export class MpakBundleCache {
       });
 
       if (!isSemverEqual(detail.latest_version, cachedMeta.version)) {
-        return detail.latest_version;
+        return { status: 'update-available', latestVersion: detail.latest_version };
       }
 
-      return null;
-    } catch {
-      return null;
+      return { status: 'up-to-date' };
+    } catch (err) {
+      return {
+        status: 'check-failed',
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /**
+   * Extract pre-downloaded bundle bytes into the cache.
+   * Use this when bytes are already in memory (e.g. after `bundle pull`) to
+   * avoid a second download.
+   */
+  async extractBundle(
+    name: string,
+    data: Uint8Array,
+    bundle: DownloadInfo['bundle'],
+  ): Promise<void> {
+    const cacheDir = this.getBundleCacheDirName(name);
+    const tempPath = join(tmpdir(), `mpak-${Date.now()}-${randomUUID().slice(0, 8)}.mcpb`);
+
+    try {
+      writeFileSync(tempPath, data);
+
+      if (existsSync(cacheDir)) {
+        rmSync(cacheDir, { recursive: true, force: true });
+      }
+
+      await extractZip(tempPath, cacheDir, this.extractOptions());
+
+      this.writeCacheMetadata(name, {
+        version: bundle.version,
+        pulledAt: new Date().toISOString(),
+        platform: bundle.platform,
+      });
+    } finally {
+      rmSync(tempPath, { force: true });
     }
   }
 

@@ -30,6 +30,7 @@ let stdout: string;
 let stderr: string;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   stdout = '';
   stderr = '';
   vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
@@ -138,7 +139,9 @@ describe('handleUpdate — bulk update', () => {
       },
     ]);
     mockCheckForUpdate.mockImplementation(async (name: string) => {
-      return name === '@scope/a' ? '2.0.0' : '3.0.0';
+      return name === '@scope/a'
+        ? { status: 'update-available', latestVersion: '2.0.0' }
+        : { status: 'update-available', latestVersion: '3.0.0' };
     });
     mockLoadBundle.mockImplementation(async (name: string) => {
       const versions: Record<string, string> = { '@scope/a': '2.0.0', '@scope/b': '3.0.0' };
@@ -168,7 +171,7 @@ describe('handleUpdate — bulk update', () => {
         cacheDir: '/cache/bad',
       },
     ]);
-    mockCheckForUpdate.mockImplementation(async () => '2.0.0');
+    mockCheckForUpdate.mockResolvedValue({ status: 'update-available', latestVersion: '2.0.0' });
     mockLoadBundle.mockImplementation(async (name: string) => {
       if (name === '@scope/bad') throw new MpakNotFoundError('@scope/bad@latest');
       return { cacheDir: '/cache/good', version: '2.0.0', pulled: true };
@@ -189,13 +192,32 @@ describe('handleUpdate — bulk update', () => {
         cacheDir: '/cache/a',
       },
     ]);
-    mockCheckForUpdate.mockResolvedValue('2.0.0');
+    mockCheckForUpdate.mockResolvedValue({ status: 'update-available', latestVersion: '2.0.0' });
     mockLoadBundle.mockRejectedValue(new MpakNetworkError('timeout'));
 
     await expect(handleUpdate(undefined)).rejects.toThrow('process.exit called');
 
     expect(stderr).toContain('Failed to update @scope/a');
     expect(stderr).toContain('All updates failed');
+  });
+
+  it('warns and skips bundles whose update check fails', async () => {
+    mockListCachedBundles.mockReturnValue([
+      {
+        name: '@scope/a',
+        version: '1.0.0',
+        pulledAt: '2025-01-01T00:00:00.000Z',
+        cacheDir: '/cache/a',
+      },
+    ]);
+    mockCheckForUpdate.mockResolvedValue({ status: 'check-failed', reason: 'timeout' });
+
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await handleUpdate(undefined);
+
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('could not check @scope/a'));
+    expect(mockLoadBundle).not.toHaveBeenCalled();
   });
 
   it('outputs JSON for bulk update with --json', async () => {
@@ -207,7 +229,7 @@ describe('handleUpdate — bulk update', () => {
         cacheDir: '/cache/a',
       },
     ]);
-    mockCheckForUpdate.mockResolvedValue('2.0.0');
+    mockCheckForUpdate.mockResolvedValue({ status: 'update-available', latestVersion: '2.0.0' });
     mockLoadBundle.mockResolvedValue({ cacheDir: '/cache/a', version: '2.0.0', pulled: true });
 
     await handleUpdate(undefined, { json: true });

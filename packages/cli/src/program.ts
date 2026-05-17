@@ -23,6 +23,7 @@ import {
   handleSkillInstall,
   handleSkillList,
 } from "./commands/skills/index.js";
+import { handleCacheInfo, handleCacheClear } from "./commands/cache/index.js";
 
 /**
  * Creates and configures the CLI program
@@ -262,6 +263,28 @@ export function createProgram(): Command {
     .description("Clear config for a package (all values or specific key)")
     .action(async (packageName, key) => {
       await handleConfigClear(packageName, key);
+    });
+
+  // ==========================================================================
+  // Cache commands
+  // ==========================================================================
+
+  const cache = program.command("cache").description("Manage the local bundle cache");
+
+  cache
+    .command("info")
+    .description("Show cache contents and disk usage")
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      await handleCacheInfo(options);
+    });
+
+  cache
+    .command("clear")
+    .description("Delete all cached bundles and free disk space")
+    .option("--force", "Skip confirmation prompt")
+    .action(async (options) => {
+      await handleCacheClear(options);
     });
 
   // ==========================================================================
