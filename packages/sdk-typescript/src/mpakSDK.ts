@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { McpbManifest } from '@nimblebrain/mpak-schemas';
@@ -13,6 +12,8 @@ import {
   localBundleNeedsExtract,
   readJsonFromFile,
 } from './helpers.js';
+import { resolvePython } from './python-resolver.js';
+import { resolveUv } from './uv-resolver.js';
 import type { MpakClientConfig } from './types.js';
 
 /**
@@ -38,6 +39,22 @@ export interface MpakOptions {
    * policy.
    */
   maxUncompressedSize?: number;
+  /**
+   * Override the Python interpreter probe used by `type: "python"` bundles.
+   *
+   * Production callers omit this — the resolver spawns the real binary to
+   * read `sys.implementation.cache_tag`. Tests inject a stub so the suite
+   * doesn't depend on which Python is on the runner's PATH.
+   */
+  pythonProbe?: (command: string) => { cacheTag: string; version: string } | null;
+  /**
+   * Override the `uv --version` probe used by `type: "uv"` bundles.
+   *
+   * Production callers omit this — the resolver spawns the real binary to
+   * confirm uv is installed. Tests inject a stub so the suite doesn't
+   * depend on whether uv is on the runner's PATH.
+   */
+  uvProbe?: (command: string) => { version: string } | null;
 }
 
 /**
@@ -132,6 +149,10 @@ export class Mpak {
   readonly client: MpakClient;
   /** Local bundle cache. */
   readonly bundleCache: MpakBundleCache;
+  /** Optional probe override for `type: "python"` resolution (test seam). */
+  private readonly pythonProbe: MpakOptions['pythonProbe'];
+  /** Optional probe override for `type: "uv"` resolution (test seam). */
+  private readonly uvProbe: MpakOptions['uvProbe'];
 
   constructor(options?: MpakOptions) {
     // initialize config
@@ -156,6 +177,9 @@ export class Mpak {
       cacheOptions.maxUncompressedSize = options.maxUncompressedSize;
     }
     this.bundleCache = new MpakBundleCache(this.client, cacheOptions);
+
+    this.pythonProbe = options?.pythonProbe;
+    this.uvProbe = options?.uvProbe;
   }
 
   /**
@@ -391,12 +415,16 @@ export class Mpak {
   /**
    * Resolve the manifest's `server` block into a spawnable command, args, and env.
    *
-   * Handles three server types:
+   * Handles four server types:
    * - **binary** — runs the compiled executable at `entry_point`, chmod'd +x.
    * - **node** — runs `mcp_config.command` (default `"node"`) with `mcp_config.args`,
    *   or falls back to `node <entry_point>` when args are empty.
-   * - **python** — like node, but resolves `python3`/`python` at runtime and
-   *   prepends `<cacheDir>/deps` to `PYTHONPATH` for bundled dependencies.
+   * - **python** — single-probe interpreter resolution via {@link resolvePython}
+   *   (MPAK_PYTHON > manifest command > `python3`), ABI-validated against the
+   *   bundle's compiled extensions and `compatibility.runtimes.python`. Prepends
+   *   `<cacheDir>/deps` to `PYTHONPATH` for bundled dependencies.
+   * - **uv** — invokes uv to provision Python and install deps from
+   *   `pyproject.toml` (default args: `run --directory <cacheDir> <entry_point>`).
    *
    * All `${__dirname}` placeholders in args are replaced with `cacheDir`.
    * All `${user_config.*}` placeholders in env are replaced with gathered user values.
@@ -408,7 +436,12 @@ export class Mpak {
     cacheDir: string,
     userConfigValues: Record<string, string>,
   ): { command: string; args: string[]; env: Record<string, string> } {
-    const { type, entry_point, mcp_config } = manifest.server;
+    const { type, entry_point } = manifest.server;
+    // `mcp_config` is optional (MCPB v0.4 lets `type: "uv"` bundles omit it);
+    // normalize to an empty object so each case can reach for command/args/env
+    // without re-guarding undefined.
+    const mcp_config = manifest.server.mcp_config ?? {};
+    const userArgs = mcp_config.args ?? [];
 
     // Substitute user_config placeholders in manifest env
     const env = Mpak.substituteEnvVars(mcp_config.env, userConfigValues);
@@ -419,7 +452,7 @@ export class Mpak {
     switch (type) {
       case 'binary': {
         command = join(cacheDir, entry_point);
-        args = Mpak.resolveArgs(mcp_config.args ?? [], cacheDir);
+        args = Mpak.resolveArgs(userArgs, cacheDir);
         try {
           chmodSync(command, 0o755);
         } catch {
@@ -431,20 +464,35 @@ export class Mpak {
       case 'node': {
         command = mcp_config.command || 'node';
         args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+          userArgs.length > 0
+            ? Mpak.resolveArgs(userArgs, cacheDir)
             : [join(cacheDir, entry_point)];
         break;
       }
 
       case 'python': {
-        command =
-          mcp_config.command === 'python'
-            ? Mpak.findPythonCommand()
-            : mcp_config.command || Mpak.findPythonCommand();
+        // No candidate-name parade: ABI-validate exactly one interpreter
+        // (MPAK_PYTHON env > manifest command > "python3"). Throws with an
+        // actionable message — including how to set MPAK_PYTHON — when the
+        // chosen interpreter doesn't match the bundle's compiled deps or the
+        // manifest's declared `compatibility.runtimes.python` range.
+        const resolved = resolvePython({
+          cacheDir,
+          manifestCommand: mcp_config.command,
+          declaredRange: manifest.compatibility?.runtimes?.python,
+          env: process.env,
+          ...(this.pythonProbe ? { probe: this.pythonProbe } : {}),
+        });
+        command = resolved.command;
+        // One stderr line at startup so users never have to ask "which Python
+        // is mpak actually running?". Removes the entire class of issue #90
+        // debug sessions.
+        process.stderr.write(
+          `[mpak] python: ${resolved.command} (${resolved.version}, ${resolved.cacheTag}) via ${resolved.source}\n`,
+        );
         args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
+          userArgs.length > 0
+            ? Mpak.resolveArgs(userArgs, cacheDir)
             : [join(cacheDir, entry_point)];
 
         // Set PYTHONPATH to deps/ directory
@@ -454,11 +502,21 @@ export class Mpak {
       }
 
       case 'uv': {
-        command = mcp_config.command || 'uv';
-        args =
-          mcp_config.args.length > 0
-            ? Mpak.resolveArgs(mcp_config.args, cacheDir)
-            : ['run', join(cacheDir, entry_point)];
+        // Preflight uv before spawning so the failure mode is "install uv"
+        // instead of a raw ENOENT mid-spawn. Default args follow the spec
+        // example (`run --directory <cacheDir> <entry>`) so the invocation
+        // is cwd-independent — embedders that don't honor `server.cwd`
+        // still find pyproject.toml correctly.
+        const resolvedUv = resolveUv({
+          cacheDir,
+          entryPoint: entry_point,
+          manifestCommand: mcp_config.command,
+          userArgs: Mpak.resolveArgs(userArgs, cacheDir),
+          ...(this.uvProbe ? { probe: this.uvProbe } : {}),
+        });
+        command = resolvedUv.command;
+        args = resolvedUv.args;
+        process.stderr.write(`[mpak] uv: ${resolvedUv.command} (${resolvedUv.version})\n`);
         break;
       }
 
@@ -512,17 +570,6 @@ export class Mpak {
       );
     }
     return result;
-  }
-
-  /**
-   * Find a working Python executable. Tries `python3` first, falls back to `python`.
-   */
-  private static findPythonCommand(): string {
-    const result = spawnSync('python3', ['--version'], { stdio: 'pipe' });
-    if (result.status === 0) {
-      return 'python3';
-    }
-    return 'python';
   }
 }
 
