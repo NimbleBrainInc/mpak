@@ -37,10 +37,7 @@ jobs:
         run: pnpm --filter @nimblebrain/mpak-sdk... build
 
       - name: Lint
-        run: pnpm --filter @nimblebrain/mpak-sdk lint
-
-      - name: Format check
-        run: pnpm --filter @nimblebrain/mpak-sdk exec prettier --check "src/**/*.ts" "tests/**/*.ts"
+        run: pnpm lint
 
       - name: Typecheck
         run: pnpm --filter @nimblebrain/mpak-sdk typecheck
