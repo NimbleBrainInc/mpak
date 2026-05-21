@@ -12,18 +12,110 @@ const DOMAIN_ORDER = [
 
 // Certification levels from the MTF (must match SecurityPage.tsx)
 const CERT_LEVELS = [
-  { level: 1, name: 'Basic', grade: 'L1', controls: 5, color: '#64748b', bg: 'bg-surface text-mpak-gray-600' },
-  { level: 2, name: 'Standard', grade: 'L2', controls: 14, color: '#22c55e', bg: 'bg-terminal-success/15 text-terminal-success' },
-  { level: 3, name: 'Verified', grade: 'L3', controls: 22, color: '#10b981', bg: 'bg-accent-emerald/15 text-accent-emerald' },
-  { level: 4, name: 'Attested', grade: 'L4', controls: 25, color: '#f59e0b', bg: 'bg-accent-gold-400/15 text-accent-gold-400' },
+  {
+    level: 1,
+    name: 'Basic',
+    grade: 'L1',
+    controls: 5,
+    color: '#64748b',
+    bg: 'bg-surface text-mpak-gray-600',
+  },
+  {
+    level: 2,
+    name: 'Standard',
+    grade: 'L2',
+    controls: 14,
+    color: '#22c55e',
+    bg: 'bg-terminal-success/15 text-terminal-success',
+  },
+  {
+    level: 3,
+    name: 'Verified',
+    grade: 'L3',
+    controls: 22,
+    color: '#10b981',
+    bg: 'bg-accent-emerald/15 text-accent-emerald',
+  },
+  {
+    level: 4,
+    name: 'Attested',
+    grade: 'L4',
+    controls: 25,
+    color: '#f59e0b',
+    bg: 'bg-accent-gold-400/15 text-accent-gold-400',
+  },
 ];
 
 // Controls required per certification level (must match scanner models.py CONTROL_LEVELS)
 const LEVEL_REQUIREMENTS: Record<number, string[]> = {
   1: ['AI-01', 'SC-01', 'CQ-01', 'CQ-02', 'CD-01'],
-  2: ['AI-01', 'AI-05', 'SC-01', 'SC-02', 'SC-03', 'SC-04', 'CQ-01', 'CQ-02', 'CQ-03', 'CD-01', 'CD-02', 'CD-03', 'PR-01', 'PR-02'],
-  3: ['AI-01', 'AI-03', 'AI-05', 'SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-05', 'CQ-01', 'CQ-02', 'CQ-03', 'CQ-04', 'CQ-05', 'CD-01', 'CD-02', 'CD-03', 'CD-04', 'CD-05', 'PR-01', 'PR-02', 'PR-03', 'PR-05'],
-  4: ['AI-01', 'AI-03', 'AI-04', 'AI-05', 'SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-05', 'CQ-01', 'CQ-02', 'CQ-03', 'CQ-04', 'CQ-05', 'CQ-06', 'CD-01', 'CD-02', 'CD-03', 'CD-04', 'CD-05', 'PR-01', 'PR-02', 'PR-03', 'PR-04', 'PR-05'],
+  2: [
+    'AI-01',
+    'AI-05',
+    'SC-01',
+    'SC-02',
+    'SC-03',
+    'SC-04',
+    'CQ-01',
+    'CQ-02',
+    'CQ-03',
+    'CD-01',
+    'CD-02',
+    'CD-03',
+    'PR-01',
+    'PR-02',
+  ],
+  3: [
+    'AI-01',
+    'AI-03',
+    'AI-05',
+    'SC-01',
+    'SC-02',
+    'SC-03',
+    'SC-04',
+    'SC-05',
+    'CQ-01',
+    'CQ-02',
+    'CQ-03',
+    'CQ-04',
+    'CQ-05',
+    'CD-01',
+    'CD-02',
+    'CD-03',
+    'CD-04',
+    'CD-05',
+    'PR-01',
+    'PR-02',
+    'PR-03',
+    'PR-05',
+  ],
+  4: [
+    'AI-01',
+    'AI-03',
+    'AI-04',
+    'AI-05',
+    'SC-01',
+    'SC-02',
+    'SC-03',
+    'SC-04',
+    'SC-05',
+    'CQ-01',
+    'CQ-02',
+    'CQ-03',
+    'CQ-04',
+    'CQ-05',
+    'CQ-06',
+    'CD-01',
+    'CD-02',
+    'CD-03',
+    'CD-04',
+    'CD-05',
+    'PR-01',
+    'PR-02',
+    'PR-03',
+    'PR-04',
+    'PR-05',
+  ],
 };
 
 // Score color mapping: 0-39 red, 40-69 amber, 70-89 blue, 90-100 green
@@ -36,16 +128,18 @@ function scoreColor(score: number): { ring: string; text: string } {
 
 function certBadge(level: number | null | undefined): { bg: string; label: string } {
   if (!level || level === 0) return { bg: 'bg-surface text-mpak-gray-500', label: 'Not Certified' };
-  const cert = CERT_LEVELS.find(c => c.level === level);
+  const cert = CERT_LEVELS.find((c) => c.level === level);
   return cert
     ? { bg: cert.bg, label: `${cert.grade} ${cert.name}` }
     : { bg: 'bg-surface text-mpak-gray-500', label: 'Not Certified' };
 }
 
 // Find the next certification level to aim for
-function nextCertLevel(currentLevel: number | null | undefined): typeof CERT_LEVELS[number] | null {
+function nextCertLevel(
+  currentLevel: number | null | undefined,
+): (typeof CERT_LEVELS)[number] | null {
   if (!currentLevel || currentLevel === 0) return CERT_LEVELS[0]; // Not certified -> aim for L1
-  return CERT_LEVELS.find(c => c.level === currentLevel + 1) ?? null;
+  return CERT_LEVELS.find((c) => c.level === currentLevel + 1) ?? null;
 }
 
 // Find controls required for a level that aren't currently passing
@@ -67,11 +161,11 @@ function getBlockingControls(
   }
 
   return required
-    .filter(id => {
+    .filter((id) => {
       const ctrl = allControls[id];
       return !ctrl || ctrl.status !== 'pass';
     })
-    .map(id => ({
+    .map((id) => ({
       id,
       name: allControls[id]?.name ?? 'Not yet scanned',
     }));
@@ -89,21 +183,50 @@ function barColor(passed: number, total: number): string {
 // Control status styling (dot + text color)
 function controlStyle(status: string): { dot: string; text: string } {
   switch (status) {
-    case 'pass': return { dot: 'bg-terminal-success', text: 'text-terminal-success' };
-    case 'fail': return { dot: 'bg-terminal-warning', text: 'text-terminal-warning' };
-    case 'skip': return { dot: 'bg-mpak-gray-500', text: 'text-mpak-gray-400' };
-    default: return { dot: 'bg-terminal-error', text: 'text-terminal-error' }; // error
+    case 'pass':
+      return { dot: 'bg-terminal-success', text: 'text-terminal-success' };
+    case 'fail':
+      return { dot: 'bg-terminal-warning', text: 'text-terminal-warning' };
+    case 'skip':
+      return { dot: 'bg-mpak-gray-500', text: 'text-mpak-gray-400' };
+    default:
+      return { dot: 'bg-terminal-error', text: 'text-terminal-error' }; // error
   }
 }
 
 // Severity badge styles
 function severityBadge(severity: string): { bg: string; numBg: string; numText: string } {
   switch (severity) {
-    case 'critical': return { bg: 'bg-terminal-error/15 text-terminal-error', numBg: 'bg-terminal-error/15', numText: 'text-terminal-error' };
-    case 'high': return { bg: 'bg-terminal-error/15 text-terminal-error', numBg: 'bg-terminal-error/15', numText: 'text-terminal-error' };
-    case 'medium': return { bg: 'bg-terminal-warning/15 text-terminal-warning', numBg: 'bg-terminal-warning/15', numText: 'text-terminal-warning' };
-    case 'low': return { bg: 'bg-terminal-warning/15 text-terminal-warning', numBg: 'bg-terminal-warning/15', numText: 'text-terminal-warning' };
-    default: return { bg: 'bg-surface text-mpak-gray-500', numBg: 'bg-surface', numText: 'text-mpak-gray-500' };
+    case 'critical':
+      return {
+        bg: 'bg-terminal-error/15 text-terminal-error',
+        numBg: 'bg-terminal-error/15',
+        numText: 'text-terminal-error',
+      };
+    case 'high':
+      return {
+        bg: 'bg-terminal-error/15 text-terminal-error',
+        numBg: 'bg-terminal-error/15',
+        numText: 'text-terminal-error',
+      };
+    case 'medium':
+      return {
+        bg: 'bg-terminal-warning/15 text-terminal-warning',
+        numBg: 'bg-terminal-warning/15',
+        numText: 'text-terminal-warning',
+      };
+    case 'low':
+      return {
+        bg: 'bg-terminal-warning/15 text-terminal-warning',
+        numBg: 'bg-terminal-warning/15',
+        numText: 'text-terminal-warning',
+      };
+    default:
+      return {
+        bg: 'bg-surface text-mpak-gray-500',
+        numBg: 'bg-surface',
+        numText: 'text-mpak-gray-500',
+      };
   }
 }
 
@@ -133,7 +256,7 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
   let description: string;
 
   if (certLevel > 0) {
-    const achieved = CERT_LEVELS.find(c => c.level === certLevel)!;
+    const achieved = CERT_LEVELS.find((c) => c.level === certLevel)!;
     description = `This bundle is ${achieved.grade} ${achieved.name} certified, passing ${controlsPassed} of ${controlsTotal} security controls.`;
   } else {
     description = `This bundle passes ${controlsPassed} of ${controlsTotal} security controls. Certification requires all controls for a level to pass.`;
@@ -146,15 +269,23 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
         <div className="flex flex-col sm:flex-row items-center gap-8">
           {/* Score Ring */}
           <div className="relative flex-shrink-0">
-            <svg width="160" height="160" viewBox="0 0 160 160">
+            <svg aria-hidden="true" width="160" height="160" viewBox="0 0 160 160">
               <circle
-                cx="80" cy="80" r="65"
-                fill="none" strokeWidth="12" strokeLinecap="round"
+                cx="80"
+                cy="80"
+                r="65"
+                fill="none"
+                strokeWidth="12"
+                strokeLinecap="round"
                 className="stroke-surface-overlay"
               />
               <circle
-                cx="80" cy="80" r="65"
-                fill="none" strokeWidth="12" strokeLinecap="round"
+                cx="80"
+                cy="80"
+                r="65"
+                fill="none"
+                strokeWidth="12"
+                strokeLinecap="round"
                 stroke={colors.ring}
                 strokeDasharray={circumference}
                 strokeDashoffset={circumference}
@@ -175,7 +306,9 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
           {/* Verdict */}
           <div className="flex-1 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
-              <h2 className="text-xl font-bold text-mpak-gray-900">{controlsPassed}/{controlsTotal} Controls</h2>
+              <h2 className="text-xl font-bold text-mpak-gray-900">
+                {controlsPassed}/{controlsTotal} Controls
+              </h2>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.bg}`}>
                 {badge.label}
               </span>
@@ -184,10 +317,11 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
             {next && blockingControls.length > 0 && (
               <div className="bg-surface rounded-lg px-3 py-2.5 mb-3 text-xs">
                 <p className="text-mpak-gray-600 font-medium mb-1.5">
-                  {certLevel > 0 ? 'Next' : 'Target'}: {next.grade} {next.name} ({next.controls} controls) &mdash; {blockingControls.length} not yet passing:
+                  {certLevel > 0 ? 'Next' : 'Target'}: {next.grade} {next.name} ({next.controls}{' '}
+                  controls) &mdash; {blockingControls.length} not yet passing:
                 </p>
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {blockingControls.map(ctrl => (
+                  {blockingControls.map((ctrl) => (
                     <span key={ctrl.id} className="flex items-center gap-1 text-terminal-warning">
                       <span className="w-1.5 h-1.5 rounded-full bg-terminal-warning flex-shrink-0" />
                       <span className="font-mono">{ctrl.id}</span> {ctrl.name}
@@ -198,24 +332,52 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
             )}
             {next && blockingControls.length === 0 && (
               <div className="bg-terminal-success/10 rounded-lg px-3 py-2.5 mb-3 text-xs text-terminal-success font-medium">
-                All {next.grade} {next.name} controls are passing. Certification updates on next scan.
+                All {next.grade} {next.name} controls are passing. Certification updates on next
+                scan.
               </div>
             )}
             <div className="flex flex-wrap gap-3 text-xs text-mpak-gray-400">
               {scan.summary && scan.summary.components > 0 && (
                 <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                    />
                   </svg>
                   {scan.summary.components} dependencies
                 </span>
               )}
               {scan.scanned_at && (
                 <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
-                  Scanned {new Date(scan.scanned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  Scanned{' '}
+                  {new Date(scan.scanned_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
                 </span>
               )}
             </div>
@@ -248,11 +410,12 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
             </div>
           </div>
           <div className="space-y-4">
-            {DOMAIN_ORDER.filter(key => domains[key]).map((domainKey, i) => {
+            {DOMAIN_ORDER.filter((key) => domains[key]).map((domainKey, i) => {
               const domain = domains[domainKey]!;
-              const pct = domain.controls_total > 0
-                ? Math.round((domain.controls_passed / domain.controls_total) * 100)
-                : 0;
+              const pct =
+                domain.controls_total > 0
+                  ? Math.round((domain.controls_passed / domain.controls_total) * 100)
+                  : 0;
 
               return (
                 <div
@@ -261,7 +424,9 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
                   style={{ ['--scorecard-delay' as string]: `${0.1 * (i + 1)}s` }}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium text-mpak-gray-700">{domain.display_name}</span>
+                    <span className="text-sm font-medium text-mpak-gray-700">
+                      {domain.display_name}
+                    </span>
                     <span className="text-sm text-mpak-gray-500">
                       {domain.controls_passed}/{domain.controls_total}
                     </span>
@@ -281,7 +446,9 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
                         const style = controlStyle(control.status);
                         return (
                           <span key={controlId} className={`flex items-center gap-1 ${style.text}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${style.dot} flex-shrink-0`} />
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${style.dot} flex-shrink-0`}
+                            />
                             {controlId} {control.name}
                           </span>
                         );
@@ -308,8 +475,13 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
             {findings.map((finding, idx) => {
               const badge = severityBadge(finding.severity);
               return (
-                <div key={finding.id} className="py-3 flex items-start gap-3 transition-colors hover:bg-surface-overlay">
-                  <span className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded-full ${badge.numBg} ${badge.numText} flex items-center justify-center text-xs font-bold`}>
+                <div
+                  key={finding.id}
+                  className="py-3 flex items-start gap-3 transition-colors hover:bg-surface-overlay"
+                >
+                  <span
+                    className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded-full ${badge.numBg} ${badge.numText} flex items-center justify-center text-xs font-bold`}
+                  >
                     {idx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -317,7 +489,9 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${badge.bg}`}>
                         {finding.severity.toUpperCase()}
                       </span>
-                      <span className="text-sm font-medium text-mpak-gray-900">{finding.title}</span>
+                      <span className="text-sm font-medium text-mpak-gray-900">
+                        {finding.title}
+                      </span>
                     </div>
                     <p className="text-xs text-mpak-gray-500">{finding.description}</p>
                     <p className="text-xs text-mpak-gray-400 mt-1">
@@ -347,8 +521,12 @@ export default function SecurityScorecard({ scan }: SecurityScorecardProps) {
       {/* === Footer === */}
       <section className="flex items-center justify-between text-sm text-mpak-gray-400 px-1">
         <div className="flex gap-4">
-          <Link to="/security" className="hover:text-accent-gold-400">About mpak Security</Link>
-          <Link to="/security/controls" className="hover:text-accent-gold-400">View all 25 controls</Link>
+          <Link to="/security" className="hover:text-accent-gold-400">
+            About mpak Security
+          </Link>
+          <Link to="/security/controls" className="hover:text-accent-gold-400">
+            View all 25 controls
+          </Link>
         </div>
       </section>
 

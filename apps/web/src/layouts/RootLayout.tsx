@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { UserButton } from "@clerk/clerk-react";
-import { Link, Outlet, ScrollRestoration } from "react-router-dom";
-import { MpakWordmark } from "../components/MpakLogo";
-import { DebugAuth } from "../components/DebugAuth";
-import { AuthGuard, GuestGuard, authEnabled } from "../auth/AuthProvider";
-import { siteConfig } from "../lib/siteConfig";
+import { UserButton } from '@clerk/clerk-react';
+import { useState } from 'react';
+import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
+import { AuthGuard, authEnabled, GuestGuard } from '../auth/AuthProvider';
+import { DebugAuth } from '../components/DebugAuth';
+import { MpakWordmark } from '../components/MpakLogo';
+import { siteConfig } from '../lib/siteConfig';
 
 interface RootLayoutProps {
   children?: React.ReactNode;
@@ -51,8 +51,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
         className="text-mpak-gray-500 hover:text-mpak-gray-800 transition-colors"
         aria-label="GitHub"
       >
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        <span className="sr-only">GitHub</span>
+        <svg aria-hidden="true" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
         </svg>
       </a>
     </>
@@ -69,7 +70,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       </a>
 
       {/* Header */}
-      <header role="banner" className="sticky top-0 z-50 bg-[#0c0a0f]/85 backdrop-blur-md border-b border-white/[0.08]">
+      <header className="sticky top-0 z-50 bg-[#0c0a0f]/85 backdrop-blur-md border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
@@ -87,7 +88,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                     afterSignOutUrl="/"
                     appearance={{
                       elements: {
-                        avatarBox: "w-9 h-9",
+                        avatarBox: 'w-9 h-9',
                       },
                     }}
                   >
@@ -96,6 +97,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                         label="My Packages"
                         labelIcon={
                           <svg
+                            aria-hidden="true"
                             className="w-4 h-4"
                             fill="none"
                             stroke="currentColor"
@@ -139,24 +141,47 @@ export default function RootLayout({ children }: RootLayoutProps) {
                     afterSignOutUrl="/"
                     appearance={{
                       elements: {
-                        avatarBox: "w-8 h-8",
+                        avatarBox: 'w-8 h-8',
                       },
                     }}
                   />
                 )}
               </AuthGuard>
               <button
+                type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="text-mpak-gray-600 hover:text-mpak-gray-900 transition-colors p-1"
-                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
               >
                 {mobileMenuOpen ? (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 ) : (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 6h16M4 12h16M4 18h16"
+                    />
                   </svg>
                 )}
               </button>
@@ -166,7 +191,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <nav aria-label="Mobile navigation" className="md:hidden border-t border-white/[0.08] bg-[#0c0a0f]/95 backdrop-blur-md">
+          <nav
+            aria-label="Mobile navigation"
+            className="md:hidden border-t border-white/[0.08] bg-[#0c0a0f]/95 backdrop-blur-md"
+          >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col space-y-3">
               {navLinks}
               <GuestGuard>
@@ -198,7 +226,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       </main>
 
       {/* Debug panel */}
-      {import.meta.env.VITE_ENABLE_DEBUG_AUTH === "true" && (
+      {import.meta.env.VITE_ENABLE_DEBUG_AUTH === 'true' && (
         <AuthGuard>
           <DebugAuth />
         </AuthGuard>
@@ -209,7 +237,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-mpak-gray-500 text-sm">
-              &copy; {new Date().getFullYear()} mpak is a{" "}
+              &copy; {new Date().getFullYear()} mpak is a{' '}
               <a
                 href={siteConfig.operator.url}
                 target="_blank"
@@ -217,7 +245,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 className="text-mpak-gray-700 hover:text-accent-gold-400 transition-colors"
               >
                 {siteConfig.operator.shortName}
-              </a>{" "}
+              </a>{' '}
               project.
             </p>
             <nav aria-label="Footer navigation" className="flex items-center gap-6 text-sm">
@@ -258,11 +286,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
                 aria-label="GitHub"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <span className="sr-only">GitHub</span>
+                <svg aria-hidden="true" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                 </svg>
               </a>

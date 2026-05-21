@@ -41,11 +41,7 @@ export default function BadgeSection({ packageName, packageType = 'bundle' }: Ba
       {/* Preview */}
       <div className="flex items-center gap-4 mb-4">
         <span className="text-xs text-mpak-gray-500 uppercase tracking-wider">Preview</span>
-        <img
-          src={previewBadgeUrl}
-          alt="mpak badge"
-          className="h-5"
-        />
+        <img src={previewBadgeUrl} alt="mpak badge" className="h-5" />
       </div>
 
       {/* Markdown code block */}
@@ -53,20 +49,43 @@ export default function BadgeSection({ packageName, packageType = 'bundle' }: Ba
         <div className="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/[0.08]">
           <span className="text-xs text-mpak-gray-400 font-medium">Markdown</span>
           <button
+            type="button"
             onClick={copyToClipboard}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 rounded text-xs text-mpak-gray-400 hover:text-white transition-colors"
           >
             {copied ? (
               <>
-                <svg className="w-3.5 h-3.5 text-terminal-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg
+                  aria-hidden="true"
+                  className="w-3.5 h-3.5 text-terminal-success"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
                 Copied!
               </>
             ) : (
               <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <svg
+                  aria-hidden="true"
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
                 </svg>
                 Copy
               </>
@@ -74,9 +93,7 @@ export default function BadgeSection({ packageName, packageType = 'bundle' }: Ba
           </button>
         </div>
         <div className="p-4 font-mono text-sm overflow-x-auto">
-          <code className="text-terminal-success break-all">
-            {markdownCode}
-          </code>
+          <code className="text-terminal-success break-all">{markdownCode}</code>
         </div>
       </div>
 

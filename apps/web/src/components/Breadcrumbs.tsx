@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { generateBreadcrumbSchema } from '../lib/schema';
 import { SITE_URL } from '../lib/siteConfig';
 
@@ -50,9 +50,10 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
     <nav aria-label="Breadcrumb" className="mb-6">
       <ol className="flex items-center gap-2 text-sm text-mpak-gray-500">
         {items.map((item, index) => (
-          <li key={index} className="flex items-center gap-2">
+          <li key={item.href ?? item.label} className="flex items-center gap-2">
             {index > 0 && (
               <svg
+                aria-hidden="true"
                 className="w-4 h-4 text-mpak-gray-400"
                 fill="none"
                 stroke="currentColor"
@@ -67,17 +68,12 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
               </svg>
             )}
             {item.href && index < items.length - 1 ? (
-              <Link
-                to={item.href}
-                className="hover:text-accent-gold-400 transition-colors"
-              >
+              <Link to={item.href} className="hover:text-accent-gold-400 transition-colors">
                 {item.label}
               </Link>
             ) : (
               <span
-                className={
-                  index === items.length - 1 ? 'text-mpak-gray-900 font-medium' : ''
-                }
+                className={index === items.length - 1 ? 'text-mpak-gray-900 font-medium' : ''}
                 aria-current={index === items.length - 1 ? 'page' : undefined}
               >
                 {item.label}

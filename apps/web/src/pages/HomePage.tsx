@@ -1,12 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { api, Package } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSEO } from '../hooks/useSEO';
-import {
-  generateFAQSchema,
-  generateWebSiteSchema,
-  generateCLIToolSchema,
-} from '../lib/schema';
+import { api, type Package } from '../lib/api';
+import { generateCLIToolSchema, generateFAQSchema, generateWebSiteSchema } from '../lib/schema';
 
 // FAQ data for homepage
 const faqs = [
@@ -83,13 +79,7 @@ export default function HomePage() {
     schema: [generateWebSiteSchema(), generateCLIToolSchema(), generateFAQSchema(faqs)],
   });
 
-  useEffect(() => {
-    if (searchQuery) {
-      loadPackages();
-    }
-  }, [searchQuery]);
-
-  async function loadPackages() {
+  const loadPackages = useCallback(async () => {
     try {
       setLoading(true);
       const result = await api.searchPackages({
@@ -102,7 +92,13 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (searchQuery) {
+      loadPackages();
+    }
+  }, [searchQuery, loadPackages]);
 
   const handleHeroSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,12 +132,18 @@ export default function HomePage() {
                   </h3>
                   <div className="flex items-center gap-2">
                     {pkg.claimable && (
-                      <span className="text-xs bg-terminal-warning/15 text-terminal-warning px-2 py-1 rounded" title="Unclaimed - Click to claim">
+                      <span
+                        className="text-xs bg-terminal-warning/15 text-terminal-warning px-2 py-1 rounded"
+                        title="Unclaimed - Click to claim"
+                      >
                         Unclaimed
                       </span>
                     )}
                     {pkg.claimed && (
-                      <span className="text-xs bg-terminal-success/15 text-terminal-success px-2 py-1 rounded" title="Claimed">
+                      <span
+                        className="text-xs bg-terminal-success/15 text-terminal-success px-2 py-1 rounded"
+                        title="Claimed"
+                      >
                         Claimed
                       </span>
                     )}
@@ -156,15 +158,11 @@ export default function HomePage() {
                   {pkg.description || 'No description'}
                 </p>
                 <div className="flex items-center justify-between text-sm text-mpak-gray-500 mb-3">
-                  <span className="font-mono text-xs bg-surface px-2 py-1 rounded">
-                    {pkg.name}
-                  </span>
+                  <span className="font-mono text-xs bg-surface px-2 py-1 rounded">{pkg.name}</span>
                   <span className="text-mpak-gray-400">{pkg.downloads} downloads</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="workshop-badge workshop-badge-gold">
-                    {pkg.server_type}
-                  </span>
+                  <span className="workshop-badge workshop-badge-gold">{pkg.server_type}</span>
                   <span className="text-xs text-mpak-gray-500">v{pkg.latest_version}</span>
                 </div>
               </Link>
@@ -191,7 +189,8 @@ export default function HomePage() {
               OPEN SOURCE · SECURE · MCP-NATIVE
             </span>
             <h1 className="text-4xl sm:text-5xl font-bold text-mpak-gray-900 tracking-tight">
-              The <span className="text-accent-gold-400">secure registry</span> for MCP servers and skills.
+              The <span className="text-accent-gold-400">secure registry</span> for MCP servers and
+              skills.
             </h1>
             <p className="mt-4 text-lg text-mpak-gray-600">
               Every bundle scanned. Every trust score public. Open source from day one.
@@ -207,15 +206,20 @@ export default function HomePage() {
                 value={heroSearch}
                 onChange={(e) => setHeroSearch(e.target.value)}
                 className="workshop-input w-full px-5 py-4 pl-12 text-lg rounded-xl border-2"
-                autoFocus
               />
               <svg
+                aria-hidden="true"
                 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-mpak-gray-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
               <button
                 type="submit"
@@ -228,11 +232,23 @@ export default function HomePage() {
 
           {/* Quick actions */}
           <p className="text-mpak-gray-500 text-sm">
-            <Link to="/bundles" className="text-accent-gold-400 hover:text-accent-gold-300 font-medium">Browse bundles</Link>
+            <Link
+              to="/bundles"
+              className="text-accent-gold-400 hover:text-accent-gold-300 font-medium"
+            >
+              Browse bundles
+            </Link>
             {' · '}
-            <Link to="/skills" className="text-accent-purple-400 hover:text-accent-purple-300 font-medium">Browse skills</Link>
+            <Link
+              to="/skills"
+              className="text-accent-purple-400 hover:text-accent-purple-300 font-medium"
+            >
+              Browse skills
+            </Link>
             {' · '}
-            <Link to="/publish" className="text-mpak-gray-600 hover:text-mpak-gray-800 font-medium">Publish</Link>
+            <Link to="/publish" className="text-mpak-gray-600 hover:text-mpak-gray-800 font-medium">
+              Publish
+            </Link>
           </p>
         </div>
       </section>
@@ -268,13 +284,17 @@ export default function HomePage() {
                   <span className="text-mpak-gray-700 w-48">@mcp/server-postgres</span>
                   <span className="w-14">v0.6.2</span>
                   <span className="w-10 text-terminal-success font-semibold">L3</span>
-                  <span className="text-mpak-gray-400 hidden sm:inline">PostgreSQL database access</span>
+                  <span className="text-mpak-gray-400 hidden sm:inline">
+                    PostgreSQL database access
+                  </span>
                 </div>
                 <div className="flex gap-x-3 text-mpak-gray-500">
                   <span className="text-mpak-gray-700 w-48">@community/pg-admin</span>
                   <span className="w-14">v1.2.0</span>
                   <span className="w-10 text-accent-gold-400 font-semibold">L2</span>
-                  <span className="text-mpak-gray-400 hidden sm:inline">PostgreSQL admin tools</span>
+                  <span className="text-mpak-gray-400 hidden sm:inline">
+                    PostgreSQL admin tools
+                  </span>
                 </div>
               </div>
 
@@ -284,11 +304,16 @@ export default function HomePage() {
                 <span className="text-mpak-gray-800">mpak install @mcp/server-postgres</span>
               </div>
               <div className="ml-6 text-xs mb-1 space-y-1">
-                <div className="text-mpak-gray-500">Trust: <span className="text-terminal-success font-semibold">L3 Verified</span> (92/100)</div>
+                <div className="text-mpak-gray-500">
+                  Trust: <span className="text-terminal-success font-semibold">L3 Verified</span>{' '}
+                  (92/100)
+                </div>
                 <div className="text-terminal-success">✓ Signed provenance</div>
                 <div className="text-terminal-success">✓ No dangerous permissions</div>
                 <div className="text-terminal-success">✓ Dependencies vendored</div>
-                <div className="text-terminal-success mt-1">Installing @mcp/server-postgres@0.6.2... done</div>
+                <div className="text-terminal-success mt-1">
+                  Installing @mcp/server-postgres@0.6.2... done
+                </div>
               </div>
 
               {/* Cursor */}
@@ -302,7 +327,10 @@ export default function HomePage() {
       </section>
 
       {/* Three Pillars */}
-      <section aria-label="Security features" className="px-4 sm:px-6 lg:px-8 py-16 border-y border-white/[0.08]">
+      <section
+        aria-label="Security features"
+        className="px-4 sm:px-6 lg:px-8 py-16 border-y border-white/[0.08]"
+      >
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold text-mpak-gray-900 mb-8 text-center">
             Built for MCP security
@@ -311,28 +339,54 @@ export default function HomePage() {
             {/* MCPB Format */}
             <div className="workshop-card workshop-card-gold p-6">
               <div className="w-10 h-10 bg-accent-gold-glow rounded-lg flex items-center justify-center border border-accent-gold-border mb-4">
-                <svg className="w-5 h-5 text-accent-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                <svg
+                  aria-hidden="true"
+                  className="w-5 h-5 text-accent-gold-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                  />
                 </svg>
               </div>
               <h3 className="font-semibold text-mpak-gray-900 mb-2">MCPB Format</h3>
               <p className="text-sm text-mpak-gray-600">
-                One standardized package format for all MCP servers. Python, Node, or binary, all installed the same way.
+                One standardized package format for all MCP servers. Python, Node, or binary, all
+                installed the same way.
               </p>
             </div>
 
             {/* MTF Security */}
             <div className="workshop-card workshop-card-gold p-6">
               <div className="w-10 h-10 bg-accent-gold-glow rounded-lg flex items-center justify-center border border-accent-gold-border mb-4">
-                <svg className="w-5 h-5 text-accent-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                <svg
+                  aria-hidden="true"
+                  className="w-5 h-5 text-accent-gold-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                  />
                 </svg>
               </div>
               <h3 className="font-semibold text-mpak-gray-900 mb-2">Built-in Security Scans</h3>
               <p className="text-sm text-mpak-gray-600 mb-3">
                 25 controls, 5 domains. Trust score on every publish. L1 through L4 certification.
               </p>
-              <Link to="/security" className="text-sm text-accent-gold-400 hover:text-accent-gold-300 font-medium">
+              <Link
+                to="/security"
+                className="text-sm text-accent-gold-400 hover:text-accent-gold-300 font-medium"
+              >
                 Learn about certification →
               </Link>
             </div>
@@ -340,13 +394,25 @@ export default function HomePage() {
             {/* Open Source */}
             <div className="workshop-card workshop-card-gold p-6">
               <div className="w-10 h-10 bg-accent-gold-glow rounded-lg flex items-center justify-center border border-accent-gold-border mb-4">
-                <svg className="w-5 h-5 text-accent-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  aria-hidden="true"
+                  className="w-5 h-5 text-accent-gold-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
               </div>
               <h3 className="font-semibold text-mpak-gray-900 mb-2">Open Source Registry</h3>
               <p className="text-sm text-mpak-gray-600">
-                Entire stack is Apache 2.0. Self-hostable with federation, policies, and audit logging.
+                Entire stack is Apache 2.0. Self-hostable with federation, policies, and audit
+                logging.
               </p>
             </div>
           </div>
@@ -375,7 +441,9 @@ export default function HomePage() {
               <thead>
                 <tr className="border-b border-white/[0.08]">
                   <th className="text-left py-3 pr-4 font-medium text-mpak-gray-500 w-1/3"></th>
-                  <th className="text-left py-3 pr-4 font-medium text-mpak-gray-500">General-purpose registries</th>
+                  <th className="text-left py-3 pr-4 font-medium text-mpak-gray-500">
+                    General-purpose registries
+                  </th>
                   <th className="text-left py-3 font-medium text-accent-gold-400">mpak</th>
                 </tr>
               </thead>
@@ -383,7 +451,9 @@ export default function HomePage() {
                 <tr className="border-b border-white/[0.08]">
                   <td className="py-3 pr-4 font-medium text-mpak-gray-800">Packaging</td>
                   <td className="py-3 pr-4">Language-specific (npm, pip, Docker)</td>
-                  <td className="py-3 bg-accent-gold-400/5 px-3 rounded-l">One format (MCPB) for all runtimes</td>
+                  <td className="py-3 bg-accent-gold-400/5 px-3 rounded-l">
+                    One format (MCPB) for all runtimes
+                  </td>
                 </tr>
                 <tr className="border-b border-white/[0.08]">
                   <td className="py-3 pr-4 font-medium text-mpak-gray-800">Install experience</td>
@@ -393,17 +463,25 @@ export default function HomePage() {
                 <tr className="border-b border-white/[0.08]">
                   <td className="py-3 pr-4 font-medium text-mpak-gray-800">Security scanning</td>
                   <td className="py-3 pr-4">Generic CVE checks</td>
-                  <td className="py-3 bg-accent-gold-400/5 px-3">MCP-specific: 25 controls, 5 domains</td>
+                  <td className="py-3 bg-accent-gold-400/5 px-3">
+                    MCP-specific: 25 controls, 5 domains
+                  </td>
                 </tr>
                 <tr className="border-b border-white/[0.08]">
                   <td className="py-3 pr-4 font-medium text-mpak-gray-800">Trust visibility</td>
                   <td className="py-3 pr-4">None or hidden</td>
-                  <td className="py-3 bg-accent-gold-400/5 px-3">Public trust score on every package</td>
+                  <td className="py-3 bg-accent-gold-400/5 px-3">
+                    Public trust score on every package
+                  </td>
                 </tr>
                 <tr>
-                  <td className="py-3 pr-4 font-medium text-mpak-gray-800">Enterprise governance</td>
+                  <td className="py-3 pr-4 font-medium text-mpak-gray-800">
+                    Enterprise governance
+                  </td>
                   <td className="py-3 pr-4">Limited or paid add-on</td>
-                  <td className="py-3 bg-accent-gold-400/5 px-3 rounded-r">Self-hostable, federation, audit logs</td>
+                  <td className="py-3 bg-accent-gold-400/5 px-3 rounded-r">
+                    Self-hostable, federation, audit logs
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -412,18 +490,30 @@ export default function HomePage() {
       </section>
 
       {/* Extend Your AI */}
-      <section aria-label="Package types" className="px-4 sm:px-6 lg:px-8 py-16 border-y border-white/[0.08]">
+      <section
+        aria-label="Package types"
+        className="px-4 sm:px-6 lg:px-8 py-16 border-y border-white/[0.08]"
+      >
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl font-bold text-mpak-gray-900 mb-8 text-center">
-            Extend your AI
-          </h2>
+          <h2 className="text-2xl font-bold text-mpak-gray-900 mb-8 text-center">Extend your AI</h2>
           <div className="grid gap-6 md:grid-cols-2">
             {/* Bundles */}
             <div className="workshop-card workshop-card-gold p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-accent-gold-glow rounded-lg flex items-center justify-center border border-accent-gold-border">
-                  <svg className="w-5 h-5 text-accent-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-5 h-5 text-accent-gold-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
                   </svg>
                 </div>
                 <div>
@@ -432,7 +522,8 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-sm text-mpak-gray-600 mb-4">
-                Pre-built servers that give your AI new abilities. Connect to databases, call APIs, access file systems. Every bundle scanned with 25 security controls.
+                Pre-built servers that give your AI new abilities. Connect to databases, call APIs,
+                access file systems. Every bundle scanned with 25 security controls.
               </p>
               <ul className="text-sm text-mpak-gray-500 space-y-1 mb-5">
                 <li className="flex items-center gap-2">
@@ -449,8 +540,13 @@ export default function HomePage() {
                 </li>
               </ul>
               <div className="flex items-center justify-between">
-                <code className="text-xs bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">mpak bundle pull [package]</code>
-                <Link to="/bundles" className="text-sm text-accent-gold-400 hover:text-accent-gold-300 font-medium">
+                <code className="text-xs bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">
+                  mpak bundle pull [package]
+                </code>
+                <Link
+                  to="/bundles"
+                  className="text-sm text-accent-gold-400 hover:text-accent-gold-300 font-medium"
+                >
                   Browse bundles →
                 </Link>
               </div>
@@ -460,8 +556,19 @@ export default function HomePage() {
             <div className="workshop-card workshop-card-purple p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-accent-purple-glow rounded-lg flex items-center justify-center border border-accent-purple-border">
-                  <svg className="w-5 h-5 text-accent-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-5 h-5 text-accent-purple-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                    />
                   </svg>
                 </div>
                 <div>
@@ -470,7 +577,8 @@ export default function HomePage() {
                 </div>
               </div>
               <p className="text-sm text-mpak-gray-600 mb-4">
-                Instructions that teach your AI new behaviors and domain knowledge. Shape how it thinks and responds.
+                Instructions that teach your AI new behaviors and domain knowledge. Shape how it
+                thinks and responds.
               </p>
               <ul className="text-sm text-mpak-gray-500 space-y-1 mb-5">
                 <li className="flex items-center gap-2">
@@ -487,8 +595,13 @@ export default function HomePage() {
                 </li>
               </ul>
               <div className="flex items-center justify-between">
-                <code className="text-xs bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">mpak skill install @org/skill</code>
-                <Link to="/skills" className="text-sm text-accent-purple-400 hover:text-accent-purple-300 font-medium">
+                <code className="text-xs bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">
+                  mpak skill install @org/skill
+                </code>
+                <Link
+                  to="/skills"
+                  className="text-sm text-accent-purple-400 hover:text-accent-purple-300 font-medium"
+                >
                   Browse skills →
                 </Link>
               </div>
@@ -498,12 +611,18 @@ export default function HomePage() {
       </section>
 
       {/* Publish CTA */}
-      <section aria-label="Publish to mpak" className="px-4 sm:px-6 lg:px-8 py-12 bg-surface-raised border-y border-white/[0.08]">
+      <section
+        aria-label="Publish to mpak"
+        className="px-4 sm:px-6 lg:px-8 py-12 bg-surface-raised border-y border-white/[0.08]"
+      >
         <div className="max-w-2xl mx-auto flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-mpak-gray-900 mb-1">Built something for AI?</h3>
+            <h3 className="text-lg font-semibold text-mpak-gray-900 mb-1">
+              Built something for AI?
+            </h3>
             <p className="text-mpak-gray-500 text-sm">
-              Publish bundles or skills to mpak. Security scanning, verified provenance, one-command installs.
+              Publish bundles or skills to mpak. Security scanning, verified provenance, one-command
+              installs.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
@@ -526,23 +645,37 @@ export default function HomePage() {
       {/* Install Section */}
       <section id="install" aria-label="Install the CLI" className="px-4 sm:px-6 lg:px-8 py-16">
         <div className="max-w-xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-mpak-gray-900 mb-6">
-            Install the CLI
-          </h2>
+          <h2 className="text-2xl font-bold text-mpak-gray-900 mb-6">Install the CLI</h2>
           <div className="bg-surface text-mpak-gray-800 p-4 rounded-xl font-mono text-sm relative group border border-white/[0.08]">
             <code>npm install -g @nimblebrain/mpak</code>
             <button
+              type="button"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-mpak-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
               onClick={() => navigator.clipboard.writeText('npm install -g @nimblebrain/mpak')}
               title="Copy to clipboard"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              <svg
+                aria-hidden="true"
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
               </svg>
             </button>
           </div>
           <p className="text-mpak-gray-500 text-sm mt-4">
-            Then run <code className="bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">mpak search</code> to get started
+            Then run{' '}
+            <code className="bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">
+              mpak search
+            </code>{' '}
+            to get started
           </p>
         </div>
       </section>
@@ -554,16 +687,12 @@ export default function HomePage() {
             Frequently Asked Questions
           </h2>
           <div className="space-y-4">
-            {faqs.map((faq, index) => (
-              <details
-                key={index}
-                className="group workshop-card overflow-hidden"
-              >
+            {faqs.map((faq) => (
+              <details key={faq.question} className="group workshop-card overflow-hidden">
                 <summary className="flex items-center justify-between p-5 cursor-pointer hover:bg-surface-overlay transition-colors">
-                  <h3 className="font-semibold text-mpak-gray-900 pr-4">
-                    {faq.question}
-                  </h3>
+                  <h3 className="font-semibold text-mpak-gray-900 pr-4">{faq.question}</h3>
                   <svg
+                    aria-hidden="true"
                     className="w-5 h-5 text-mpak-gray-400 flex-shrink-0 transition-transform group-open:rotate-180"
                     fill="none"
                     stroke="currentColor"
@@ -577,9 +706,7 @@ export default function HomePage() {
                     />
                   </svg>
                 </summary>
-                <div className="px-5 pb-5 text-mpak-gray-600">
-                  {faq.answer}
-                </div>
+                <div className="px-5 pb-5 text-mpak-gray-600">{faq.answer}</div>
               </details>
             ))}
           </div>

@@ -10,6 +10,7 @@ interface MpakLogoIconProps {
 export function MpakLogoIcon({ size = 28, className }: MpakLogoIconProps) {
   return (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 64 64"
@@ -38,14 +39,7 @@ export function MpakLogoIcon({ size = 28, className }: MpakLogoIconProps) {
         strokeWidth="2"
       />
       {/* Inner detail ring */}
-      <circle
-        cx="32"
-        cy="32"
-        r="18"
-        stroke="currentColor"
-        strokeWidth="1"
-        opacity="0.25"
-      />
+      <circle cx="32" cy="32" r="18" stroke="currentColor" strokeWidth="1" opacity="0.25" />
       {/* m letterform */}
       <text
         x="32"
@@ -69,6 +63,7 @@ export function MpakLogoIcon({ size = 28, className }: MpakLogoIconProps) {
 export function MpakLogoIconSolid({ size = 28, className }: MpakLogoIconProps) {
   return (
     <svg
+      aria-hidden="true"
       width={size}
       height={size}
       viewBox="0 0 64 64"
@@ -105,9 +100,7 @@ export function MpakWordmark({ iconSize = 28, className }: MpakWordmarkProps) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className ?? ''}`}>
       <MpakLogoIcon size={iconSize} className="text-accent-gold-400" />
-      <span className="text-[22px] font-bold tracking-tight text-mpak-gray-900">
-        mpak
-      </span>
+      <span className="text-[22px] font-bold tracking-tight text-mpak-gray-900">mpak</span>
     </span>
   );
 }

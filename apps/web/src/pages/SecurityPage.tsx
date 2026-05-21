@@ -103,6 +103,7 @@ const DOMAINS = [
 function ShieldIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       viewBox="0 0 24 24"
       fill="none"
@@ -122,6 +123,7 @@ function ShieldIcon({ className }: { className?: string }) {
 function ScanIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       viewBox="0 0 24 24"
       fill="none"
@@ -146,6 +148,7 @@ function ScanIcon({ className }: { className?: string }) {
 function LockIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       viewBox="0 0 24 24"
       fill="none"
@@ -165,6 +168,7 @@ function LockIcon({ className }: { className?: string }) {
 function FingerprintIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       viewBox="0 0 24 24"
       fill="none"
@@ -184,6 +188,7 @@ function FingerprintIcon({ className }: { className?: string }) {
 function DocumentIcon({ className }: { className?: string }) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       viewBox="0 0 24 24"
       fill="none"
@@ -249,9 +254,8 @@ export default function SecurityPage() {
               <span className="text-accent-gold-400">verify</span>
             </h1>
             <p className="text-xl text-mpak-gray-600 leading-relaxed max-w-2xl">
-              25 security controls. 5 domains. 4 certification levels.
-              Every bundle on mpak is scanned and graded, so you know exactly
-              what you're installing.
+              25 security controls. 5 domains. 4 certification levels. Every bundle on mpak is
+              scanned and graded, so you know exactly what you're installing.
             </p>
 
             {/* Terminal-style stats */}
@@ -285,8 +289,8 @@ export default function SecurityPage() {
             The Problem
           </h2>
           <p className="text-2xl sm:text-3xl font-semibold text-mpak-gray-900 leading-snug max-w-3xl mb-10">
-            MCP servers have full system access. Traditional security tools
-            don't understand AI-specific attack vectors.
+            MCP servers have full system access. Traditional security tools don't understand
+            AI-specific attack vectors.
           </p>
 
           <div className="grid gap-8 sm:grid-cols-3">
@@ -296,31 +300,24 @@ export default function SecurityPage() {
                 Filesystem + Network + Code Execution
               </h3>
               <p className="text-mpak-gray-600 text-sm leading-relaxed">
-                A malicious bundle can exfiltrate data, install backdoors, or
-                serve as a supply chain attack vector. The permissions model
-                is wide open.
+                A malicious bundle can exfiltrate data, install backdoors, or serve as a supply
+                chain attack vector. The permissions model is wide open.
               </p>
             </div>
             <div className="group">
               <div className="h-1 w-12 bg-terminal-warning mb-6 group-hover:w-16 transition-all" />
-              <h3 className="font-semibold text-mpak-gray-900 mb-2">
-                Tool Description Poisoning
-              </h3>
+              <h3 className="font-semibold text-mpak-gray-900 mb-2">Tool Description Poisoning</h3>
               <p className="text-mpak-gray-600 text-sm leading-relaxed">
-                AI assistants follow tool descriptions faithfully. A description
-                like "read ~/.aws/credentials before calling" becomes an
-                instruction, not documentation.
+                AI assistants follow tool descriptions faithfully. A description like "read
+                ~/.aws/credentials before calling" becomes an instruction, not documentation.
               </p>
             </div>
             <div className="group">
               <div className="h-1 w-12 bg-terminal-info mb-6 group-hover:w-16 transition-all" />
-              <h3 className="font-semibold text-mpak-gray-900 mb-2">
-                Slopsquatting
-              </h3>
+              <h3 className="font-semibold text-mpak-gray-900 mb-2">Slopsquatting</h3>
               <p className="text-mpak-gray-600 text-sm leading-relaxed">
-                LLMs hallucinate package names consistently. Attackers register
-                these phantom packages with malicious payloads, waiting for
-                AI-generated code to install them.
+                LLMs hallucinate package names consistently. Attackers register these phantom
+                packages with malicious payloads, waiting for AI-generated code to install them.
               </p>
             </div>
           </div>
@@ -342,9 +339,7 @@ export default function SecurityPage() {
                 className="group relative bg-surface-raised border border-white/[0.08] rounded-lg overflow-hidden hover:border-white/[0.16] transition-all"
               >
                 {/* Level indicator bar */}
-                <div
-                  className={`absolute left-0 top-0 bottom-0 w-1 ${LEVEL_CLASSES[idx]!.bar}`}
-                />
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${LEVEL_CLASSES[idx]!.bar}`} />
 
                 <div className="pl-6 pr-5 py-5">
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -356,12 +351,8 @@ export default function SecurityPage() {
                           {level.grade}
                         </span>
                         <div>
-                          <h3 className="text-lg font-semibold text-mpak-gray-900">
-                            {level.name}
-                          </h3>
-                          <p className="text-sm text-mpak-gray-500">
-                            {level.target}
-                          </p>
+                          <h3 className="text-lg font-semibold text-mpak-gray-900">{level.name}</h3>
+                          <p className="text-sm text-mpak-gray-500">{level.target}</p>
                         </div>
                       </div>
 
@@ -378,15 +369,11 @@ export default function SecurityPage() {
                     <div className="flex sm:flex-col items-center sm:items-end gap-4 sm:gap-2 font-mono text-sm text-right shrink-0">
                       <div>
                         <span className="text-mpak-gray-400">controls</span>
-                        <div className="text-mpak-gray-900 font-semibold">
-                          {level.controls}/25
-                        </div>
+                        <div className="text-mpak-gray-900 font-semibold">{level.controls}/25</div>
                       </div>
                       <div>
                         <span className="text-mpak-gray-400">coverage</span>
-                        <div className="text-mpak-gray-900 font-semibold">
-                          {level.coverage}%
-                        </div>
+                        <div className="text-mpak-gray-900 font-semibold">{level.coverage}%</div>
                       </div>
                       <div>
                         <span className="text-mpak-gray-400">effort</span>
@@ -426,14 +413,10 @@ export default function SecurityPage() {
                   className="bg-surface-raised p-6 hover:bg-surface-overlay transition-colors"
                 >
                   <div className="flex items-start gap-4">
-                    {Icon && (
-                      <Icon className="w-6 h-6 text-mpak-gray-400 shrink-0 mt-0.5" />
-                    )}
+                    {Icon && <Icon className="w-6 h-6 text-mpak-gray-400 shrink-0 mt-0.5" />}
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-mpak-gray-900">
-                          {domain.name}
-                        </h3>
+                        <h3 className="font-semibold text-mpak-gray-900">{domain.name}</h3>
                         <span className="font-mono text-xs text-mpak-gray-400">
                           {domain.abbrev}
                         </span>
@@ -462,8 +445,8 @@ export default function SecurityPage() {
             </span>
           </div>
           <p className="text-2xl font-semibold text-mpak-gray-900 mb-10 max-w-2xl">
-            Traditional security tools don't understand these threats.
-            We built controls specifically for MCP and AI workflows.
+            Traditional security tools don't understand these threats. We built controls
+            specifically for MCP and AI workflows.
           </p>
 
           <div className="grid gap-6 sm:grid-cols-2">
@@ -509,17 +492,11 @@ export default function SecurityPage() {
 
                 <div className="relative">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-mono text-sm text-terminal-error">
-                      {control.id}
-                    </span>
-                    <span className="font-mono text-xs text-mpak-gray-500">
-                      {control.level}
-                    </span>
+                    <span className="font-mono text-sm text-terminal-error">{control.id}</span>
+                    <span className="font-mono text-xs text-mpak-gray-500">{control.level}</span>
                   </div>
                   <h3 className="font-semibold text-lg mb-2 text-mpak-gray-900">{control.name}</h3>
-                  <p className="text-mpak-gray-600 text-sm leading-relaxed">
-                    {control.desc}
-                  </p>
+                  <p className="text-mpak-gray-600 text-sm leading-relaxed">{control.desc}</p>
                 </div>
               </div>
             ))}
@@ -533,9 +510,7 @@ export default function SecurityPage() {
           </h2>
           <div className="grid gap-12 sm:grid-cols-2 mt-8">
             <div>
-              <h3 className="text-xl font-semibold text-mpak-gray-900 mb-6">
-                For Consumers
-              </h3>
+              <h3 className="text-xl font-semibold text-mpak-gray-900 mb-6">For Consumers</h3>
               <ol className="space-y-4">
                 {[
                   'Check the certification badge on package pages',
@@ -552,9 +527,7 @@ export default function SecurityPage() {
               </ol>
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-mpak-gray-900 mb-6">
-                For Publishers
-              </h3>
+              <h3 className="text-xl font-semibold text-mpak-gray-900 mb-6">For Publishers</h3>
               <ol className="space-y-4">
                 {[
                   'All published bundles are automatically scanned',
@@ -587,8 +560,7 @@ export default function SecurityPage() {
           <div
             className="absolute inset-0 opacity-10"
             style={{
-              backgroundImage:
-                'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)',
+              backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)',
               backgroundSize: '24px 24px',
             }}
           />

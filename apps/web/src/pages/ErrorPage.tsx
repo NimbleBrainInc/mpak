@@ -1,4 +1,4 @@
-import { useRouteError, isRouteErrorResponse, Link } from 'react-router-dom';
+import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom';
 
 function getErrorDetails(error: unknown): { status: number; title: string; message: string } {
   if (isRouteErrorResponse(error)) {
@@ -51,6 +51,7 @@ export default function ErrorPage() {
         {/* Lost in Transit Illustration */}
         <div className="mb-8">
           <svg
+            aria-hidden="true"
             className="w-48 h-48 mx-auto"
             viewBox="0 0 200 200"
             fill="none"
@@ -78,8 +79,20 @@ export default function ErrorPage() {
               {/* Googly eyes */}
               <circle cx="75" cy="78" r="8" fill="white" />
               <circle cx="105" cy="78" r="8" fill="white" />
-              <circle cx="77" cy="80" r="4" fill="#1f2937" className="animate-[look_4s_ease-in-out_infinite]" />
-              <circle cx="107" cy="80" r="4" fill="#1f2937" className="animate-[look_4s_ease-in-out_infinite]" />
+              <circle
+                cx="77"
+                cy="80"
+                r="4"
+                fill="#1f2937"
+                className="animate-[look_4s_ease-in-out_infinite]"
+              />
+              <circle
+                cx="107"
+                cy="80"
+                r="4"
+                fill="#1f2937"
+                className="animate-[look_4s_ease-in-out_infinite]"
+              />
               {/* Eye shine */}
               <circle cx="78" cy="78" r="1.5" fill="white" />
               <circle cx="108" cy="78" r="1.5" fill="white" />
@@ -89,26 +102,73 @@ export default function ErrorPage() {
               <path d="M112 68 L102 72" stroke="#15803d" strokeWidth="2" strokeLinecap="round" />
 
               {/* Small worried mouth */}
-              <path d="M85 108 Q90 104 95 108" stroke="#15803d" strokeWidth="2" strokeLinecap="round" fill="none" />
+              <path
+                d="M85 108 Q90 104 95 108"
+                stroke="#15803d"
+                strokeWidth="2"
+                strokeLinecap="round"
+                fill="none"
+              />
 
               {/* Stick legs */}
-              <line x1="75" y1="120" x2="70" y2="145" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" />
-              <line x1="105" y1="120" x2="110" y2="145" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" />
+              <line
+                x1="75"
+                y1="120"
+                x2="70"
+                y2="145"
+                stroke="#1f2937"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <line
+                x1="105"
+                y1="120"
+                x2="110"
+                y2="145"
+                stroke="#1f2937"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
 
               {/* Little feet */}
               <ellipse cx="68" cy="148" rx="6" ry="3" fill="#1f2937" />
               <ellipse cx="112" cy="148" rx="6" ry="3" fill="#1f2937" />
 
               {/* Stick arms */}
-              <line x1="60" y1="90" x2="40" y2="75" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" />
-              <line x1="120" y1="90" x2="140" y2="100" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" />
+              <line
+                x1="60"
+                y1="90"
+                x2="40"
+                y2="75"
+                stroke="#1f2937"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <line
+                x1="120"
+                y1="90"
+                x2="140"
+                y2="100"
+                stroke="#1f2937"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
 
               {/* Hand holding map (left) */}
               <circle cx="38" cy="73" r="4" fill="#1f2937" />
 
               {/* Map (held upside down) */}
               <g transform="rotate(15, 30, 55)">
-                <rect x="15" y="45" width="30" height="22" rx="2" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1" />
+                <rect
+                  x="15"
+                  y="45"
+                  width="30"
+                  height="22"
+                  rx="2"
+                  fill="#fef3c7"
+                  stroke="#f59e0b"
+                  strokeWidth="1"
+                />
                 {/* Map lines (upside down) */}
                 <path d="M20 52 L25 58 L35 50" stroke="#f59e0b" strokeWidth="1" fill="none" />
                 <circle cx="38" cy="60" r="2" fill="#ef4444" /> {/* "You are here" dot */}
@@ -120,26 +180,41 @@ export default function ErrorPage() {
             </g>
 
             {/* Question marks floating around */}
-            <text x="150" y="50" className="text-lg fill-mpak-gray-400 animate-bounce" style={{ animationDelay: '0.5s' }}>?</text>
-            <text x="45" y="160" className="text-sm fill-mpak-gray-400 animate-bounce" style={{ animationDelay: '1s' }}>?</text>
-            <text x="165" y="130" className="text-base fill-mpak-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }}>?</text>
+            <text
+              x="150"
+              y="50"
+              className="text-lg fill-mpak-gray-400 animate-bounce"
+              style={{ animationDelay: '0.5s' }}
+            >
+              ?
+            </text>
+            <text
+              x="45"
+              y="160"
+              className="text-sm fill-mpak-gray-400 animate-bounce"
+              style={{ animationDelay: '1s' }}
+            >
+              ?
+            </text>
+            <text
+              x="165"
+              y="130"
+              className="text-base fill-mpak-gray-400 animate-bounce"
+              style={{ animationDelay: '0.2s' }}
+            >
+              ?
+            </text>
           </svg>
         </div>
 
         {/* Error Code */}
-        <div className="text-6xl font-bold text-mpak-gray-200 mb-2">
-          {status}
-        </div>
+        <div className="text-6xl font-bold text-mpak-gray-200 mb-2">{status}</div>
 
         {/* Error Title */}
-        <h1 className="text-2xl font-bold text-mpak-gray-900 mb-3">
-          {title}
-        </h1>
+        <h1 className="text-2xl font-bold text-mpak-gray-900 mb-3">{title}</h1>
 
         {/* Error Message */}
-        <p className="text-mpak-gray-600 mb-8">
-          {message}
-        </p>
+        <p className="text-mpak-gray-600 mb-8">{message}</p>
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -150,6 +225,7 @@ export default function ErrorPage() {
             Go Home
           </Link>
           <button
+            type="button"
             onClick={() => window.location.reload()}
             className="px-5 py-2.5 bg-mpak-gray-100 text-mpak-gray-700 font-medium rounded-lg hover:bg-mpak-gray-200 transition-colors"
           >
