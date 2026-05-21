@@ -1,25 +1,25 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import {
+  SkillAnnounceRequestSchema,
+  SkillAnnounceResponseSchema,
+  SkillDetailSchema,
+  SkillDownloadInfoSchema,
+  SkillSearchResponseSchema,
+} from '@nimblebrain/mpak-schemas';
 import type { FastifyPluginAsync } from 'fastify';
-import { createHash, randomUUID } from 'crypto';
-import { createWriteStream, createReadStream, promises as fs } from 'fs';
-import { tmpdir } from 'os';
-import path from 'path';
 import { config } from '../../config.js';
 import { runInTransaction } from '../../db/index.js';
 import {
   BadRequestError,
+  handleError,
   NotFoundError,
   UnauthorizedError,
-  handleError,
 } from '../../errors/index.js';
+import { buildProvenance, verifyGitHubOIDC } from '../../lib/oidc.js';
 import { toJsonSchema } from '../../lib/zod-schema.js';
-import { verifyGitHubOIDC, buildProvenance } from '../../lib/oidc.js';
-import {
-  SkillSearchResponseSchema,
-  SkillDetailSchema,
-  SkillDownloadInfoSchema,
-  SkillAnnounceRequestSchema,
-  SkillAnnounceResponseSchema,
-} from '@nimblebrain/mpak-schemas';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
 import { extractSkillContent } from '../../utils/skill-content.js';
@@ -106,9 +106,9 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Build filters
       const filters: Record<string, unknown> = {};
-      if (q) filters['query'] = q;
-      if (category) filters['category'] = category;
-      if (tags) filters['tags'] = tags.split(',').map((t) => t.trim());
+      if (q) filters.query = q;
+      if (category) filters.category = category;
+      if (tags) filters.tags = tags.split(',').map((t) => t.trim());
 
       // Build sort options
       let orderBy: Record<string, string> = { totalDownloads: 'desc' };
@@ -138,7 +138,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
           results: total,
           ms: Date.now() - startTime,
         },
-        `skill_search: q="${q ?? '*'}" returned ${total} results`
+        `skill_search: q="${q ?? '*'}" returned ${total} results`,
       );
 
       return {
@@ -201,8 +201,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Extract examples from the latest version's frontmatter
       const frontmatter = (latestVersion?.frontmatter ?? {}) as Record<string, unknown>;
-      const meta = (frontmatter['metadata'] ?? {}) as Record<string, unknown>;
-      const examples = Array.isArray(meta['examples']) ? meta['examples'] as { prompt: string; context?: string }[] : undefined;
+      const meta = (frontmatter.metadata ?? {}) as Record<string, unknown>;
+      const examples = Array.isArray(meta.examples)
+        ? (meta.examples as { prompt: string; context?: string }[])
+        : undefined;
 
       // Build provenance from the latest version
       const provenance = latestVersion?.provenanceRepository
@@ -320,7 +322,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
       // Log download
       fastify.log.info(
         { op: 'skill_download', skill: name, version: version.version },
-        `skill_download: ${name}@${version.version}`
+        `skill_download: ${name}@${version.version}`,
       );
 
       // Increment download counts atomically in a single transaction
@@ -328,7 +330,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         await skillRepo.incrementVersionDownloads(skill.id, version.version, tx);
         await skillRepo.incrementDownloads(skill.id, tx);
       }).catch((err: unknown) =>
-        fastify.log.error({ err }, 'Failed to update skill download counts')
+        fastify.log.error({ err }, 'Failed to update skill download counts'),
       );
 
       // Check if client wants JSON response
@@ -340,7 +342,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
       if (wantsJson) {
         const expiresAt = new Date();
         expiresAt.setSeconds(
-          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900)
+          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
         );
 
         return {
@@ -359,7 +361,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
         return reply
           .header('Content-Type', 'application/octet-stream')
-          .header('Content-Disposition', `attachment; filename="${skillName}-${version.version}.skill"`)
+          .header(
+            'Content-Disposition',
+            `attachment; filename="${skillName}-${version.version}.skill"`,
+          )
           .send(fileBuffer);
       }
     },
@@ -385,7 +390,11 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (request, reply) => {
-      const { scope, name: skillName, version: versionParam } = request.params as {
+      const {
+        scope,
+        name: skillName,
+        version: versionParam,
+      } = request.params as {
         scope: string;
         name: string;
         version: string;
@@ -407,7 +416,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
       fastify.log.info(
         { op: 'skill_download', skill: name, version: version.version },
-        `skill_download: ${name}@${version.version}`
+        `skill_download: ${name}@${version.version}`,
       );
 
       // Increment download counts atomically in a single transaction
@@ -415,7 +424,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         await skillRepo.incrementVersionDownloads(skill.id, version.version, tx);
         await skillRepo.incrementDownloads(skill.id, tx);
       }).catch((err: unknown) =>
-        fastify.log.error({ err }, 'Failed to update skill download counts')
+        fastify.log.error({ err }, 'Failed to update skill download counts'),
       );
 
       const acceptHeader = request.headers.accept ?? '';
@@ -426,7 +435,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
       if (wantsJson) {
         const expiresAt = new Date();
         expiresAt.setSeconds(
-          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900)
+          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
         );
 
         return {
@@ -445,7 +454,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
         return reply
           .header('Content-Type', 'application/octet-stream')
-          .header('Content-Disposition', `attachment; filename="${skillName}-${version.version}.skill"`)
+          .header(
+            'Content-Disposition',
+            `attachment; filename="${skillName}-${version.version}.skill"`,
+          )
           .send(fileBuffer);
       }
     },
@@ -468,7 +480,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         const authHeader = request.headers.authorization;
         if (!authHeader?.startsWith('Bearer ')) {
           throw new UnauthorizedError(
-            'Missing OIDC token. This endpoint requires a GitHub Actions OIDC token.'
+            'Missing OIDC token. This endpoint requires a GitHub Actions OIDC token.',
           );
         }
 
@@ -476,31 +488,37 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         const announceStart = Date.now();
 
         // Verify the OIDC token
-        let claims;
+        let claims: Awaited<ReturnType<typeof verifyGitHubOIDC>>;
         try {
           claims = await verifyGitHubOIDC(token);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Token verification failed';
           fastify.log.warn(
             { op: 'skill_announce', error: message },
-            `skill_announce: OIDC verification failed`
+            `skill_announce: OIDC verification failed`,
           );
           throw new UnauthorizedError(`Invalid OIDC token: ${message}`);
         }
 
-        const { name: rawName, version, skill: frontmatter, release_tag, prerelease = false, artifact } =
-          request.body as {
-            name: string;
-            version: string;
-            skill: Record<string, unknown>;
-            release_tag: string;
-            prerelease?: boolean;
-            artifact: {
-              filename: string;
-              sha256: string;
-              size: number;
-            };
+        const {
+          name: rawName,
+          version,
+          skill: frontmatter,
+          release_tag,
+          prerelease = false,
+          artifact,
+        } = request.body as {
+          name: string;
+          version: string;
+          skill: Record<string, unknown>;
+          release_tag: string;
+          prerelease?: boolean;
+          artifact: {
+            filename: string;
+            sha256: string;
+            size: number;
           };
+        };
 
         // Normalise to lowercase so @Foo/bar and @foo/bar are the same skill
         const name = rawName.toLowerCase();
@@ -508,7 +526,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         // Validate name
         if (!isValidScopedName(name)) {
           throw new BadRequestError(
-            `Invalid skill name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
+            `Invalid skill name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`,
           );
         }
 
@@ -530,10 +548,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
               repo: claims.repository,
               error: 'scope_mismatch',
             },
-            `skill_announce: scope mismatch @${parsed.scope} != ${claims.repository_owner}`
+            `skill_announce: scope mismatch @${parsed.scope} != ${claims.repository_owner}`,
           );
           throw new UnauthorizedError(
-            `Scope mismatch: Skill scope "@${parsed.scope}" does not match repository owner "${claims.repository_owner}".`
+            `Scope mismatch: Skill scope "@${parsed.scope}" does not match repository owner "${claims.repository_owner}".`,
           );
         }
 
@@ -546,7 +564,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             tag: release_tag,
             prerelease,
           },
-          `skill_announce: starting ${name}@${version}`
+          `skill_announce: starting ${name}@${version}`,
         );
 
         // Build provenance
@@ -566,7 +584,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
 
         if (!releaseResponse.ok) {
           throw new BadRequestError(
-            `Failed to fetch release ${release_tag}: ${releaseResponse.statusText}`
+            `Failed to fetch release ${release_tag}: ${releaseResponse.statusText}`,
           );
         }
 
@@ -580,7 +598,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         const asset = release.assets.find((a: GitHubReleaseAsset) => a.name === artifact.filename);
         if (!asset) {
           throw new BadRequestError(
-            `Artifact "${artifact.filename}" not found in release ${release_tag}`
+            `Artifact "${artifact.filename}" not found in release ${release_tag}`,
           );
         }
 
@@ -594,7 +612,9 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
           fastify.log.info(`Downloading artifact: ${asset.name}`);
           const assetResponse = await fetch(asset.browser_download_url);
           if (!assetResponse.ok || !assetResponse.body) {
-            throw new BadRequestError(`Failed to download ${asset.name}: ${assetResponse.statusText}`);
+            throw new BadRequestError(
+              `Failed to download ${asset.name}: ${assetResponse.statusText}`,
+            );
           }
 
           // Stream to temp file while computing hash
@@ -624,7 +644,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
           // Verify size
           if (bytesWritten !== artifact.size) {
             throw new BadRequestError(
-              `Size mismatch for ${asset.name}: declared ${artifact.size} bytes, got ${bytesWritten} bytes`
+              `Size mismatch for ${asset.name}: declared ${artifact.size} bytes, got ${bytesWritten} bytes`,
             );
           }
 
@@ -632,7 +652,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
           computedSha256 = hash.digest('hex');
           if (computedSha256 !== artifact.sha256) {
             throw new BadRequestError(
-              `SHA256 mismatch for ${asset.name}: declared ${artifact.sha256}, computed ${computedSha256}`
+              `SHA256 mismatch for ${asset.name}: declared ${artifact.sha256}, computed ${computedSha256}`,
             );
           }
 
@@ -649,7 +669,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             uploadStream,
             computedSha256,
             bytesWritten,
-            'skill' // Use 'skill' as the "platform" to distinguish from mcpb bundles
+            'skill', // Use 'skill' as the "platform" to distinguish from mcpb bundles
           );
           storagePath = result.path;
 
@@ -659,7 +679,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         // Extract metadata from frontmatter
-        const meta = (frontmatter['metadata'] ?? {}) as Record<string, unknown>;
+        const meta = (frontmatter.metadata ?? {}) as Record<string, unknown>;
 
         let status: 'created' | 'exists' = 'created';
         let oldStoragePath: string | null = null;
@@ -671,42 +691,46 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             const { skill: existingSkill } = await skillRepo.upsertSkill(
               {
                 name,
-                description: frontmatter['description'] as string,
-                license: frontmatter['license'] as string | undefined,
-                compatibility: frontmatter['compatibility'] as string | undefined,
+                description: frontmatter.description as string,
+                license: frontmatter.license as string | undefined,
+                compatibility: frontmatter.compatibility as string | undefined,
                 allowedTools: frontmatter['allowed-tools'] as string | undefined,
-                category: meta['category'] as string | undefined,
-                tags: (meta['tags'] as string[]) ?? [],
-                triggers: (meta['triggers'] as string[]) ?? [],
-                keywords: (meta['keywords'] as string[]) ?? [],
-                authorName: (meta['author'] as Record<string, unknown>)?.['name'] as string | undefined,
-                authorEmail: (meta['author'] as Record<string, unknown>)?.['email'] as string | undefined,
-                authorUrl: (meta['author'] as Record<string, unknown>)?.['url'] as string | undefined,
+                category: meta.category as string | undefined,
+                tags: (meta.tags as string[]) ?? [],
+                triggers: (meta.triggers as string[]) ?? [],
+                keywords: (meta.keywords as string[]) ?? [],
+                authorName: (meta.author as Record<string, unknown>)?.name as string | undefined,
+                authorEmail: (meta.author as Record<string, unknown>)?.email as string | undefined,
+                authorUrl: (meta.author as Record<string, unknown>)?.url as string | undefined,
                 githubRepo: claims.repository,
                 latestVersion: version,
               },
-              tx
+              tx,
             );
 
             // Upsert version
             const { created: versionCreated, oldStoragePath: oldPath } =
-              await skillRepo.upsertVersion(existingSkill.id, {
-                skillId: existingSkill.id,
-                version,
-                frontmatter,
-                content: skillContent,
-                prerelease,
-                releaseTag: release_tag,
-                releaseUrl: release.html_url,
-                storagePath,
-                sourceUrl: asset.browser_download_url,
-                digest: `sha256:${computedSha256}`,
-                sizeBytes: BigInt(artifact.size),
-                publishMethod: 'oidc',
-                provenanceRepository: provenance.repository,
-                provenanceSha: provenance.sha,
-                provenance,
-              }, tx);
+              await skillRepo.upsertVersion(
+                existingSkill.id,
+                {
+                  skillId: existingSkill.id,
+                  version,
+                  frontmatter,
+                  content: skillContent,
+                  prerelease,
+                  releaseTag: release_tag,
+                  releaseUrl: release.html_url,
+                  storagePath,
+                  sourceUrl: asset.browser_download_url,
+                  digest: `sha256:${computedSha256}`,
+                  sizeBytes: BigInt(artifact.size),
+                  publishMethod: 'oidc',
+                  provenanceRepository: provenance.repository,
+                  provenanceSha: provenance.sha,
+                  provenance,
+                },
+                tx,
+              );
 
             status = versionCreated ? 'created' : 'exists';
             oldStoragePath = oldPath;
@@ -722,7 +746,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             await fastify.storage.deleteBundle(storagePath);
             fastify.log.info(`Cleaned up after transaction failure: ${storagePath}`);
           } catch (cleanupError) {
-            fastify.log.error({ err: cleanupError, path: storagePath }, 'Failed to cleanup uploaded file');
+            fastify.log.error(
+              { err: cleanupError, path: storagePath },
+              'Failed to cleanup uploaded file',
+            );
           }
           throw error;
         }
@@ -733,7 +760,10 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             await fastify.storage.deleteBundle(oldStoragePath);
             fastify.log.info(`Cleaned up old skill: ${oldStoragePath}`);
           } catch (cleanupError) {
-            fastify.log.warn({ err: cleanupError, path: oldStoragePath }, 'Failed to cleanup old skill file');
+            fastify.log.warn(
+              { err: cleanupError, path: oldStoragePath },
+              'Failed to cleanup old skill file',
+            );
           }
         }
 
@@ -746,7 +776,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
             status,
             ms: Date.now() - announceStart,
           },
-          `skill_announce: ${status} ${name}@${version} (${Date.now() - announceStart}ms)`
+          `skill_announce: ${status} ${name}@${version} (${Date.now() - announceStart}ms)`,
         );
 
         // Non-blocking Discord notification for new or updated skills
@@ -760,7 +790,7 @@ export const skillRoutes: FastifyPluginAsync = async (fastify) => {
       } catch (error) {
         fastify.log.error(
           { op: 'skill_announce', error: error instanceof Error ? error.message : 'unknown' },
-          `skill_announce: failed`
+          `skill_announce: failed`,
         );
         return handleError(error, request, reply);
       }
