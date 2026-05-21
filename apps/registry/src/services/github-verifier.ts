@@ -5,7 +5,7 @@
  * to verify package ownership claims.
  */
 
-import { validateMpakJson, type MpakJson } from '../schemas/mpak-schema.js';
+import { type MpakJson, validateMpakJson } from '../schemas/mpak-schema.js';
 
 export interface GitHubRepoStats {
   stars: number;
@@ -25,11 +25,14 @@ export interface GitHubVerificationResult {
  * Parse GitHub repository identifier
  */
 export function parseGitHubRepo(input: string): { owner: string; repo: string } | null {
-  const cleaned = input.trim().replace(/\.git$/, '').replace(/\/$/, '');
+  const cleaned = input
+    .trim()
+    .replace(/\.git$/, '')
+    .replace(/\/$/, '');
 
   if (cleaned.includes('github.com')) {
     const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/);
-    if (match && match[1] && match[2]) {
+    if (match?.[1] && match[2]) {
       return { owner: match[1], repo: match[2] };
     }
   }
@@ -46,7 +49,7 @@ export function parseGitHubRepo(input: string): { owner: string; repo: string } 
  * Fetch mpak.json from GitHub repository
  */
 export async function fetchMpakJsonFromGitHub(
-  githubRepo: string
+  githubRepo: string,
 ): Promise<GitHubVerificationResult> {
   const parsed = parseGitHubRepo(githubRepo);
 
@@ -66,7 +69,7 @@ export async function fetchMpakJsonFromGitHub(
     try {
       const apiResponse = await fetch(apiUrl, {
         headers: {
-          'Accept': 'application/vnd.github.v3.raw',
+          Accept: 'application/vnd.github.v3.raw',
           'User-Agent': 'mpak-registry',
         },
       });
@@ -140,14 +143,13 @@ export async function fetchMpakJsonFromGitHub(
           githubUrl: rawUrl,
         };
       }
-    } catch (_error) {
-      continue;
-    }
+    } catch (_error) {}
   }
 
   return {
     success: false,
-    error: 'Could not find mpak.json in repository. Please add mpak.json to the root of your repository on the main or master branch.',
+    error:
+      'Could not find mpak.json in repository. Please add mpak.json to the root of your repository on the main or master branch.',
   };
 }
 
@@ -156,7 +158,7 @@ export async function fetchMpakJsonFromGitHub(
  */
 export function verifyMaintainer(mpakJson: MpakJson, githubUsername: string): boolean {
   return mpakJson.maintainers.some(
-    (maintainer) => maintainer.toLowerCase() === githubUsername.toLowerCase()
+    (maintainer) => maintainer.toLowerCase() === githubUsername.toLowerCase(),
   );
 }
 
@@ -173,7 +175,7 @@ export function verifyPackageName(mpakJson: MpakJson, expectedPackageName: strin
 export async function verifyPackageClaim(
   packageName: string,
   githubRepo: string,
-  githubUsername: string
+  githubUsername: string,
 ): Promise<{
   verified: boolean;
   error?: string;
@@ -219,9 +221,7 @@ export async function verifyPackageClaim(
 /**
  * Fetch repository stats from GitHub API
  */
-export async function fetchGitHubRepoStats(
-  githubRepo: string
-): Promise<GitHubRepoStats | null> {
+export async function fetchGitHubRepoStats(githubRepo: string): Promise<GitHubRepoStats | null> {
   const parsed = parseGitHubRepo(githubRepo);
 
   if (!parsed) {
@@ -234,7 +234,7 @@ export async function fetchGitHubRepoStats(
   try {
     const response = await fetch(url, {
       headers: {
-        'Accept': 'application/vnd.github.v3+json',
+        Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'mpak-registry',
       },
     });
@@ -243,12 +243,12 @@ export async function fetchGitHubRepoStats(
       return null;
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
 
     return {
-      stars: (data['stargazers_count'] as number) ?? 0,
-      forks: (data['forks_count'] as number) ?? 0,
-      watchers: (data['watchers_count'] as number) ?? 0,
+      stars: (data.stargazers_count as number) ?? 0,
+      forks: (data.forks_count as number) ?? 0,
+      watchers: (data.watchers_count as number) ?? 0,
       updatedAt: new Date(),
     };
   } catch (_error) {

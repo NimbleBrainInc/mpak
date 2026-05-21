@@ -1,11 +1,8 @@
-import { createWriteStream, createReadStream } from "fs";
-import { createHash } from "crypto";
-import { basename, join, resolve } from "path";
-import archiver from "archiver";
-import {
-  validateSkillDirectory,
-  formatValidationResult,
-} from "./validate.js";
+import { createHash } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
+import archiver from 'archiver';
+import { formatValidationResult, validateSkillDirectory } from './validate.js';
 
 export interface PackResult {
   success: boolean;
@@ -20,10 +17,7 @@ export interface PackResult {
 /**
  * Create a .skill bundle from a skill directory
  */
-export async function packSkill(
-  skillPath: string,
-  outputPath?: string,
-): Promise<PackResult> {
+export async function packSkill(skillPath: string, outputPath?: string): Promise<PackResult> {
   // Validate first
   const validation = validateSkillDirectory(skillPath);
 
@@ -40,29 +34,27 @@ export async function packSkill(
   }
 
   const skillName = validation.name!;
-  const version =
-    validation.frontmatter?.metadata?.version || "0.0.0";
+  const version = validation.frontmatter?.metadata?.version || '0.0.0';
 
   // Determine output path
   const bundleName = `${skillName}-${version}.skill`;
-  const finalOutputPath =
-    outputPath || join(process.cwd(), bundleName);
+  const finalOutputPath = outputPath || join(process.cwd(), bundleName);
 
   // Create the zip archive
   return new Promise((resolvePromise) => {
     const output = createWriteStream(finalOutputPath);
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = archiver('zip', { zlib: { level: 9 } });
 
-    output.on("close", () => {
+    output.on('close', () => {
       const size = archive.pointer();
 
       // Calculate SHA256
-      const hash = createHash("sha256");
+      const hash = createHash('sha256');
       const stream = createReadStream(finalOutputPath);
 
-      stream.on("data", (chunk) => hash.update(chunk));
-      stream.on("end", () => {
-        const sha256 = hash.digest("hex");
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => {
+        const sha256 = hash.digest('hex');
 
         resolvePromise({
           success: true,
@@ -74,7 +66,7 @@ export async function packSkill(
           error: null,
         });
       });
-      stream.on("error", (err) => {
+      stream.on('error', (err) => {
         resolvePromise({
           success: false,
           path: null,
@@ -87,7 +79,7 @@ export async function packSkill(
       });
     });
 
-    archive.on("error", (err) => {
+    archive.on('error', (err) => {
       resolvePromise({
         success: false,
         path: null,
@@ -127,11 +119,8 @@ export interface PackOptions {
 /**
  * Handle the pack command
  */
-export async function handleSkillPack(
-  skillPath: string,
-  options: PackOptions,
-): Promise<void> {
-  console.log("");
+export async function handleSkillPack(skillPath: string, options: PackOptions): Promise<void> {
+  console.log('');
   console.log(`Validating ${skillPath}...`);
 
   const result = await packSkill(skillPath, options.output);
@@ -140,11 +129,9 @@ export async function handleSkillPack(
     console.log(JSON.stringify(result, null, 2));
   } else if (result.success) {
     console.log(`\u2713 Valid: ${result.name}`);
-    console.log("");
-    console.log("Creating bundle...");
-    console.log(
-      `\u2713 Created: ${basename(result.path!)} (${formatSize(result.size!)})`,
-    );
+    console.log('');
+    console.log('Creating bundle...');
+    console.log(`\u2713 Created: ${basename(result.path!)} (${formatSize(result.size!)})`);
     console.log(`  SHA256: ${result.sha256}`);
   } else {
     console.log(result.error);

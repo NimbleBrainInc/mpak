@@ -3,7 +3,7 @@ interface RuntimeIconProps {
   className?: string;
 }
 
-export default function RuntimeIcon({ runtime, className = "w-5 h-5" }: RuntimeIconProps) {
+export default function RuntimeIcon({ runtime, className = 'w-5 h-5' }: RuntimeIconProps) {
   const lowerRuntime = runtime.toLowerCase();
 
   if (lowerRuntime === 'node' || lowerRuntime === 'nodejs') {

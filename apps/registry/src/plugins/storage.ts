@@ -1,17 +1,27 @@
+import { createHash } from 'node:crypto';
+import { createWriteStream, promises as fs } from 'node:fs';
+import path from 'node:path';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/cloudfront-signer';
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
-import { promises as fs } from 'fs';
-import { createWriteStream } from 'fs';
-import path from 'path';
-import { createHash } from 'crypto';
-import type { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/cloudfront-signer';
 import { config } from '../config.js';
 
 export interface StorageService {
-  saveBundle(scope: string, packageName: string, version: string, data: Buffer, platform?: string): Promise<{
+  saveBundle(
+    scope: string,
+    packageName: string,
+    version: string,
+    data: Buffer,
+    platform?: string,
+  ): Promise<{
     path: string;
     sha256: string;
     size: number;
@@ -23,11 +33,16 @@ export interface StorageService {
     stream: Readable,
     sha256: string,
     size: number,
-    platform?: string
+    platform?: string,
   ): Promise<{ path: string; sha256: string; size: number }>;
   getBundle(storagePath: string): Promise<Buffer>;
   getBundleUrl(scope: string, packageName: string, version: string, platform?: string): string;
-  getSignedDownloadUrl(scope: string, packageName: string, version: string, platform?: string): Promise<string>;
+  getSignedDownloadUrl(
+    scope: string,
+    packageName: string,
+    version: string,
+    platform?: string,
+  ): Promise<string>;
   getSignedDownloadUrlFromPath(storagePath: string): Promise<string>;
   deleteBundle(storagePath: string): Promise<void>;
 }
@@ -50,7 +65,7 @@ class LocalStorageService implements StorageService {
     packageName: string,
     version: string,
     data: Buffer,
-    platform?: string
+    platform?: string,
   ): Promise<{ path: string; sha256: string; size: number }> {
     const bundleDir = path.join(this.basePath, `@${scope}`, packageName, version);
     await fs.mkdir(bundleDir, { recursive: true });
@@ -76,7 +91,12 @@ class LocalStorageService implements StorageService {
     return platform ? `${base}?platform=${platform}` : base;
   }
 
-  async getSignedDownloadUrl(scope: string, packageName: string, version: string, platform?: string): Promise<string> {
+  async getSignedDownloadUrl(
+    scope: string,
+    packageName: string,
+    version: string,
+    platform?: string,
+  ): Promise<string> {
     return this.getBundleUrl(scope, packageName, version, platform);
   }
 
@@ -96,7 +116,7 @@ class LocalStorageService implements StorageService {
     stream: Readable,
     sha256: string,
     size: number,
-    platform?: string
+    platform?: string,
   ): Promise<{ path: string; sha256: string; size: number }> {
     const bundleDir = path.join(this.basePath, `@${scope}`, packageName, version);
     await fs.mkdir(bundleDir, { recursive: true });
@@ -131,7 +151,7 @@ class S3StorageService implements StorageService {
     packageName: string,
     version: string,
     data: Buffer,
-    platform?: string
+    platform?: string,
   ): Promise<{ path: string; sha256: string; size: number }> {
     const filename = platform ? `${platform}.mcpb` : 'bundle.mcpb';
     const key = `packages/@${scope}/${packageName}/${version}/${filename}`;
@@ -195,7 +215,12 @@ class S3StorageService implements StorageService {
     return `https://${bucket}.s3.${region}.amazonaws.com/packages/@${scope}/${packageName}/${version}/${filename}`;
   }
 
-  async getSignedDownloadUrl(scope: string, packageName: string, version: string, platform?: string): Promise<string> {
+  async getSignedDownloadUrl(
+    scope: string,
+    packageName: string,
+    version: string,
+    platform?: string,
+  ): Promise<string> {
     const cloudfrontConfig = config.storage.cloudfront;
 
     if (!cloudfrontConfig.domain || !cloudfrontConfig.keyPairId) {
@@ -282,7 +307,7 @@ class S3StorageService implements StorageService {
     stream: Readable,
     sha256: string,
     size: number,
-    platform?: string
+    platform?: string,
   ): Promise<{ path: string; sha256: string; size: number }> {
     const filename = platform ? `${platform}.mcpb` : 'bundle.mcpb';
     const key = `packages/@${scope}/${packageName}/${version}/${filename}`;
@@ -320,7 +345,9 @@ const storagePlugin: FastifyPluginAsync = async (fastify) => {
     const { bucket, region, accessKeyId, secretAccessKey } = config.storage.s3;
 
     if (!bucket || !region || !accessKeyId || !secretAccessKey) {
-      throw new Error('S3 storage requires bucket, region, accessKeyId, and secretAccessKey to be configured');
+      throw new Error(
+        'S3 storage requires bucket, region, accessKeyId, and secretAccessKey to be configured',
+      );
     }
 
     storageService = new S3StorageService(bucket, region, accessKeyId, secretAccessKey);

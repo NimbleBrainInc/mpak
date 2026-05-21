@@ -11,7 +11,7 @@ import { handleError } from './handler.js';
 export function errorHandler(
   error: FastifyError,
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): void {
   if (reply.sent) {
     return;
@@ -28,7 +28,7 @@ export function errorHandler(
  * Helper to wrap async route handlers with error handling
  */
 export function asyncHandler<T = unknown>(
-  handler: (request: FastifyRequest, reply: FastifyReply) => Promise<T>
+  handler: (request: FastifyRequest, reply: FastifyReply) => Promise<T>,
 ) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     try {

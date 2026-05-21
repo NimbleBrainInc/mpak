@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { MpakClient } from '@nimblebrain/mpak-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSkillInstall } from '../../src/commands/skills/install.js';

@@ -76,14 +76,8 @@ name: my-skill
 
   it('picks first match when multiple SKILL.md files exist', () => {
     const zip = new AdmZip();
-    zip.addFile(
-      'a-skill/SKILL.md',
-      Buffer.from('---\nname: first\n---\nFirst body.')
-    );
-    zip.addFile(
-      'b-skill/SKILL.md',
-      Buffer.from('---\nname: second\n---\nSecond body.')
-    );
+    zip.addFile('a-skill/SKILL.md', Buffer.from('---\nname: first\n---\nFirst body.'));
+    zip.addFile('b-skill/SKILL.md', Buffer.from('---\nname: second\n---\nSecond body.'));
     const result = extractSkillContent(zip.toBuffer());
     expect(result).toBe('First body.');
   });

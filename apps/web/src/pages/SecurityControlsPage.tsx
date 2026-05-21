@@ -30,19 +30,22 @@ const DOMAINS: Domain[] = [
       {
         id: 'SC-01',
         name: 'SBOM Generation',
-        description: 'Bundle includes a Software Bill of Materials (CycloneDX or SPDX format) listing all components.',
+        description:
+          'Bundle includes a Software Bill of Materials (CycloneDX or SPDX format) listing all components.',
         levels: [1, 2, 3, 4],
       },
       {
         id: 'SC-02',
         name: 'Vulnerability Scan',
-        description: 'No critical CVEs in KEV, no critical/high CVEs with EPSS > 10%. VEX statements supported for exceptions.',
+        description:
+          'No critical CVEs in KEV, no critical/high CVEs with EPSS > 10%. VEX statements supported for exceptions.',
         levels: [2, 3, 4],
       },
       {
         id: 'SC-03',
         name: 'Dependency Pinning',
-        description: 'All dependencies pinned to exact versions via lock files. No floating version ranges.',
+        description:
+          'All dependencies pinned to exact versions via lock files. No floating version ranges.',
         levels: [2, 3, 4],
       },
       {
@@ -55,7 +58,8 @@ const DOMAINS: Domain[] = [
       {
         id: 'SC-05',
         name: 'Trusted Sources',
-        description: 'All dependencies from approved registries (npm, PyPI, crates.io). Private registries declared.',
+        description:
+          'All dependencies from approved registries (npm, PyPI, crates.io). Private registries declared.',
         levels: [3, 4],
       },
     ],
@@ -69,25 +73,29 @@ const DOMAINS: Domain[] = [
       {
         id: 'CQ-01',
         name: 'No Embedded Secrets',
-        description: 'No AWS keys, API tokens, passwords, or private keys in source. Scanned with TruffleHog.',
+        description:
+          'No AWS keys, API tokens, passwords, or private keys in source. Scanned with TruffleHog.',
         levels: [1, 2, 3, 4],
       },
       {
         id: 'CQ-02',
         name: 'No Malicious Patterns',
-        description: 'No data exfiltration, typosquatting, crypto miners, backdoors, or malicious install hooks.',
+        description:
+          'No data exfiltration, typosquatting, crypto miners, backdoors, or malicious install hooks.',
         levels: [1, 2, 3, 4],
       },
       {
         id: 'CQ-03',
         name: 'Static Analysis Clean',
-        description: 'Server code passes Bandit/ESLint security analysis with no high-severity findings.',
+        description:
+          'Server code passes Bandit/ESLint security analysis with no high-severity findings.',
         levels: [2, 3, 4],
       },
       {
         id: 'CQ-04',
         name: 'Input Validation',
-        description: 'All tool parameters validated using schema libraries (Zod, Pydantic, JSON Schema).',
+        description:
+          'All tool parameters validated using schema libraries (Zod, Pydantic, JSON Schema).',
         levels: [3, 4],
       },
       {
@@ -99,14 +107,16 @@ const DOMAINS: Domain[] = [
       {
         id: 'CQ-06',
         name: 'Anti-Slopsquatting',
-        description: 'Package name not in LLM hallucination corpus. Protects against AI code generation attacks.',
+        description:
+          'Package name not in LLM hallucination corpus. Protects against AI code generation attacks.',
         levels: [2, 3, 4],
         mcpSpecific: true,
       },
       {
         id: 'CQ-07',
         name: 'Behavioral Analysis',
-        description: 'Bundle runs in isolated sandbox. Network, filesystem, and process behavior monitored.',
+        description:
+          'Bundle runs in isolated sandbox. Network, filesystem, and process behavior monitored.',
         levels: [4],
         mcpSpecific: true,
       },
@@ -116,7 +126,8 @@ const DOMAINS: Domain[] = [
     id: 'artifact_integrity',
     name: 'Artifact Integrity',
     abbrev: 'AI',
-    description: 'Ensures the bundle has not been tampered with and can be cryptographically verified.',
+    description:
+      'Ensures the bundle has not been tampered with and can be cryptographically verified.',
     controls: [
       {
         id: 'AI-01',
@@ -133,7 +144,8 @@ const DOMAINS: Domain[] = [
       {
         id: 'AI-03',
         name: 'Bundle Signature',
-        description: 'Cryptographically signed with Sigstore or GPG. Signature verifiable against publisher key.',
+        description:
+          'Cryptographically signed with Sigstore or GPG. Signature verifiable against publisher key.',
         levels: [3, 4],
       },
       {
@@ -154,7 +166,8 @@ const DOMAINS: Domain[] = [
       {
         id: 'PR-01',
         name: 'Source Repository',
-        description: 'Public source repository linked and accessible. Source matches bundle contents.',
+        description:
+          'Public source repository linked and accessible. Source matches bundle contents.',
         levels: [2, 3, 4],
       },
       {
@@ -166,7 +179,8 @@ const DOMAINS: Domain[] = [
       {
         id: 'PR-03',
         name: 'Build Attestation',
-        description: 'SLSA provenance attestation from trusted builder (GitHub Actions, GitLab CI).',
+        description:
+          'SLSA provenance attestation from trusted builder (GitHub Actions, GitLab CI).',
         levels: [3, 4],
       },
       {
@@ -179,7 +193,8 @@ const DOMAINS: Domain[] = [
       {
         id: 'PR-05',
         name: 'Source Repository Health',
-        description: 'OpenSSF Scorecard score >= 5.0 (L3) or >= 7.0 (L4). No critical check failures.',
+        description:
+          'OpenSSF Scorecard score >= 5.0 (L3) or >= 7.0 (L4). No critical check failures.',
         levels: [3, 4],
       },
     ],
@@ -199,20 +214,23 @@ const DOMAINS: Domain[] = [
       {
         id: 'CD-02',
         name: 'Permission Scope',
-        description: 'Filesystem, network, environment, subprocess permissions declared in manifest.',
+        description:
+          'Filesystem, network, environment, subprocess permissions declared in manifest.',
         levels: [2, 3, 4],
       },
       {
         id: 'CD-03',
         name: 'Tool Description Safety',
-        description: 'No prompt injection, exfiltration instructions, or hidden directives in tool descriptions.',
+        description:
+          'No prompt injection, exfiltration instructions, or hidden directives in tool descriptions.',
         levels: [2, 3, 4],
         mcpSpecific: true,
       },
       {
         id: 'CD-04',
         name: 'Credential Scope Declaration',
-        description: 'OAuth scopes and API permissions declared. Least-privilege principle enforced.',
+        description:
+          'OAuth scopes and API permissions declared. Least-privilege principle enforced.',
         levels: [3, 4],
         mcpSpecific: true,
       },
@@ -221,16 +239,31 @@ const DOMAINS: Domain[] = [
 ];
 
 const LEVEL_CLASSES = [
-  { legend: 'border-mpak-gray-500 text-mpak-gray-500', active: 'bg-mpak-gray-500/15 text-mpak-gray-500' },
-  { legend: 'border-terminal-success text-terminal-success', active: 'bg-terminal-success/15 text-terminal-success' },
-  { legend: 'border-accent-emerald text-accent-emerald', active: 'bg-accent-emerald/15 text-accent-emerald' },
-  { legend: 'border-accent-gold-400 text-accent-gold-400', active: 'bg-accent-gold-400/15 text-accent-gold-400' },
+  {
+    legend: 'border-mpak-gray-500 text-mpak-gray-500',
+    active: 'bg-mpak-gray-500/15 text-mpak-gray-500',
+  },
+  {
+    legend: 'border-terminal-success text-terminal-success',
+    active: 'bg-terminal-success/15 text-terminal-success',
+  },
+  {
+    legend: 'border-accent-emerald text-accent-emerald',
+    active: 'bg-accent-emerald/15 text-accent-emerald',
+  },
+  {
+    legend: 'border-accent-gold-400 text-accent-gold-400',
+    active: 'bg-accent-gold-400/15 text-accent-gold-400',
+  },
 ];
 
 export default function SecurityControlsPage() {
   // Build ItemList schema from all controls
-  const controlItems = DOMAINS.flatMap(d =>
-    d.controls.map(c => ({ name: `${c.id}: ${c.name}`, url: `https://www.mpak.dev/security/controls#${c.id}` }))
+  const controlItems = DOMAINS.flatMap((d) =>
+    d.controls.map((c) => ({
+      name: `${c.id}: ${c.name}`,
+      url: `https://www.mpak.dev/security/controls#${c.id}`,
+    })),
   );
 
   useSEO({
@@ -258,7 +291,7 @@ export default function SecurityControlsPage() {
   const totalControls = DOMAINS.reduce((sum, d) => sum + d.controls.length, 0);
   const mcpSpecificControls = DOMAINS.reduce(
     (sum, d) => sum + d.controls.filter((c) => c.mcpSpecific).length,
-    0
+    0,
   );
 
   return (
@@ -311,16 +344,12 @@ export default function SecurityControlsPage() {
             <section key={domain.id}>
               {/* Domain header */}
               <div className="flex items-baseline gap-3 mb-2">
-                <h2 className="text-2xl font-semibold text-mpak-gray-900">
-                  {domain.name}
-                </h2>
+                <h2 className="text-2xl font-semibold text-mpak-gray-900">{domain.name}</h2>
                 <span className="font-mono text-sm text-mpak-gray-400">
                   {domain.abbrev}-01..{domain.abbrev}-0{domain.controls.length}
                 </span>
               </div>
-              <p className="text-mpak-gray-600 mb-6 max-w-2xl">
-                {domain.description}
-              </p>
+              <p className="text-mpak-gray-600 mb-6 max-w-2xl">{domain.description}</p>
 
               {/* Controls list */}
               <div className="bg-surface-raised rounded-lg border border-white/[0.08] divide-y divide-white/[0.08] overflow-hidden">
@@ -342,9 +371,7 @@ export default function SecurityControlsPage() {
                       <div className="shrink-0 w-16">
                         <span
                           className={`inline-block font-mono text-sm font-medium ${
-                            control.mcpSpecific
-                              ? 'text-terminal-error'
-                              : 'text-mpak-gray-500'
+                            control.mcpSpecific ? 'text-terminal-error' : 'text-mpak-gray-500'
                           }`}
                         >
                           {control.id}
@@ -358,9 +385,7 @@ export default function SecurityControlsPage() {
                             <h3 className="font-semibold text-mpak-gray-900">
                               {control.name}
                               {control.recommended && (
-                                <span className="text-mpak-gray-400 ml-1">
-                                  *
-                                </span>
+                                <span className="text-mpak-gray-400 ml-1">*</span>
                               )}
                               {control.legal && (
                                 <span className="ml-2 text-xs font-normal text-mpak-gray-500">

@@ -20,7 +20,7 @@ export class AppError extends Error {
     statusCode: number = 500,
     code: string = 'INTERNAL_ERROR',
     isOperational: boolean = true,
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -70,25 +70,37 @@ export class ValidationError extends AppError {
 }
 
 export class InternalServerError extends AppError {
-  constructor(message: string = 'An internal error occurred. Please try again later.', details?: Record<string, unknown>) {
+  constructor(
+    message: string = 'An internal error occurred. Please try again later.',
+    details?: Record<string, unknown>,
+  ) {
     super(message, 500, 'INTERNAL_ERROR', false, details);
   }
 }
 
 export class ServiceUnavailableError extends AppError {
-  constructor(message: string = 'Service temporarily unavailable', details?: Record<string, unknown>) {
+  constructor(
+    message: string = 'Service temporarily unavailable',
+    details?: Record<string, unknown>,
+  ) {
     super(message, 503, 'SERVICE_UNAVAILABLE', true, details);
   }
 }
 
 export class DatabaseError extends AppError {
-  constructor(message: string = 'A database error occurred. Please try again.', details?: Record<string, unknown>) {
+  constructor(
+    message: string = 'A database error occurred. Please try again.',
+    details?: Record<string, unknown>,
+  ) {
     super(message, 500, 'DATABASE_ERROR', false, details);
   }
 }
 
 export class TransactionTimeoutError extends AppError {
-  constructor(message: string = 'The operation took too long to complete. Please try again.', details?: Record<string, unknown>) {
+  constructor(
+    message: string = 'The operation took too long to complete. Please try again.',
+    details?: Record<string, unknown>,
+  ) {
     super(message, 500, 'TRANSACTION_TIMEOUT', true, details);
   }
 }

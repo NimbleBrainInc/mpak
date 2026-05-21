@@ -3,33 +3,31 @@
  * Main entry point for all database operations
  */
 
+export type { Prisma, TransactionClient } from './client.js';
 // Client and transaction helpers
-export { getPrismaClient, disconnectDatabase, runInTransaction } from './client.js';
-export type { TransactionClient, Prisma } from './client.js';
-
-// Repositories
-export {
-  PackageRepository,
-  UserRepository,
-  SkillRepository,
-} from './repositories/index.js';
-
+export { disconnectDatabase, getPrismaClient, runInTransaction } from './client.js';
 export type {
   CreatePackageData,
   CreatePackageVersionData,
-  PackageSearchResult,
-  CreateUserData,
-  UpdateUserData,
   CreateSkillData,
   CreateSkillVersionData,
+  CreateUserData,
+  PackageSearchResult,
   SkillSearchFilters,
   SkillSearchResult,
+  UpdateUserData,
+} from './repositories/index.js';
+// Repositories
+export {
+  PackageRepository,
+  SkillRepository,
+  UserRepository,
 } from './repositories/index.js';
 
 // Types
 export type {
-  IRepository,
   FindOptions,
+  IRepository,
   PackageSearchFilters,
   PackageWithRelations,
 } from './types.js';

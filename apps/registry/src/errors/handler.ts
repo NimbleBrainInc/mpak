@@ -5,8 +5,8 @@
  * that can be safely exposed to the client.
  */
 
-import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
+import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import {
   AppError,
   BadRequestError,
@@ -37,8 +37,8 @@ function isPrismaError(error: unknown): error is Prisma.PrismaClientKnownRequest
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    typeof (error as Record<string, unknown>)['code'] === 'string' &&
-    ((error as Record<string, unknown>)['code'] as string).startsWith('P')
+    typeof (error as Record<string, unknown>).code === 'string' &&
+    ((error as Record<string, unknown>).code as string).startsWith('P')
   );
 }
 
@@ -48,7 +48,7 @@ function isPrismaError(error: unknown): error is Prisma.PrismaClientKnownRequest
 function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): AppError {
   switch (error.code) {
     case 'P2002': {
-      const target = error.meta?.['target'];
+      const target = error.meta?.target;
       const fieldName = Array.isArray(target) ? target.join(', ') : target;
       return new ConflictError('A record with this value already exists', {
         field: fieldName as string,
@@ -130,7 +130,7 @@ export function logError(
   logger: FastifyRequest['log'],
   error: unknown,
   normalizedError: AppError,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ) {
   const logContext = {
     ...context,
@@ -150,7 +150,7 @@ export function logError(
           originalError: error.message,
           originalErrorName: error.name,
         },
-        `Internal error: ${normalizedError.message}`
+        `Internal error: ${normalizedError.message}`,
       );
     } else {
       logger.error(
@@ -158,7 +158,7 @@ export function logError(
           ...logContext,
           unknownError: String(error),
         },
-        'Unknown error occurred'
+        'Unknown error occurred',
       );
     }
   }
@@ -179,7 +179,7 @@ export function handleError(
   error: unknown,
   request: FastifyRequest,
   reply: FastifyReply,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ): void {
   const normalizedError = normalizeError(error);
   logError(request.log, error, normalizedError, context);

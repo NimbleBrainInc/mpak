@@ -1,5 +1,5 @@
-import { packageToDetailPlaceholder } from './api';
 import type { Package } from '../schemas/generated';
+import { packageToDetailPlaceholder } from './api';
 
 function makePackage(overrides: Partial<Package> = {}): Package {
   return {

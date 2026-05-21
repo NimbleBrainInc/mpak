@@ -10,12 +10,12 @@ if (gtmId) {
   script.async = true;
   script.src = `https://www.googletagmanager.com/gtm.js?id=${gtmId}`;
   window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+  window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
   document.head.appendChild(script);
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
-  </StrictMode>
+  </StrictMode>,
 );

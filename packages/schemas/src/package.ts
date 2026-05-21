@@ -4,20 +4,20 @@ import { ServerTypeSchema } from './manifest.js';
 
 // Re-export manifest schemas so existing consumers of package.ts are not broken.
 export {
-  CapabilitySchema,
-  ManifestAuthorSchema,
-  ManifestServerSchema,
-  McpbManifestSchema,
-  McpConfigSchema,
-  ServerTypeSchema,
-  UserConfigFieldSchema,
   type Capability,
+  CapabilitySchema,
   type ManifestAuthor,
+  ManifestAuthorSchema,
   type ManifestServer,
+  ManifestServerSchema,
   type McpbManifest,
+  McpbManifestSchema,
   type McpConfig,
+  McpConfigSchema,
   type ServerType,
+  ServerTypeSchema,
   type UserConfigField,
+  UserConfigFieldSchema,
 } from './manifest.js';
 
 // =============================================================================

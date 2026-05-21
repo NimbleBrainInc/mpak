@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 // =============================================================================
 // Shared Components
@@ -83,7 +83,7 @@ export const CertificationSchema = z.object({
 export const ScorecardFindingSchema = z.object({
   id: z.string(),
   control: z.string(),
-  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  severity: z.enum(['critical', 'high', 'medium', 'low', 'info']),
   title: z.string(),
   description: z.string(),
   file: z.string().nullable(),
@@ -93,7 +93,7 @@ export const ScorecardFindingSchema = z.object({
 
 /** Individual control within a security domain */
 export const DomainControlSchema = z.object({
-  status: z.enum(["pass", "fail", "skip", "error"]),
+  status: z.enum(['pass', 'fail', 'skip', 'error']),
   name: z.string(),
   findings_count: z.number(),
 });
@@ -108,8 +108,8 @@ export const SecurityDomainSchema = z.object({
 
 /** Security scan summary */
 export const SecurityScanSchema = z.object({
-  status: z.enum(["pending", "scanning", "completed", "failed"]),
-  risk_score: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).nullable(),
+  status: z.enum(['pending', 'scanning', 'completed', 'failed']),
+  risk_score: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).nullable(),
   scanned_at: z.union([z.string(), z.date()]).nullable(),
   scanner_version: z.string().nullable().optional(),
   certification: CertificationSchema.nullable().optional(),
@@ -330,7 +330,7 @@ export const AnnounceResponseSchema = z.object({
     filename: z.string(),
   }),
   total_artifacts: z.number(),
-  status: z.enum(["created", "updated"]),
+  status: z.enum(['created', 'updated']),
 });
 
 // =============================================================================
@@ -461,13 +461,9 @@ export type AnnounceResponse = z.infer<typeof AnnounceResponseSchema>;
 // Internal API types
 export type Pagination = z.infer<typeof PaginationSchema>;
 export type PublishResponse = z.infer<typeof PublishResponseSchema>;
-export type InternalDownloadResponse = z.infer<
-  typeof InternalDownloadResponseSchema
->;
+export type InternalDownloadResponse = z.infer<typeof InternalDownloadResponseSchema>;
 export type ClaimStatusResponse = z.infer<typeof ClaimStatusResponseSchema>;
 export type ClaimResponse = z.infer<typeof ClaimResponseSchema>;
 export type MyPackagesResponse = z.infer<typeof MyPackagesResponseSchema>;
 export type UnclaimedPackage = z.infer<typeof UnclaimedPackageSchema>;
-export type UnclaimedPackagesResponse = z.infer<
-  typeof UnclaimedPackagesResponseSchema
->;
+export type UnclaimedPackagesResponse = z.infer<typeof UnclaimedPackagesResponseSchema>;

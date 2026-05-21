@@ -6,10 +6,10 @@
  * without a database or network access.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
-import type { Mock } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
+import type { Mock } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Module mocks (hoisted before all imports)
@@ -61,8 +61,8 @@ vi.mock('../src/utils/skill-content.js', () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { createMockSkillRepo, createMockStorage, createMockPrisma } from './helpers.js';
 import { verifyGitHubOIDC } from '../src/lib/oidc.js';
+import { createMockPrisma, createMockSkillRepo, createMockStorage } from './helpers.js';
 
 // ---------------------------------------------------------------------------
 // Test setup

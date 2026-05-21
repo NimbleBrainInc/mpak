@@ -3,7 +3,7 @@
  * Non-blocking notifications for package announcements
  */
 
-const DISCORD_WEBHOOK_URL = process.env['DISCORD_WEBHOOK_URL'] || '';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
 export type PackageType = 'bundle' | 'skill';
 
@@ -27,7 +27,9 @@ export function notifyDiscordAnnounce(data: AnnounceNotification): void {
     `**${data.name}** v${data.version}`,
     data.repo ? `[GitHub](https://github.com/${data.repo})` : null,
     `[View on mpak.dev](${registryUrl})`,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   if (!DISCORD_WEBHOOK_URL) return;
 

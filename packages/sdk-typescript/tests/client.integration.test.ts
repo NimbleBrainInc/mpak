@@ -8,9 +8,9 @@
  * If bundles are removed, tests may need updating.
  */
 
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { MpakClient } from '../src/client.js';
 import { MpakNotFoundError } from '../src/errors.js';
 

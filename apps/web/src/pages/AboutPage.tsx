@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
-import { useSEO } from '../hooks/useSEO';
-import { generateOrganizationSchema, generateBreadcrumbSchema } from '../lib/schema';
 import Breadcrumbs from '../components/Breadcrumbs';
+import { useSEO } from '../hooks/useSEO';
+import { generateBreadcrumbSchema, generateOrganizationSchema } from '../lib/schema';
 import { siteConfig } from '../lib/siteConfig';
 
 export default function AboutPage() {
@@ -10,13 +10,7 @@ export default function AboutPage() {
     description:
       'mpak is the secure, open-source package registry for MCP servers and agent skills.',
     canonical: 'https://www.mpak.dev/about',
-    keywords: [
-      'about mpak',
-      'ai package manager',
-      'mcp bundles',
-      'agent skills',
-      'nimblebrain',
-    ],
+    keywords: ['about mpak', 'ai package manager', 'mcp bundles', 'agent skills', 'nimblebrain'],
     schema: [
       generateOrganizationSchema(),
       generateBreadcrumbSchema([
@@ -29,12 +23,7 @@ export default function AboutPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       {/* Breadcrumbs */}
-      <Breadcrumbs
-        items={[
-          { label: 'Home', href: '/' },
-          { label: 'About' },
-        ]}
-      />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'About' }]} />
 
       <h1 className="text-4xl font-bold text-mpak-gray-900 mb-8">About mpak</h1>
 
@@ -42,10 +31,15 @@ export default function AboutPage() {
       <section className="mb-12">
         <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">The Problem</h2>
         <p className="text-mpak-gray-600 mb-4">
-          MCP servers have privileged access to AI agent execution environments. They can read files, execute code, call APIs, and access databases. Yet today, installing an MCP server means downloading unvetted code from scattered sources with no security scanning, no trust signals, and no standardized packaging.
+          MCP servers have privileged access to AI agent execution environments. They can read
+          files, execute code, call APIs, and access databases. Yet today, installing an MCP server
+          means downloading unvetted code from scattered sources with no security scanning, no trust
+          signals, and no standardized packaging.
         </p>
         <p className="text-mpak-gray-600 mb-4">
-          General-purpose registries like npm and PyPI were not designed for this threat model. They don't scan for MCP-specific risks, don't surface trust scores, and don't provide the governance controls that enterprises need.
+          General-purpose registries like npm and PyPI were not designed for this threat model. They
+          don't scan for MCP-specific risks, don't surface trust scores, and don't provide the
+          governance controls that enterprises need.
         </p>
         <p className="text-mpak-gray-600">
           The MCP ecosystem needs a purpose-built registry with security at its core.
@@ -64,8 +58,16 @@ export default function AboutPage() {
             <ul className="text-sm text-mpak-gray-500 space-y-1">
               <li>• Database access, API integrations, file operations</li>
               <li>• Cross-platform: macOS, Linux, Windows</li>
-              <li>• <code className="bg-mpak-gray-100 px-1 rounded">.mcpb</code> format by{' '}
-                <a href="https://github.com/anthropics/mcpb" target="_blank" rel="noopener noreferrer" className="text-accent-gold-400 hover:text-accent-gold-500">Anthropic</a>
+              <li>
+                • <code className="bg-mpak-gray-100 px-1 rounded">.mcpb</code> format by{' '}
+                <a
+                  href="https://github.com/anthropics/mcpb"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-gold-400 hover:text-accent-gold-500"
+                >
+                  Anthropic
+                </a>
               </li>
             </ul>
           </div>
@@ -77,8 +79,16 @@ export default function AboutPage() {
             <ul className="text-sm text-mpak-gray-500 space-y-1">
               <li>• Code review patterns, writing styles, domain knowledge</li>
               <li>• Universal: works across AI platforms</li>
-              <li>• <code className="bg-mpak-gray-100 px-1 rounded">.skill</code> format per{' '}
-                <a href="https://agentskills.io" target="_blank" rel="noopener noreferrer" className="text-accent-gold-400 hover:text-accent-gold-500">Agent Skills spec</a>
+              <li>
+                • <code className="bg-mpak-gray-100 px-1 rounded">.skill</code> format per{' '}
+                <a
+                  href="https://agentskills.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-gold-400 hover:text-accent-gold-500"
+                >
+                  Agent Skills spec
+                </a>
               </li>
             </ul>
           </div>
@@ -87,9 +97,12 @@ export default function AboutPage() {
 
       {/* mpak Solution */}
       <section className="mb-12">
-        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">mpak: The Secure Package Registry</h2>
+        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">
+          mpak: The Secure Package Registry
+        </h2>
         <p className="text-mpak-gray-600 mb-4">
-          mpak is the central registry and CLI for AI packages. Discover, install, and manage bundles and skills with simple commands.
+          mpak is the central registry and CLI for AI packages. Discover, install, and manage
+          bundles and skills with simple commands.
         </p>
         <div className="bg-mpak-gray-50 border border-mpak-gray-200 rounded-xl p-6 mb-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -117,7 +130,9 @@ export default function AboutPage() {
 
       {/* Built by NimbleBrain */}
       <section className="mb-12">
-        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">Built by {siteConfig.operator.shortName}</h2>
+        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">
+          Built by {siteConfig.operator.shortName}
+        </h2>
         <p className="text-mpak-gray-600">
           mpak is built and maintained by{' '}
           <a

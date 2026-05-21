@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 /**
  * Upstream MCP Registry `ServerDetail` shape — the canonical wire format
@@ -24,10 +24,10 @@ import { z } from "zod";
 export const IconSchema = z.object({
   src: z.string().url().max(255),
   mimeType: z
-    .enum(["image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp"])
+    .enum(['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/webp'])
     .optional(),
   sizes: z.array(z.string().regex(/^(\d+x\d+|any)$/)).optional(),
-  theme: z.enum(["light", "dark"]).optional(),
+  theme: z.enum(['light', 'dark']).optional(),
 });
 export type Icon = z.infer<typeof IconSchema>;
 
@@ -42,7 +42,7 @@ export type Repository = z.infer<typeof RepositorySchema>;
 
 /** Stdio transport — the only `type` field is required at the wire. */
 export const StdioTransportSchema = z.object({
-  type: z.literal("stdio"),
+  type: z.literal('stdio'),
 });
 export type StdioTransport = z.infer<typeof StdioTransportSchema>;
 
@@ -50,7 +50,7 @@ export type StdioTransport = z.infer<typeof StdioTransportSchema>;
 export const InputSchema = z.object({
   description: z.string().optional(),
   default: z.string().optional(),
-  format: z.enum(["string", "number", "boolean", "filepath"]).optional(),
+  format: z.enum(['string', 'number', 'boolean', 'filepath']).optional(),
   isRequired: z.boolean().optional(),
   isSecret: z.boolean().optional(),
   placeholder: z.string().optional(),
@@ -68,14 +68,14 @@ export type KeyValueInput = z.infer<typeof KeyValueInputSchema>;
 
 /** Streamable HTTP transport (preferred MCP-over-HTTP profile). */
 export const StreamableHttpTransportSchema = z.object({
-  type: z.literal("streamable-http"),
+  type: z.literal('streamable-http'),
   url: z.string().regex(/^(https?:\/\/[^\s]+|\{[a-zA-Z_][a-zA-Z0-9_]*\}[^\s]*)$/),
   headers: z.array(KeyValueInputSchema).optional(),
 });
 
 /** Server-Sent Events transport (legacy MCP-over-SSE profile). */
 export const SseTransportSchema = z.object({
-  type: z.literal("sse"),
+  type: z.literal('sse'),
   url: z.string().regex(/^(https?:\/\/[^\s]+|\{[a-zA-Z_][a-zA-Z0-9_]*\}[^\s]*)$/),
   headers: z.array(KeyValueInputSchema).optional(),
 });
@@ -181,8 +181,8 @@ export type ServerListResponse = z.infer<typeof ServerListResponseSchema>;
 export function mechanicalReverseDnsName(npmName: string): string {
   const m = /^@([^/]+)\/(.+)$/.exec(npmName);
   if (!m) return `dev.mpak/${npmName.toLowerCase()}`;
-  const scope = (m[1] ?? "").toLowerCase();
-  const name = (m[2] ?? "").toLowerCase();
+  const scope = (m[1] ?? '').toLowerCase();
+  const name = (m[2] ?? '').toLowerCase();
   return `dev.mpak.${scope}/${name}`;
 }
 
@@ -192,7 +192,7 @@ export function mechanicalReverseDnsName(npmName: string): string {
  * record is reprojected.
  */
 const ORG_REVERSE_DNS_MAP: Record<string, string> = {
-  nimblebraininc: "ai.nimblebrain",
+  nimblebraininc: 'ai.nimblebrain',
 };
 
 /**
@@ -203,8 +203,8 @@ const ORG_REVERSE_DNS_MAP: Record<string, string> = {
 export function defaultReverseDnsName(npmName: string): string {
   const m = /^@([^/]+)\/(.+)$/.exec(npmName);
   if (!m) return mechanicalReverseDnsName(npmName);
-  const scope = (m[1] ?? "").toLowerCase();
-  const name = (m[2] ?? "").toLowerCase();
+  const scope = (m[1] ?? '').toLowerCase();
+  const name = (m[2] ?? '').toLowerCase();
   const mapped = ORG_REVERSE_DNS_MAP[scope];
   if (mapped) return `${mapped}/${name}`;
   return mechanicalReverseDnsName(npmName);
@@ -238,11 +238,11 @@ export function resolveReverseDnsName(
   npmName: string,
   manifestMeta: Record<string, unknown> | null | undefined,
 ): string {
-  const meta = manifestMeta?.["dev.mpak/registry"];
-  if (meta && typeof meta === "object") {
+  const meta = manifestMeta?.['dev.mpak/registry'];
+  if (meta && typeof meta === 'object') {
     const override = (meta as { name?: unknown }).name;
     if (
-      typeof override === "string" &&
+      typeof override === 'string' &&
       SERVER_NAME_PATTERN.test(override) &&
       isOverrideAuthorized(npmName, override)
     ) {
@@ -260,10 +260,10 @@ function isOverrideAuthorized(npmName: string, override: string): boolean {
   const m = /^@([^/]+)\//.exec(npmName);
   if (!m) {
     // Unscoped npm names can only override under `dev.mpak/`.
-    return override.startsWith("dev.mpak/");
+    return override.startsWith('dev.mpak/');
   }
-  const scope = (m[1] ?? "").toLowerCase();
-  const overrideNamespace = override.split("/")[0] ?? "";
+  const scope = (m[1] ?? '').toLowerCase();
+  const overrideNamespace = override.split('/')[0] ?? '';
   // Curated org-mapped namespace: must match exactly.
   const mapped = ORG_REVERSE_DNS_MAP[scope];
   if (mapped && overrideNamespace === mapped) return true;

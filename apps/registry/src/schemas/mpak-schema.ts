@@ -63,31 +63,31 @@ export function validateMpakJson(data: unknown): {
 
   const d = data as Record<string, unknown>;
 
-  if (!d['name'] || typeof d['name'] !== 'string') {
+  if (!d.name || typeof d.name !== 'string') {
     errors.push('Missing or invalid "name" field');
   }
 
-  if (!d['maintainers'] || !Array.isArray(d['maintainers'])) {
+  if (!d.maintainers || !Array.isArray(d.maintainers)) {
     errors.push('Missing or invalid "maintainers" field (must be an array)');
-  } else if ((d['maintainers'] as unknown[]).length === 0) {
+  } else if ((d.maintainers as unknown[]).length === 0) {
     errors.push('At least one maintainer is required');
   }
 
   const scopedRegex = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,213}$/;
-  if (d['name'] && typeof d['name'] === 'string' && !scopedRegex.test(d['name'])) {
+  if (d.name && typeof d.name === 'string' && !scopedRegex.test(d.name)) {
     errors.push(
-      'Package name must be scoped (e.g., @username/package-name) and follow naming conventions'
+      'Package name must be scoped (e.g., @username/package-name) and follow naming conventions',
     );
   }
 
-  if (Array.isArray(d['maintainers'])) {
+  if (Array.isArray(d.maintainers)) {
     const usernameRegex = /^[a-z0-9][a-z0-9-]{0,38}$/i;
-    (d['maintainers'] as unknown[]).forEach((maintainer: unknown, index: number) => {
+    (d.maintainers as unknown[]).forEach((maintainer: unknown, index: number) => {
       if (typeof maintainer !== 'string') {
         errors.push(`Maintainer at index ${index} must be a string`);
       } else if (!usernameRegex.test(maintainer)) {
         errors.push(
-          `Invalid GitHub username at index ${index}: "${maintainer}". Must match GitHub username format.`
+          `Invalid GitHub username at index ${index}: "${maintainer}". Must match GitHub username format.`,
         );
       }
     });

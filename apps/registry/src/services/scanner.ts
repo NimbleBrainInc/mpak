@@ -5,10 +5,10 @@
  * for vulnerabilities, malicious code, and secrets.
  */
 
+import { randomUUID } from 'node:crypto';
 import * as k8s from '@kubernetes/client-node';
-import { randomUUID } from 'crypto';
-import { config } from '../config.js';
 import type { PrismaClient } from '@prisma/client';
+import { config } from '../config.js';
 
 export interface TriggerScanParams {
   scanId: string;
@@ -163,7 +163,7 @@ export async function triggerSecurityScan(
     bundleStoragePath: string;
     packageName: string;
     version: string;
-  }
+  },
 ): Promise<void> {
   const { versionId, bundleStoragePath, packageName, version } = params;
 

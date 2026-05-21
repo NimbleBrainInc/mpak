@@ -3,16 +3,16 @@
  * Provides database access via repositories throughout the application
  */
 
+import type { PrismaClient } from '@prisma/client';
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import {
-  getPrismaClient,
   disconnectDatabase,
+  getPrismaClient,
   PackageRepository,
-  UserRepository,
   SkillRepository,
+  UserRepository,
 } from '../db/index.js';
-import type { PrismaClient } from '@prisma/client';
 
 declare module 'fastify' {
   interface FastifyInstance {

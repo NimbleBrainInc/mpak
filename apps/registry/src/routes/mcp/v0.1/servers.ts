@@ -13,8 +13,8 @@
  * manifest so bundles that drop their `server.json` file keep working.
  */
 
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { resolveReverseDnsName, type ServerDetail } from '@nimblebrain/mpak-schemas';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { PackageForServerLookup } from '../../../db/repositories/package.repository.js';
 import { composeServerDetail } from '../../../services/server-detail-composer.js';
 
@@ -25,7 +25,12 @@ const REGISTRY_VERSION = 'v1.0.0';
  * on `_meta["dev.mpak/registry"].certification`.
  */
 function scanToCertification(
-  scan: { certificationLevel: number | null; controlsPassed: number | null; controlsFailed: number | null; controlsTotal: number | null } | null,
+  scan: {
+    certificationLevel: number | null;
+    controlsPassed: number | null;
+    controlsFailed: number | null;
+    controlsTotal: number | null;
+  } | null,
 ):
   | {
       level: number;
@@ -108,7 +113,7 @@ async function resolveByName(
         const latest = hit.versions[0];
         if (!latest) continue;
         const manifestMeta =
-          ((latest.manifest as Record<string, unknown> | null)?.['_meta'] as
+          ((latest.manifest as Record<string, unknown> | null)?._meta as
             | Record<string, unknown>
             | undefined) ?? null;
         if (resolveReverseDnsName(hit.name, manifestMeta) === decodedName) {
@@ -202,207 +207,232 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       search?: string;
       updated_since?: string;
     };
-  }>('/servers', {
-    schema: {
-      tags: ['mcp-registry'],
-      description:
-        'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec). Each item is the latest published version of a server; per-version listings live under /servers/{name}/versions.',
-      querystring: {
-        type: 'object',
-        properties: {
-          cursor: { type: 'string', description: 'Pagination cursor (offset as string)' },
-          limit: { type: 'string', description: 'Maximum results (default 100, max 500)' },
-          search: {
-            type: 'string',
-            description: 'Case-insensitive substring search on name/displayName/description',
-          },
-          updated_since: {
-            type: 'string',
-            description:
-              'RFC 3339 timestamp. Returns servers with at least one version published since the given time. Filtered at the database; pagination math reflects the filter.',
+  }>(
+    '/servers',
+    {
+      schema: {
+        tags: ['mcp-registry'],
+        description:
+          'List MCP servers (each entry is a ServerDetail per the upstream MCP registry spec). Each item is the latest published version of a server; per-version listings live under /servers/{name}/versions.',
+        querystring: {
+          type: 'object',
+          properties: {
+            cursor: { type: 'string', description: 'Pagination cursor (offset as string)' },
+            limit: { type: 'string', description: 'Maximum results (default 100, max 500)' },
+            search: {
+              type: 'string',
+              description: 'Case-insensitive substring search on name/displayName/description',
+            },
+            updated_since: {
+              type: 'string',
+              description:
+                'RFC 3339 timestamp. Returns servers with at least one version published since the given time. Filtered at the database; pagination math reflects the filter.',
+            },
           },
         },
       },
     },
-  }, async (request) => {
-    const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
-    const skip = parseIntParam(request.query.cursor, 0);
-    const updatedSince = parseUpdatedSince(request.query.updated_since);
+    async (request) => {
+      const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
+      const skip = parseIntParam(request.query.cursor, 0);
+      const updatedSince = parseUpdatedSince(request.query.updated_since);
 
-    const { packages, total } = await packageRepo.findPackagesForServerListing(
-      {
-        ...(request.query.search ? { search: request.query.search } : {}),
-        ...(updatedSince ? { updatedSince } : {}),
-      },
-      { skip, take: limit },
-    );
+      const { packages, total } = await packageRepo.findPackagesForServerListing(
+        {
+          ...(request.query.search ? { search: request.query.search } : {}),
+          ...(updatedSince ? { updatedSince } : {}),
+        },
+        { skip, take: limit },
+      );
 
-    const servers: ServerDetail[] = [];
-    for (const pkg of packages) {
-      const latest = pkg.versions[0];
-      if (!latest) continue;
-      const detail = buildServerDetail(pkg, latest);
-      if (detail) servers.push(detail);
-    }
+      const servers: ServerDetail[] = [];
+      for (const pkg of packages) {
+        const latest = pkg.versions[0];
+        if (!latest) continue;
+        const detail = buildServerDetail(pkg, latest);
+        if (detail) servers.push(detail);
+      }
 
-    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } =
-      {
+      const response: {
+        servers: ServerDetail[];
+        metadata: { count: number; next_cursor?: string };
+      } = {
         servers,
         metadata: { count: servers.length },
       };
-    const nextIdx = skip + limit;
-    if (nextIdx < total) {
-      response.metadata.next_cursor = String(nextIdx);
-    }
-    return response;
-  });
+      const nextIdx = skip + limit;
+      if (nextIdx < total) {
+        response.metadata.next_cursor = String(nextIdx);
+      }
+      return response;
+    },
+  );
 
   // GET /servers/search - alias for /servers, exposed under the conventional name
   fastify.get<{
     Querystring: { q?: string; limit?: string; cursor?: string };
-  }>('/servers/search', {
-    schema: {
-      tags: ['mcp-registry'],
-      description: 'Search MCP servers by substring on name, displayName, or description',
-      querystring: {
-        type: 'object',
-        properties: {
-          q: { type: 'string', description: 'Search query' },
-          limit: { type: 'string', description: 'Maximum results (default 100, max 500)' },
-          cursor: { type: 'string', description: 'Pagination cursor (offset as string)' },
+  }>(
+    '/servers/search',
+    {
+      schema: {
+        tags: ['mcp-registry'],
+        description: 'Search MCP servers by substring on name, displayName, or description',
+        querystring: {
+          type: 'object',
+          properties: {
+            q: { type: 'string', description: 'Search query' },
+            limit: { type: 'string', description: 'Maximum results (default 100, max 500)' },
+            cursor: { type: 'string', description: 'Pagination cursor (offset as string)' },
+          },
         },
       },
     },
-  }, async (request) => {
-    const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
-    const skip = parseIntParam(request.query.cursor, 0);
-    const { packages, total } = await packageRepo.findPackagesForServerListing(
-      request.query.q ? { search: request.query.q } : {},
-      { skip, take: limit },
-    );
-    const servers: ServerDetail[] = [];
-    for (const pkg of packages) {
-      const latest = pkg.versions[0];
-      if (!latest) continue;
-      const detail = buildServerDetail(pkg, latest);
-      if (detail) servers.push(detail);
-    }
-    const response: { servers: ServerDetail[]; metadata: { count: number; next_cursor?: string } } =
-      {
+    async (request) => {
+      const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
+      const skip = parseIntParam(request.query.cursor, 0);
+      const { packages, total } = await packageRepo.findPackagesForServerListing(
+        request.query.q ? { search: request.query.q } : {},
+        { skip, take: limit },
+      );
+      const servers: ServerDetail[] = [];
+      for (const pkg of packages) {
+        const latest = pkg.versions[0];
+        if (!latest) continue;
+        const detail = buildServerDetail(pkg, latest);
+        if (detail) servers.push(detail);
+      }
+      const response: {
+        servers: ServerDetail[];
+        metadata: { count: number; next_cursor?: string };
+      } = {
         servers,
         metadata: { count: servers.length },
       };
-    const nextIdx = skip + limit;
-    if (nextIdx < total) {
-      response.metadata.next_cursor = String(nextIdx);
-    }
-    return response;
-  });
+      const nextIdx = skip + limit;
+      if (nextIdx < total) {
+        response.metadata.next_cursor = String(nextIdx);
+      }
+      return response;
+    },
+  );
 
   // GET /servers/{name} - Latest ServerDetail for a server
   fastify.get<{
     Params: { name: string };
-  }>('/servers/:name', {
-    schema: {
-      tags: ['mcp-registry'],
-      description:
-        'Get the latest ServerDetail for a server. Accepts both npm-style (@scope/name) and reverse-DNS forms.',
-      params: {
-        type: 'object',
-        required: ['name'],
-        properties: { name: { type: 'string', description: 'URL-encoded server name' } },
+  }>(
+    '/servers/:name',
+    {
+      schema: {
+        tags: ['mcp-registry'],
+        description:
+          'Get the latest ServerDetail for a server. Accepts both npm-style (@scope/name) and reverse-DNS forms.',
+        params: {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string', description: 'URL-encoded server name' } },
+        },
       },
     },
-  }, async (request, reply) => {
-    const pkg = await resolveByName(fastify, request.params.name);
-    if (!pkg) {
-      reply.code(404);
-      return { error: `Server '${decodeURIComponent(request.params.name)}' not found` };
-    }
-    const latest = pkg.versions[0];
-    if (!latest) {
-      reply.code(404);
-      return { error: `Server '${pkg.name}' has no versions` };
-    }
-    const detail = buildServerDetail(pkg, latest);
-    if (!detail) {
-      reply.code(500);
-      return { error: `Server '${pkg.name}' manifest could not be projected` };
-    }
-    return detail;
-  });
+    async (request, reply) => {
+      const pkg = await resolveByName(fastify, request.params.name);
+      if (!pkg) {
+        reply.code(404);
+        return { error: `Server '${decodeURIComponent(request.params.name)}' not found` };
+      }
+      const latest = pkg.versions[0];
+      if (!latest) {
+        reply.code(404);
+        return { error: `Server '${pkg.name}' has no versions` };
+      }
+      const detail = buildServerDetail(pkg, latest);
+      if (!detail) {
+        reply.code(500);
+        return { error: `Server '${pkg.name}' manifest could not be projected` };
+      }
+      return detail;
+    },
+  );
 
   // GET /servers/{name}/versions/{version} - Version-specific ServerDetail
   fastify.get<{
     Params: { name: string; version: string };
-  }>('/servers/:name/versions/:version', {
-    schema: {
-      tags: ['mcp-registry'],
-      description: 'Get a version-specific ServerDetail. Use "latest" for the most recent version.',
-      params: {
-        type: 'object',
-        required: ['name', 'version'],
-        properties: {
-          name: { type: 'string', description: 'URL-encoded server name' },
-          version: { type: 'string', description: 'Server version, or "latest"' },
+  }>(
+    '/servers/:name/versions/:version',
+    {
+      schema: {
+        tags: ['mcp-registry'],
+        description:
+          'Get a version-specific ServerDetail. Use "latest" for the most recent version.',
+        params: {
+          type: 'object',
+          required: ['name', 'version'],
+          properties: {
+            name: { type: 'string', description: 'URL-encoded server name' },
+            version: { type: 'string', description: 'Server version, or "latest"' },
+          },
         },
       },
     },
-  }, async (request, reply) => {
-    const pkg = await resolveByName(fastify, request.params.name);
-    if (!pkg) {
-      reply.code(404);
-      return { error: `Server '${decodeURIComponent(request.params.name)}' not found` };
-    }
-    const requestedVersion = request.params.version;
-    const matchedVersion =
-      requestedVersion === 'latest'
-        ? pkg.versions[0]
-        : pkg.versions.find((v) => v.version === requestedVersion);
-    if (!matchedVersion) {
-      reply.code(404);
-      return { error: `Version '${requestedVersion}' not found for server '${pkg.name}'` };
-    }
-    const detail = buildServerDetail(pkg, matchedVersion);
-    if (!detail) {
-      reply.code(500);
-      return {
-        error: `Server '${pkg.name}' version '${matchedVersion.version}' manifest could not be projected`,
-      };
-    }
-    return detail;
-  });
+    async (request, reply) => {
+      const pkg = await resolveByName(fastify, request.params.name);
+      if (!pkg) {
+        reply.code(404);
+        return { error: `Server '${decodeURIComponent(request.params.name)}' not found` };
+      }
+      const requestedVersion = request.params.version;
+      const matchedVersion =
+        requestedVersion === 'latest'
+          ? pkg.versions[0]
+          : pkg.versions.find((v) => v.version === requestedVersion);
+      if (!matchedVersion) {
+        reply.code(404);
+        return { error: `Version '${requestedVersion}' not found for server '${pkg.name}'` };
+      }
+      const detail = buildServerDetail(pkg, matchedVersion);
+      if (!detail) {
+        reply.code(500);
+        return {
+          error: `Server '${pkg.name}' version '${matchedVersion.version}' manifest could not be projected`,
+        };
+      }
+      return detail;
+    },
+  );
 
   // GET /servers/{name}/versions - List all versions for a server
   fastify.get<{
     Params: { name: string };
-  }>('/servers/:name/versions', {
-    schema: {
-      tags: ['mcp-registry'],
-      description: 'List every version of a server (newest first).',
-      params: {
-        type: 'object',
-        required: ['name'],
-        properties: { name: { type: 'string', description: 'URL-encoded server name' } },
+  }>(
+    '/servers/:name/versions',
+    {
+      schema: {
+        tags: ['mcp-registry'],
+        description: 'List every version of a server (newest first).',
+        params: {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string', description: 'URL-encoded server name' } },
+        },
       },
     },
-  }, async (request, reply) => {
-    const pkg = await resolveByName(fastify, request.params.name);
-    if (!pkg || pkg.versions.length === 0) {
-      reply.code(404);
+    async (request, reply) => {
+      const pkg = await resolveByName(fastify, request.params.name);
+      if (!pkg || pkg.versions.length === 0) {
+        reply.code(404);
+        return {
+          error: `Server '${decodeURIComponent(request.params.name)}' not found`,
+        };
+      }
       return {
-        error: `Server '${decodeURIComponent(request.params.name)}' not found`,
+        name: pkg.name,
+        versions: pkg.versions.map((v) => ({
+          version: v.version,
+          published_at: v.publishedAt,
+          is_latest: v.version === pkg.latestVersion,
+        })),
       };
-    }
-    return {
-      name: pkg.name,
-      versions: pkg.versions.map((v) => ({
-        version: v.version,
-        published_at: v.publishedAt,
-        is_latest: v.version === pkg.latestVersion,
-      })),
-    };
-  });
+    },
+  );
 
   // GET /health - Registry-specific health probe (counts servers).
   // The top-level /health route is the LB liveness probe with a

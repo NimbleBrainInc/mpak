@@ -2,8 +2,8 @@
  * Test helpers: mock factories for Fastify decorators and repository data.
  */
 
-import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { vi } from 'vitest';
 
 /**
@@ -183,7 +183,8 @@ export const mockArtifact = {
   mimeType: 'application/octet-stream',
   sizeBytes: BigInt(1024),
   storagePath: '@test/mcp-server/1.0.0/linux-x64.mcpb',
-  sourceUrl: 'https://github.com/test-org/mcp-server/releases/download/v1.0.0/server-linux-x64.mcpb',
+  sourceUrl:
+    'https://github.com/test-org/mcp-server/releases/download/v1.0.0/server-linux-x64.mcpb',
   downloadCount: BigInt(50),
   createdAt: new Date('2024-01-01'),
 };

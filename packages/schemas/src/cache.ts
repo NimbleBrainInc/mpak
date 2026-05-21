@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { PlatformInfoSchema } from "./api-responses.js";
+import { z } from 'zod';
+import { PlatformInfoSchema } from './api-responses.js';
 
 // =============================================================================
 // Cache Metadata

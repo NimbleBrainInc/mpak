@@ -25,7 +25,7 @@ export async function handleSkillSearch(query: string, options: SearchOptions): 
     logger.info('');
 
     const rows = result.skills.map((s) => [
-      s.name.length > 42 ? s.name.slice(0, 39) + '...' : s.name,
+      s.name.length > 42 ? `${s.name.slice(0, 39)}...` : s.name,
       s.latest_version || '-',
       s.category || '-',
       truncate(s.description || '', 40),

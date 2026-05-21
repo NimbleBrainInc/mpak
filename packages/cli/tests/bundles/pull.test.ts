@@ -1,5 +1,5 @@
-import { writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { MpakClient } from '@nimblebrain/mpak-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePull } from '../../src/commands/packages/pull.js';

@@ -53,9 +53,7 @@ export function generatePackageSchema(pkg: PackageDetail) {
 /**
  * Generate BreadcrumbList schema
  */
-export function generateBreadcrumbSchema(
-  items: Array<{ name: string; url: string }>
-) {
+export function generateBreadcrumbSchema(items: Array<{ name: string; url: string }>) {
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -71,9 +69,7 @@ export function generateBreadcrumbSchema(
 /**
  * Generate FAQPage schema
  */
-export function generateFAQSchema(
-  faqs: Array<{ question: string; answer: string }>
-) {
+export function generateFAQSchema(faqs: Array<{ question: string; answer: string }>) {
   return {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -100,10 +96,7 @@ export function generateOrganizationSchema() {
     logo: `${BASE_URL}/favicon.svg`,
     description:
       'The package manager for MCP bundles. Discover, install, and publish Model Context Protocol servers.',
-    sameAs: [
-      siteConfig.github.repo,
-      'https://twitter.com/mpak_dev',
-    ],
+    sameAs: [siteConfig.github.repo, 'https://twitter.com/mpak_dev'],
   };
 }
 

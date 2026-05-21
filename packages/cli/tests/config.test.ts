@@ -1,4 +1,4 @@
-import { execSync, type ExecSyncOptionsWithStringEncoding } from 'node:child_process';
+import { type ExecSyncOptionsWithStringEncoding, execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,7 +82,7 @@ describe('config set', () => {
       MPAK_HOME: tmpDir,
     });
     expect(result.exitCode).toBe(0);
-    expect(getPackages(tmpDir)['@scope/name']['api_key']).toBe('new-value');
+    expect(getPackages(tmpDir)['@scope/name'].api_key).toBe('new-value');
   });
 
   it('should handle value containing equals sign', () => {
@@ -90,7 +90,7 @@ describe('config set', () => {
       MPAK_HOME: tmpDir,
     });
     expect(result.exitCode).toBe(0);
-    expect(getPackages(tmpDir)['@scope/name']['token']).toBe('abc=def=ghi');
+    expect(getPackages(tmpDir)['@scope/name'].token).toBe('abc=def=ghi');
   });
 
   it('should handle empty value', () => {
@@ -98,7 +98,7 @@ describe('config set', () => {
       MPAK_HOME: tmpDir,
     });
     expect(result.exitCode).toBe(0);
-    expect(getPackages(tmpDir)['@scope/name']['api_key']).toBe('');
+    expect(getPackages(tmpDir)['@scope/name'].api_key).toBe('');
   });
 
   it('should set config for multiple packages independently', () => {
@@ -106,8 +106,8 @@ describe('config set', () => {
     run('config set @scope/pkg2 key=value2', { MPAK_HOME: tmpDir });
 
     const packages = getPackages(tmpDir);
-    expect(packages['@scope/pkg1']['key']).toBe('value1');
-    expect(packages['@scope/pkg2']['key']).toBe('value2');
+    expect(packages['@scope/pkg1'].key).toBe('value1');
+    expect(packages['@scope/pkg2'].key).toBe('value2');
   });
 
   // --- Error cases ---

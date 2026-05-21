@@ -1,9 +1,9 @@
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
-import { createClerkClient, verifyToken } from '@clerk/backend';
 import { config } from '../config.js';
-import type { AuthenticatedUser } from '../types.js';
 import { UnauthorizedError } from '../errors/types.js';
+import type { AuthenticatedUser } from '../types.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -22,7 +22,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   async function authenticate(request: FastifyRequest): Promise<void> {
     const authHeader = request.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new UnauthorizedError('Missing or invalid authorization header');
     }
 
@@ -39,13 +39,18 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       const email = primaryEmail?.emailAddress ?? '';
       const emailVerified = primaryEmail?.verification?.status === 'verified';
 
-      const githubAccount = user.externalAccounts?.find((account) => account.provider === 'oauth_github');
+      const githubAccount = user.externalAccounts?.find(
+        (account) => account.provider === 'oauth_github',
+      );
       const githubUsername = githubAccount?.username ?? null;
-      const githubUserId = (githubAccount as unknown as Record<string, unknown>)?.['providerUserId'] as string | null ?? null;
+      const githubUserId =
+        ((githubAccount as unknown as Record<string, unknown>)?.providerUserId as string | null) ??
+        null;
 
-      const name = user.firstName && user.lastName
-        ? `${user.firstName} ${user.lastName}`
-        : user.firstName ?? user.lastName ?? user.username ?? null;
+      const name =
+        user.firstName && user.lastName
+          ? `${user.firstName} ${user.lastName}`
+          : (user.firstName ?? user.lastName ?? user.username ?? null);
 
       const dbUser = await fastify.repositories.users.upsert({
         clerkId: user.id,
@@ -66,10 +71,10 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         emailVerified,
         githubUsername: githubUsername ?? undefined,
         metadata: {
-          verified: (publicMetadata?.['verified'] as boolean) ?? false,
-          publishedBundles: (publicMetadata?.['publishedBundles'] as number) ?? 0,
-          totalDownloads: (publicMetadata?.['totalDownloads'] as number) ?? 0,
-          role: (publicMetadata?.['role'] as string) ?? undefined,
+          verified: (publicMetadata?.verified as boolean) ?? false,
+          publishedBundles: (publicMetadata?.publishedBundles as number) ?? 0,
+          totalDownloads: (publicMetadata?.totalDownloads as number) ?? 0,
+          role: (publicMetadata?.role as string) ?? undefined,
         },
       };
 

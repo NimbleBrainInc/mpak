@@ -12,7 +12,7 @@
   --sl-color-accent-high: hsl(38, 90%, 75%);
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   /* Gold accent for light mode - darker for readability on white */
   --sl-color-accent-high: hsl(38, 92%, 28%);
   --sl-color-accent: hsl(38, 92%, 40%);
@@ -21,8 +21,8 @@
 
 /* Fonts */
 :root {
-  --sl-font: 'Space Grotesk', var(--sl-font-system);
-  --sl-font-mono: 'JetBrains Mono', var(--sl-font-system-mono);
+  --sl-font: "Space Grotesk", var(--sl-font-system);
+  --sl-font-mono: "JetBrains Mono", var(--sl-font-system-mono);
 }
 
 /* Browse Registry button */
@@ -44,11 +44,11 @@
   background-color: var(--sl-color-accent-high);
 }
 
-:root[data-theme='light'] .browse-registry-btn {
+:root[data-theme="light"] .browse-registry-btn {
   color: white;
 }
 
-:root[data-theme='light'] .browse-registry-btn:hover {
+:root[data-theme="light"] .browse-registry-btn:hover {
   background-color: var(--sl-color-accent-high);
   color: white;
 }

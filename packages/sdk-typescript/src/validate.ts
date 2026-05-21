@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { McpbManifestSchema, type McpbManifest } from '@nimblebrain/mpak-schemas';
+import { type McpbManifest, McpbManifestSchema } from '@nimblebrain/mpak-schemas';
 import { extractZip, readJsonFromFile } from './helpers.js';
 
 export interface McpbValidationSuccess {

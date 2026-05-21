@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
-import { join, basename } from 'path';
-import { tmpdir } from 'os';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { packSkill } from '../../src/commands/skills/pack.js';
-import { execSync } from 'child_process';
 
 describe('packSkill', () => {
   let testDir: string;

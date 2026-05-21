@@ -33,10 +33,10 @@ beforeEach(() => {
   stdout = '';
   stderr = '';
   vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-    stdout += args.join(' ') + '\n';
+    stdout += `${args.join(' ')}\n`;
   });
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-    stderr += args.join(' ') + '\n';
+    stderr += `${args.join(' ')}\n`;
   });
   vi.spyOn(process, 'exit').mockImplementation(() => {
     throw new Error('process.exit called');

@@ -120,7 +120,7 @@ function generateFeed(packages: Package[], skills: Skill[]): string {
       <pubDate>${item.pubDate}</pubDate>
       <category>${item.category}</category>
       <guid>${item.link}</guid>
-    </item>`
+    </item>`,
     )
     .join('\n');
 
@@ -152,8 +152,8 @@ async function main() {
 
   const feed = generateFeed(packages, skills);
 
-  const fs = await import('fs');
-  const path = await import('path');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
   const outputPath = path.join(process.cwd(), 'public', 'feed.xml');
 
   fs.writeFileSync(outputPath, feed, { encoding: 'utf-8', mode: 0o644 });

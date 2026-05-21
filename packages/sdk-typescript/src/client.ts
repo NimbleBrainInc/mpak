@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   BundleDetail,
   BundleSearchResponse,
@@ -11,7 +12,6 @@ import type {
   VersionDetail,
   VersionsResponse,
 } from '@nimblebrain/mpak-schemas';
-import { createHash } from 'node:crypto';
 import { MpakError, MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
 import type {
   BundleSearchParams,

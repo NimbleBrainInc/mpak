@@ -98,18 +98,20 @@ export const SecurityScanSchema = z.object({
   scanned_at: z.union([z.string(), z.date()]).nullable(),
   scanner_version: z.string().nullable().optional(),
   certification: CertificationSchema.nullable().optional(),
-  summary: z.object({
-    components: z.number(), // Total SBOM components
-    vulnerabilities: z.object({
-      critical: z.number(),
-      high: z.number(),
-      medium: z.number(),
-      low: z.number(),
-    }),
-    secrets: z.number(), // Detected secrets
-    malicious: z.number(), // Malicious patterns
-    code_issues: z.number(), // Static analysis issues
-  }).optional(),
+  summary: z
+    .object({
+      components: z.number(), // Total SBOM components
+      vulnerabilities: z.object({
+        critical: z.number(),
+        high: z.number(),
+        medium: z.number(),
+        low: z.number(),
+      }),
+      secrets: z.number(), // Detected secrets
+      malicious: z.number(), // Malicious patterns
+      code_issues: z.number(), // Static analysis issues
+    })
+    .optional(),
   domains: z.record(z.string(), SecurityDomainSchema).optional(),
   findings: z.array(ScorecardFindingSchema).optional(),
 });
@@ -189,11 +191,13 @@ export const BundleSchema = z.object({
 export const BundleDetailSchema = BundleSchema.extend({
   homepage: z.string().nullable().optional(),
   license: z.string().nullable().optional(),
-  versions: z.array(z.object({
-    version: z.string(),
-    published_at: z.union([z.string(), z.date()]),
-    downloads: z.number(),
-  })),
+  versions: z.array(
+    z.object({
+      version: z.string(),
+      published_at: z.union([z.string(), z.date()]),
+      downloads: z.number(),
+    }),
+  ),
 });
 
 // Bundle search response schema (v1 API)
@@ -284,11 +288,13 @@ export const ClaimStatusResponseSchema = z.object({
   claimed_at: z.union([z.string(), z.date()]).nullable().optional(),
   package_name: z.string().optional(),
   github_repo: z.string().nullable().optional(),
-  instructions: z.object({
-    steps: z.array(z.string()),
-    mpak_json_example: z.string(),
-    verification_url: z.string().nullable(),
-  }).optional(),
+  instructions: z
+    .object({
+      steps: z.array(z.string()),
+      mpak_json_example: z.string(),
+      verification_url: z.string().nullable(),
+    })
+    .optional(),
 });
 
 // Claim response schema
@@ -333,7 +339,6 @@ export const UnclaimedPackagesResponseSchema = z.object({
   pagination: PaginationSchema,
 });
 
-
 // =============================================================================
 // V1 API Additional Schemas
 // =============================================================================
@@ -344,18 +349,22 @@ export const VersionDetailSchema = z.object({
   version: z.string(),
   published_at: z.union([z.string(), z.date()]),
   downloads: z.number(),
-  artifacts: z.array(z.object({
-    platform: PlatformInfoSchema,
-    digest: z.string(),
-    size: z.number(),
-    download_url: z.string(),
-    source_url: z.string().optional(),
-  })),
+  artifacts: z.array(
+    z.object({
+      platform: PlatformInfoSchema,
+      digest: z.string(),
+      size: z.number(),
+      download_url: z.string(),
+      source_url: z.string().optional(),
+    }),
+  ),
   manifest: z.record(z.string(), z.unknown()),
-  release: z.object({
-    tag: z.string().nullable(),
-    url: z.string().nullable(),
-  }).optional(),
+  release: z
+    .object({
+      tag: z.string().nullable(),
+      url: z.string().nullable(),
+    })
+    .optional(),
   publish_method: z.string().nullable(),
   provenance: FullProvenanceSchema.nullable(),
 });
@@ -367,13 +376,15 @@ export const MCPBIndexSchema = z.object({
   name: z.string(),
   version: z.string(),
   description: z.string().nullable(),
-  bundles: z.array(z.object({
-    mimeType: z.string().nullable(),
-    digest: z.string(),
-    size: z.number(),
-    platform: PlatformInfoSchema,
-    urls: z.array(z.string()),
-  })),
+  bundles: z.array(
+    z.object({
+      mimeType: z.string().nullable(),
+      digest: z.string(),
+      size: z.number(),
+      platform: PlatformInfoSchema,
+      urls: z.array(z.string()),
+    }),
+  ),
   annotations: z.record(z.string(), z.string()).optional(),
 });
 

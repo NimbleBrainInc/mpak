@@ -5,9 +5,9 @@
  * summary endpoint (GET).
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -103,11 +103,7 @@ describe('Scanner Routes', () => {
           controls_failed: 5,
           controls_total: 25,
         },
-        findings: [
-          { severity: 'high' },
-          { severity: 'medium' },
-          { severity: 'low' },
-        ],
+        findings: [{ severity: 'high' }, { severity: 'medium' }, { severity: 'low' }],
       },
     };
 
@@ -275,11 +271,7 @@ describe('Scanner Routes', () => {
             status: 'completed',
             completedAt: new Date('2024-06-01'),
             report: {
-              findings: [
-                { severity: 'high' },
-                { severity: 'medium' },
-                { severity: 'medium' },
-              ],
+              findings: [{ severity: 'high' }, { severity: 'medium' }, { severity: 'medium' }],
             },
           },
         ],

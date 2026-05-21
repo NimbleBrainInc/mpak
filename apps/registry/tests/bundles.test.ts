@@ -6,10 +6,10 @@
  * so tests run without a database or network access.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
-import type { Mock } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
+import type { Mock } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Module mocks (hoisted before all imports)
@@ -61,18 +61,18 @@ vi.mock('../src/utils/badge.js', () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
+import { errorHandler } from '../src/errors/middleware.js';
+import { verifyGitHubOIDC } from '../src/lib/oidc.js';
 import {
   createMockPackageRepo,
-  createMockStorage,
   createMockPrisma,
+  createMockStorage,
   mockArtifact,
   mockPackage,
   mockVersion,
   mockVersionWithArtifacts,
   mockVersionWithScans,
 } from './helpers.js';
-import { verifyGitHubOIDC } from '../src/lib/oidc.js';
-import { errorHandler } from '../src/errors/middleware.js';
 
 // ---------------------------------------------------------------------------
 // Test setup

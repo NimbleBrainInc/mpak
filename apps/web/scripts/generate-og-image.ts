@@ -11,8 +11,8 @@
  *   public/og-image.png
  */
 
+import { join } from 'node:path';
 import { chromium } from '@playwright/test';
-import { join } from 'path';
 
 const WIDTH = 1200;
 const HEIGHT = 630;

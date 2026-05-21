@@ -109,7 +109,7 @@ export function useSEO({
       // Support array of schemas or single schema
       const schemaData = Array.isArray(schema) ? schema : [schema];
       schemaScript.textContent = JSON.stringify(
-        schemaData.length === 1 ? schemaData[0] : schemaData
+        schemaData.length === 1 ? schemaData[0] : schemaData,
       );
       document.head.appendChild(schemaScript);
     }

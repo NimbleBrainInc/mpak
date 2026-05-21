@@ -15,13 +15,13 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  MAX_UNCOMPRESSED_SIZE,
-  UPDATE_CHECK_TTL_MS,
   extractZip,
   hashBundlePath,
   isSemverEqual,
   localBundleNeedsExtract,
+  MAX_UNCOMPRESSED_SIZE,
   readJsonFromFile,
+  UPDATE_CHECK_TTL_MS,
 } from '../src/helpers.js';
 
 describe('isSemverEqual', () => {

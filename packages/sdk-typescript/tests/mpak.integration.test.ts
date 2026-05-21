@@ -92,9 +92,7 @@ describe('Mpak facade integration', () => {
   it('config stores and retrieves package config alongside cache', () => {
     sdk.configManager.setPackageConfigValue(KNOWN_BUNDLE, 'api_key', 'sk-integration-test');
 
-    expect(sdk.configManager.getPackageConfig(KNOWN_BUNDLE)?.['api_key']).toBe(
-      'sk-integration-test',
-    );
+    expect(sdk.configManager.getPackageConfig(KNOWN_BUNDLE)?.api_key).toBe('sk-integration-test');
 
     // Config file and cache coexist under the same mpakHome
     expect(existsSync(join(testDir, 'config.json'))).toBe(true);
@@ -135,7 +133,7 @@ describe('Mpak facade integration', () => {
     expect(Array.isArray(result.args)).toBe(true);
     expect(result.args.length).toBeGreaterThan(0);
     expect(typeof result.env).toBe('object');
-    expect(result.env['MPAK_WORKSPACE']).toBeDefined();
+    expect(result.env.MPAK_WORKSPACE).toBeDefined();
     expect(result.cwd).toContain('nimblebraininc-echo');
 
     // The command should be resolvable (node, python3, or an absolute path)
@@ -150,7 +148,7 @@ describe('Mpak facade integration', () => {
       },
     );
 
-    expect(result.env['MPAK_WORKSPACE']).toBe('/tmp/custom-workspace');
+    expect(result.env.MPAK_WORKSPACE).toBe('/tmp/custom-workspace');
   });
 
   it('prepareServer with explicit version', async () => {
@@ -172,7 +170,7 @@ describe('Mpak facade integration', () => {
     const sdk2 = new Mpak({ mpakHome: testDir, registryUrl });
 
     // Should see the config
-    expect(sdk2.configManager.getPackageConfig(KNOWN_BUNDLE)?.['test_key']).toBe('test_value');
+    expect(sdk2.configManager.getPackageConfig(KNOWN_BUNDLE)?.test_key).toBe('test_value');
 
     // Should see the cached bundle
     const meta = sdk2.bundleCache.getBundleMetadata(KNOWN_BUNDLE);

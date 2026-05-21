@@ -5,7 +5,7 @@
 
 import type { Artifact, Package, PackageVersion, Prisma, SecurityScan } from '@prisma/client';
 import { getPrismaClient, type TransactionClient } from '../client.js';
-import type { PackageSearchFilters, FindOptions, PackageWithRelations } from '../types.js';
+import type { FindOptions, PackageSearchFilters, PackageWithRelations } from '../types.js';
 
 // Version with artifacts included
 export type PackageVersionWithArtifacts = PackageVersion & {
@@ -111,7 +111,7 @@ export class PackageRepository {
    */
   async findByNameWithRelations(
     name: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageWithRelations | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findUnique({
@@ -130,7 +130,7 @@ export class PackageRepository {
   async search(
     filters: PackageSearchFilters,
     options: FindOptions,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
@@ -165,7 +165,9 @@ export class PackageRepository {
         where,
         skip: options.skip,
         take: options.take,
-        orderBy: (options.orderBy as Prisma.PackageOrderByWithRelationInput) ?? { totalDownloads: 'desc' },
+        orderBy: (options.orderBy as Prisma.PackageOrderByWithRelationInput) ?? {
+          totalDownloads: 'desc',
+        },
       }),
       client.package.count({ where }),
     ]);
@@ -206,7 +208,7 @@ export class PackageRepository {
   async update(
     id: string,
     data: Partial<CreatePackageData>,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Package> {
     const client = tx ?? getPrismaClient();
     return client.package.update({
@@ -218,11 +220,7 @@ export class PackageRepository {
   /**
    * Update latest version
    */
-  async updateLatestVersion(
-    id: string,
-    version: string,
-    tx?: TransactionClient
-  ): Promise<Package> {
+  async updateLatestVersion(id: string, version: string, tx?: TransactionClient): Promise<Package> {
     const client = tx ?? getPrismaClient();
     return client.package.update({
       where: { id },
@@ -260,7 +258,7 @@ export class PackageRepository {
    */
   async upsertPackage(
     data: CreatePackageData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ package: Package; created: boolean }> {
     const client = tx ?? getPrismaClient();
 
@@ -300,7 +298,7 @@ export class PackageRepository {
   async findByCreator(
     createdBy: string,
     options: FindOptions,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Package[]> {
     const client = tx ?? getPrismaClient();
     return client.package.findMany({
@@ -319,7 +317,7 @@ export class PackageRepository {
    */
   async findPackageForServerLookup(
     name: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageForServerLookup | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findUnique({
@@ -352,7 +350,7 @@ export class PackageRepository {
   async findPackagesForServerListing(
     filters: { search?: string; updatedSince?: Date },
     options: { skip?: number; take?: number },
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ packages: PackageForServerLookup[]; total: number }> {
     const client = tx ?? getPrismaClient();
 
@@ -405,14 +403,13 @@ export class PackageRepository {
 
   // ==================== Package Version Methods ====================
 
-
   /**
    * Find version by package ID and version string, including latest completed security scan
    */
   async findVersionWithLatestScan(
     packageId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersionWithArtifactsAndScans | null> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findUnique({
@@ -439,7 +436,7 @@ export class PackageRepository {
   async findVersion(
     packageId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersion | null> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findUnique({
@@ -466,7 +463,10 @@ export class PackageRepository {
   /**
    * Get latest version for a package
    */
-  async getLatestVersion(packageId: string, tx?: TransactionClient): Promise<PackageVersion | null> {
+  async getLatestVersion(
+    packageId: string,
+    tx?: TransactionClient,
+  ): Promise<PackageVersion | null> {
     const client = tx ?? getPrismaClient();
     const versions = await client.packageVersion.findMany({
       where: { packageId },
@@ -481,7 +481,7 @@ export class PackageRepository {
    */
   async createVersion(
     data: CreatePackageVersionData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersion> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.create({
@@ -511,7 +511,7 @@ export class PackageRepository {
   async upsertVersion(
     packageId: string,
     data: CreatePackageVersionData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ version: PackageVersion; created: boolean }> {
     const client = tx ?? getPrismaClient();
 
@@ -555,7 +555,9 @@ export class PackageRepository {
         ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
         ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),
         ...(data.provenance ? { provenance: data.provenance as Prisma.InputJsonValue } : {}),
-        ...(data.serverJson !== undefined ? { serverJson: data.serverJson as Prisma.InputJsonValue } : {}),
+        ...(data.serverJson !== undefined
+          ? { serverJson: data.serverJson as Prisma.InputJsonValue }
+          : {}),
       },
     });
 
@@ -568,7 +570,7 @@ export class PackageRepository {
   async findVersionWithArtifacts(
     packageId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersionWithArtifacts | null> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findUnique({
@@ -589,7 +591,7 @@ export class PackageRepository {
    */
   async getVersionsWithArtifacts(
     packageId: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersionWithArtifacts[]> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findMany({
@@ -606,7 +608,7 @@ export class PackageRepository {
    */
   async getVersionsWithArtifactsAndScans(
     packageId: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageVersionWithArtifactsAndScans[]> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findMany({
@@ -627,10 +629,7 @@ export class PackageRepository {
   /**
    * Create an artifact for a version
    */
-  async createArtifact(
-    data: CreateArtifactData,
-    tx?: TransactionClient
-  ): Promise<Artifact> {
+  async createArtifact(data: CreateArtifactData, tx?: TransactionClient): Promise<Artifact> {
     const client = tx ?? getPrismaClient();
     return client.artifact.create({
       data: {
@@ -649,10 +648,7 @@ export class PackageRepository {
   /**
    * Create multiple artifacts for a version
    */
-  async createArtifacts(
-    artifacts: CreateArtifactData[],
-    tx?: TransactionClient
-  ): Promise<number> {
+  async createArtifacts(artifacts: CreateArtifactData[], tx?: TransactionClient): Promise<number> {
     const client = tx ?? getPrismaClient();
     const result = await client.artifact.createMany({
       data: artifacts.map((a) => ({
@@ -686,7 +682,7 @@ export class PackageRepository {
     versionId: string,
     os: string,
     arch: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Artifact | null> {
     const client = tx ?? getPrismaClient();
     return client.artifact.findUnique({
@@ -705,7 +701,7 @@ export class PackageRepository {
    */
   async upsertArtifact(
     data: CreateArtifactData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ artifact: Artifact; created: boolean; oldStoragePath: string | null }> {
     const client = tx ?? getPrismaClient();
 
@@ -719,9 +715,8 @@ export class PackageRepository {
       },
     });
 
-    const oldStoragePath = existing && existing.storagePath !== data.storagePath
-      ? existing.storagePath
-      : null;
+    const oldStoragePath =
+      existing && existing.storagePath !== data.storagePath ? existing.storagePath : null;
 
     const artifact = await client.artifact.upsert({
       where: {
@@ -795,7 +790,7 @@ export class PackageRepository {
   async incrementVersionDownloads(
     packageId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<void> {
     const client = tx ?? getPrismaClient();
     await client.packageVersion.update({
@@ -848,7 +843,7 @@ export class PackageRepository {
     name: string,
     claimedBy: string,
     githubRepo: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Package> {
     const client = tx ?? getPrismaClient();
     return client.package.update({
@@ -864,10 +859,7 @@ export class PackageRepository {
   /**
    * Get all unclaimed packages
    */
-  async findUnclaimed(
-    options: FindOptions,
-    tx?: TransactionClient
-  ): Promise<PackageSearchResult> {
+  async findUnclaimed(options: FindOptions, tx?: TransactionClient): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
     const [packages, total] = await Promise.all([
@@ -895,7 +887,7 @@ export class PackageRepository {
   async findClaimedByUser(
     userId: string,
     options: FindOptions,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
@@ -924,7 +916,7 @@ export class PackageRepository {
   async updateGitHubRepo(
     name: string,
     githubRepo: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Package> {
     const client = tx ?? getPrismaClient();
     return client.package.update({
@@ -943,7 +935,7 @@ export class PackageRepository {
       forks: number;
       watchers: number;
     },
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<Package> {
     const client = tx ?? getPrismaClient();
     return client.package.update({

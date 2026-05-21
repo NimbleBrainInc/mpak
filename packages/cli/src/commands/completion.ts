@@ -7,28 +7,12 @@
  *   mpak completion fish | source
  */
 
-const TOP_COMMANDS = [
-  "search",
-  "run",
-  "bundle",
-  "skill",
-  "config",
-  "completion",
-  "help",
-];
+const TOP_COMMANDS = ['search', 'run', 'bundle', 'skill', 'config', 'completion', 'help'];
 
-const BUNDLE_SUBCOMMANDS = ["search", "show", "pull", "run"];
-const SKILL_SUBCOMMANDS = [
-  "validate",
-  "pack",
-  "search",
-  "show",
-  "pull",
-  "install",
-  "list",
-];
-const CONFIG_SUBCOMMANDS = ["set", "get", "list", "clear"];
-const COMPLETION_SHELLS = ["bash", "zsh", "fish"];
+const BUNDLE_SUBCOMMANDS = ['search', 'show', 'pull', 'run'];
+const SKILL_SUBCOMMANDS = ['validate', 'pack', 'search', 'show', 'pull', 'install', 'list'];
+const CONFIG_SUBCOMMANDS = ['set', 'get', 'list', 'clear'];
+const COMPLETION_SHELLS = ['bash', 'zsh', 'fish'];
 
 function bashScript(): string {
   return `# mpak bash completion
@@ -39,11 +23,11 @@ _mpak_completions() {
   local cur prev words cword
   _init_completion || return
 
-  local top_commands="${TOP_COMMANDS.join(" ")}"
-  local bundle_sub="${BUNDLE_SUBCOMMANDS.join(" ")}"
-  local skill_sub="${SKILL_SUBCOMMANDS.join(" ")}"
-  local config_sub="${CONFIG_SUBCOMMANDS.join(" ")}"
-  local completion_shells="${COMPLETION_SHELLS.join(" ")}"
+  local top_commands="${TOP_COMMANDS.join(' ')}"
+  local bundle_sub="${BUNDLE_SUBCOMMANDS.join(' ')}"
+  local skill_sub="${SKILL_SUBCOMMANDS.join(' ')}"
+  local config_sub="${CONFIG_SUBCOMMANDS.join(' ')}"
+  local completion_shells="${COMPLETION_SHELLS.join(' ')}"
 
   case "\${cword}" in
     1)
@@ -206,19 +190,17 @@ complete -c mpak -n '__fish_seen_subcommand_from completion; and not __fish_seen
 
 export function handleCompletion(shell: string): void {
   switch (shell) {
-    case "bash":
+    case 'bash':
       process.stdout.write(bashScript());
       break;
-    case "zsh":
+    case 'zsh':
       process.stdout.write(zshScript());
       break;
-    case "fish":
+    case 'fish':
       process.stdout.write(fishScript());
       break;
     default:
-      process.stderr.write(
-        `Unsupported shell: ${shell}\nSupported shells: bash, zsh, fish\n`,
-      );
+      process.stderr.write(`Unsupported shell: ${shell}\nSupported shells: bash, zsh, fish\n`);
       process.exit(1);
   }
 }

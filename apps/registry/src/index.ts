@@ -11,11 +11,11 @@ import { authPlugin } from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { storagePlugin } from './plugins/storage.js';
 import { authRoutes } from './routes/auth.js';
+import { mcpRegistryRoutes } from './routes/mcp/v0.1/servers.js';
 import { packageRoutes } from './routes/packages.js';
 import { scannerRoutes, securityRoutes } from './routes/scanner.js';
 import { bundleRoutes } from './routes/v1/bundles.js';
 import { skillRoutes } from './routes/v1/skills.js';
-import { mcpRegistryRoutes } from './routes/mcp/v0.1/servers.js';
 
 async function start() {
   // Validate configuration
@@ -58,12 +58,13 @@ async function start() {
         description: 'API documentation for the mpak backend server',
         version: '0.1.0',
       },
-      servers: config.server.nodeEnv === 'production'
-        ? [{ url: 'https://registry.mpak.dev', description: 'Production' }]
-        : [
-            { url: `http://localhost:${config.server.port}`, description: 'Development' },
-            { url: 'https://registry.mpak.dev', description: 'Production' },
-          ],
+      servers:
+        config.server.nodeEnv === 'production'
+          ? [{ url: 'https://registry.mpak.dev', description: 'Production' }]
+          : [
+              { url: `http://localhost:${config.server.port}`, description: 'Development' },
+              { url: 'https://registry.mpak.dev', description: 'Production' },
+            ],
       tags: [
         { name: 'bundles', description: 'Bundle management API' },
         { name: 'skills', description: 'Agent Skills API' },
@@ -112,100 +113,116 @@ async function start() {
   // Register routes
 
   // Web app API - strict CORS, frontend origins only
-  await fastify.register(async (instance) => {
-    // CORS: development allows localhost, production requires explicit CORS_ORIGINS
-    const appOrigin = config.server.nodeEnv === 'development'
-      ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
-      : config.server.corsOrigins;
+  await fastify.register(
+    async (instance) => {
+      // CORS: development allows localhost, production requires explicit CORS_ORIGINS
+      const appOrigin =
+        config.server.nodeEnv === 'development'
+          ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
+          : config.server.corsOrigins;
 
-    await instance.register(cors, {
-      origin: appOrigin.length > 0 ? appOrigin : false,
-      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
-      credentials: true,
-    });
+      await instance.register(cors, {
+        origin: appOrigin.length > 0 ? appOrigin : false,
+        methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+        credentials: true,
+      });
 
-    // Hide app routes from Swagger documentation
-    instance.addHook('onRoute', (routeOptions) => {
-      routeOptions.schema = routeOptions.schema ?? {};
-      (routeOptions.schema as Record<string, unknown>)['hide'] = true;
-    });
-    await instance.register(authRoutes, { prefix: '/auth' });
-    await instance.register(packageRoutes, { prefix: '/packages' });
-    await instance.register(scannerRoutes); // /app/scan-results
-  }, { prefix: '/app' });
+      // Hide app routes from Swagger documentation
+      instance.addHook('onRoute', (routeOptions) => {
+        routeOptions.schema = routeOptions.schema ?? {};
+        (routeOptions.schema as Record<string, unknown>).hide = true;
+      });
+      await instance.register(authRoutes, { prefix: '/auth' });
+      await instance.register(packageRoutes, { prefix: '/packages' });
+      await instance.register(scannerRoutes); // /app/scan-results
+    },
+    { prefix: '/app' },
+  );
 
   // Public API (CLI, OIDC) - open CORS, no cookies involved
-  await fastify.register(async (instance) => {
-    await instance.register(cors, {
-      origin: true, // Allow any origin - public API uses Bearer tokens, not cookies
-      methods: ['GET', 'HEAD', 'POST'],
-      credentials: false, // No cookies, just Authorization header
-    });
-    // Stricter rate limit for bundle operations: 10 req/min per IP
-    await instance.register(rateLimit, {
-      max: 10,
-      timeWindow: '1 minute',
-    });
-    // Mark every /v1/bundles response as deprecated per RFC 8594. The
-    // successor is the MCP-spec-aligned /v1/servers family; the legacy
-    // bundle-shape endpoints stay alive (announce / publish flow still
-    // depends on them) but consumers fetching read shapes should
-    // migrate. Skip POST /announce — that's a publish path, not a
-    // consumer-read path.
-    //
-    // RFC 8594 specifies `Deprecation = HTTP-date / "@" 1*DIGIT`. The
-    // boolean string "true" is a common shortcut from a superseded
-    // draft but isn't conformant; strict parsers ignore it. Emit an
-    // IMF-fixdate equal to when the deprecation took effect (the
-    // first commit of this PR's day) so the header round-trips
-    // through any conforming client.
-    const DEPRECATION_DATE = 'Fri, 09 May 2026 00:00:00 GMT';
-    instance.addHook('onSend', async (request, reply) => {
-      if (request.method === 'GET' || request.method === 'HEAD') {
-        reply.header('Deprecation', DEPRECATION_DATE);
-        reply.header('Link', '</v1/servers>; rel="successor-version"');
-      }
-    });
-    await instance.register(bundleRoutes);
-    await instance.register(securityRoutes); // /@:scope/:package/security routes
-  }, { prefix: '/v1/bundles' });
+  await fastify.register(
+    async (instance) => {
+      await instance.register(cors, {
+        origin: true, // Allow any origin - public API uses Bearer tokens, not cookies
+        methods: ['GET', 'HEAD', 'POST'],
+        credentials: false, // No cookies, just Authorization header
+      });
+      // Stricter rate limit for bundle operations: 10 req/min per IP
+      await instance.register(rateLimit, {
+        max: 10,
+        timeWindow: '1 minute',
+      });
+      // Mark every /v1/bundles response as deprecated per RFC 8594. The
+      // successor is the MCP-spec-aligned /v1/servers family; the legacy
+      // bundle-shape endpoints stay alive (announce / publish flow still
+      // depends on them) but consumers fetching read shapes should
+      // migrate. Skip POST /announce — that's a publish path, not a
+      // consumer-read path.
+      //
+      // RFC 8594 specifies `Deprecation = HTTP-date / "@" 1*DIGIT`. The
+      // boolean string "true" is a common shortcut from a superseded
+      // draft but isn't conformant; strict parsers ignore it. Emit an
+      // IMF-fixdate equal to when the deprecation took effect (the
+      // first commit of this PR's day) so the header round-trips
+      // through any conforming client.
+      const DEPRECATION_DATE = 'Fri, 09 May 2026 00:00:00 GMT';
+      instance.addHook('onSend', async (request, reply) => {
+        if (request.method === 'GET' || request.method === 'HEAD') {
+          reply.header('Deprecation', DEPRECATION_DATE);
+          reply.header('Link', '</v1/servers>; rel="successor-version"');
+        }
+      });
+      await instance.register(bundleRoutes);
+      await instance.register(securityRoutes); // /@:scope/:package/security routes
+    },
+    { prefix: '/v1/bundles' },
+  );
 
   // Skills API
-  await fastify.register(async (instance) => {
-    await instance.register(cors, {
-      origin: true,
-      methods: ['GET', 'HEAD', 'POST'],
-      credentials: false,
-    });
-    // Stricter rate limit for skill operations: 10 req/min per IP
-    await instance.register(rateLimit, {
-      max: 10,
-      timeWindow: '1 minute',
-    });
-    await instance.register(skillRoutes);
-  }, { prefix: '/v1/skills' });
+  await fastify.register(
+    async (instance) => {
+      await instance.register(cors, {
+        origin: true,
+        methods: ['GET', 'HEAD', 'POST'],
+        credentials: false,
+      });
+      // Stricter rate limit for skill operations: 10 req/min per IP
+      await instance.register(rateLimit, {
+        max: 10,
+        timeWindow: '1 minute',
+      });
+      await instance.register(skillRoutes);
+    },
+    { prefix: '/v1/skills' },
+  );
 
   // MCP Registry API — mounted at both /v0.1 (the upstream MCP Registry
   // public API prefix) and /v1 (mpak's `/v1/...` family). Same routes,
   // same handlers; consumers pick whichever URL space is conventional
   // for their stack.
-  await fastify.register(async (instance) => {
-    await instance.register(cors, {
-      origin: true,
-      methods: ['GET', 'HEAD'],
-      credentials: false,
-    });
-    await instance.register(mcpRegistryRoutes);
-  }, { prefix: '/v0.1' });
+  await fastify.register(
+    async (instance) => {
+      await instance.register(cors, {
+        origin: true,
+        methods: ['GET', 'HEAD'],
+        credentials: false,
+      });
+      await instance.register(mcpRegistryRoutes);
+    },
+    { prefix: '/v0.1' },
+  );
 
-  await fastify.register(async (instance) => {
-    await instance.register(cors, {
-      origin: true,
-      methods: ['GET', 'HEAD'],
-      credentials: false,
-    });
-    await instance.register(mcpRegistryRoutes);
-  }, { prefix: '/v1' });
+  await fastify.register(
+    async (instance) => {
+      await instance.register(cors, {
+        origin: true,
+        methods: ['GET', 'HEAD'],
+        credentials: false,
+      });
+      await instance.register(mcpRegistryRoutes);
+    },
+    { prefix: '/v1' },
+  );
 
   // Health check endpoint
   fastify.get('/health', {

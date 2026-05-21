@@ -1,5 +1,5 @@
-import { rmSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import { rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MpakClient, parsePackageSpec } from '@nimblebrain/mpak-sdk';
 import { mpak } from '../../utils/config.js';
 import { formatSize, logger } from '../../utils/format.js';
