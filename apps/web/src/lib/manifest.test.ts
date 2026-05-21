@@ -1,8 +1,9 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 import {
-  generateMcpConfig,
   generateBaseMcpConfig,
-  generateCliCommands,
   generateClaudeCodeCommand,
+  generateCliCommands,
+  generateMcpConfig,
 } from './manifest';
 
 describe('generateMcpConfig', () => {
@@ -103,7 +104,9 @@ describe('generateCliCommands', () => {
     };
     const commands = generateCliCommands('@scope/pkg', manifest);
     expect(commands).toHaveLength(1);
-    expect(commands[0]).toBe('mpak config set @scope/pkg api_key=YOUR_VALUE_HERE region=YOUR_VALUE_HERE');
+    expect(commands[0]).toBe(
+      'mpak config set @scope/pkg api_key=YOUR_VALUE_HERE region=YOUR_VALUE_HERE',
+    );
   });
 });
 

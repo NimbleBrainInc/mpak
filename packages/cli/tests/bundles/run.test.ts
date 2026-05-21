@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -202,9 +203,9 @@ describe('registry run — cached bundle', () => {
 
     const spawnEnv = mockSpawn.mock.calls[0][2].env;
     // process.env PATH wins over SDK's PATH
-    expect(spawnEnv['PATH']).toBe(process.env['PATH']);
+    expect(spawnEnv.PATH).toBe(process.env.PATH);
     // SDK-only keys survive the merge
-    expect(spawnEnv['FROM_SDK']).toBe('yes');
+    expect(spawnEnv.FROM_SDK).toBe('yes');
   });
 });
 
