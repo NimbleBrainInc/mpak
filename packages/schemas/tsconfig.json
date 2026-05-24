@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
+    // Pin to empty: schemas depends only on zod. Without this, tsc auto-discovers every @types/* reachable via node_modules hoisting, which breaks the build when pnpm reshuffles hoisting. Do not remove.
     "types": []
   },
   "include": ["src/**/*"],
