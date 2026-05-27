@@ -286,7 +286,25 @@ export class PackageRepository {
         claimedBy: data.claimedBy,
         claimedAt: data.claimedAt,
       },
-      update: {},
+      // Refresh manifest-derived metadata on every announce so re-releases
+      // pick up changes (display name, description, icon, author, etc.).
+      // `undefined` values are skipped by Prisma, so a manifest that omits a
+      // field leaves the existing value intact rather than nulling it.
+      // Ownership/trust (verified, createdBy, claimedBy/At) and version
+      // ordering (latestVersion — handled by updateLatestVersion) are
+      // intentionally left untouched here.
+      update: {
+        displayName: data.displayName,
+        description: data.description,
+        authorName: data.authorName,
+        authorEmail: data.authorEmail,
+        authorUrl: data.authorUrl,
+        homepage: data.homepage,
+        license: data.license,
+        iconUrl: data.iconUrl,
+        serverType: data.serverType,
+        githubRepo: data.githubRepo,
+      },
     });
 
     return { package: pkg, created: !existing };
