@@ -4,21 +4,21 @@
  * Tests error types, normalization, and response formatting.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { formatErrorResponse, normalizeError } from '../src/errors/handler.js';
 import {
   AppError,
   BadRequestError,
-  UnauthorizedError,
-  ForbiddenError,
-  NotFoundError,
   ConflictError,
-  ValidationError,
-  InternalServerError,
   DatabaseError,
-  TransactionTimeoutError,
+  ForbiddenError,
+  InternalServerError,
+  NotFoundError,
   ServiceUnavailableError,
+  TransactionTimeoutError,
+  UnauthorizedError,
+  ValidationError,
 } from '../src/errors/types.js';
-import { normalizeError, formatErrorResponse } from '../src/errors/handler.js';
 
 // ---------------------------------------------------------------------------
 // Error types

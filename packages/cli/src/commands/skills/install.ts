@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parsePackageSpec } from '@nimblebrain/mpak-sdk';
 import { mpak } from '../../utils/config.js';
 import { formatSize, logger } from '../../utils/format.js';

@@ -6,7 +6,7 @@ export class CLIError extends Error {
 
   constructor(message: string, exitCode: number = 1) {
     super(message);
-    this.name = "CLIError";
+    this.name = 'CLIError';
     this.exitCode = exitCode;
   }
 }
@@ -25,6 +25,6 @@ export function handleError(error: unknown): never {
     process.exit(1);
   }
 
-  console.error("An unexpected error occurred");
+  console.error('An unexpected error occurred');
   process.exit(1);
 }

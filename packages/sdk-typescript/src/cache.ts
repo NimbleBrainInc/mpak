@@ -202,7 +202,7 @@ export class MpakBundleCache {
 
     if (
       !options?.force &&
-      !!cachedMeta &&
+      cachedMeta &&
       (!requestedVersion || isSemverEqual(cachedMeta.version, requestedVersion))
     ) {
       return { cacheDir, version: cachedMeta.version, pulled: false };

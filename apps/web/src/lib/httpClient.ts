@@ -18,22 +18,24 @@ httpClient.interceptors.response.use(
       console.error(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
         status: error.response.status,
         data: error.response.data,
-        message: error.message
+        message: error.message,
       });
     } else if (error.request) {
       console.error(`Network Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, {
-        message: error.message
+        message: error.message,
       });
     } else {
       console.error('Request Error:', error.message);
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 // Adds access tokens in all api requests
 // This interceptor is only added when the clerk instance is ready and exports the getToken method
-export const addAccessTokenInterceptor = (getToken: (options?: { template?: string; skipCache?: boolean }) => Promise<string | null>) => {
+export const addAccessTokenInterceptor = (
+  getToken: (options?: { template?: string; skipCache?: boolean }) => Promise<string | null>,
+) => {
   httpClient.interceptors.request.use(async (config) => {
     const token = await getToken();
 

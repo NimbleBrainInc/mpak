@@ -62,10 +62,7 @@ export class UserRepository {
   /**
    * Find user by GitHub username
    */
-  async findByGitHubUsername(
-    githubUsername: string,
-    tx?: TransactionClient
-  ): Promise<User | null> {
+  async findByGitHubUsername(githubUsername: string, tx?: TransactionClient): Promise<User | null> {
     const client = tx ?? getPrismaClient();
     return client.user.findFirst({
       where: { githubUsername },

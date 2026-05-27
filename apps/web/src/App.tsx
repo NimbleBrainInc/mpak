@@ -1,24 +1,24 @@
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import RootLayout from './layouts/RootLayout';
+import AboutPage from './pages/AboutPage';
+import BrowsePackagesPage from './pages/BrowsePackagesPage';
+import ContactPage from './pages/ContactPage';
 import ErrorPage from './pages/ErrorPage';
 import HomePage from './pages/HomePage';
-import BrowsePackagesPage from './pages/BrowsePackagesPage';
-import PackageDetailPage from './pages/PackageDetailPage';
 import LoginPage from './pages/LoginPage';
-import UserPackagesPage from './pages/UserPackagesPage';
-import AboutPage from './pages/AboutPage';
-import ContactPage from './pages/ContactPage';
-import SkillsPage from './pages/SkillsPage';
-import SkillDetailPage from './pages/SkillDetailPage';
-import SecurityPage from './pages/SecurityPage';
-import SecurityControlsPage from './pages/SecurityControlsPage';
-import PublishGatewayPage from './pages/PublishGatewayPage';
-import PublishBundlesPage from './pages/PublishBundlesPage';
-import PublishSkillsPage from './pages/PublishSkillsPage';
+import PackageDetailPage from './pages/PackageDetailPage';
 import PrivacyPage from './pages/PrivacyPage';
+import PublishBundlesPage from './pages/PublishBundlesPage';
+import PublishGatewayPage from './pages/PublishGatewayPage';
+import PublishSkillsPage from './pages/PublishSkillsPage';
+import SecurityControlsPage from './pages/SecurityControlsPage';
+import SecurityPage from './pages/SecurityPage';
+import SkillDetailPage from './pages/SkillDetailPage';
+import SkillsPage from './pages/SkillsPage';
 import TermsPage from './pages/TermsPage';
+import UserPackagesPage from './pages/UserPackagesPage';
 
 // Create QueryClient instance
 const queryClient = new QueryClient({
@@ -35,7 +35,11 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <RootLayout />,
-    errorElement: <RootLayout><ErrorPage /></RootLayout>,
+    errorElement: (
+      <RootLayout>
+        <ErrorPage />
+      </RootLayout>
+    ),
     children: [
       { index: true, element: <HomePage /> },
       { path: 'bundles', element: <BrowsePackagesPage /> },

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('validateConfig', () => {
   const originalEnv = { ...process.env };
@@ -19,22 +19,24 @@ describe('validateConfig', () => {
   });
 
   it('throws when CLERK_SECRET_KEY is missing in production', async () => {
-    process.env['NODE_ENV'] = 'production';
-    process.env['CLERK_SECRET_KEY'] = '';
+    process.env.NODE_ENV = 'production';
+    process.env.CLERK_SECRET_KEY = '';
     const { validateConfig } = await import('../src/config.js');
     expect(() => validateConfig()).toThrow('CLERK_SECRET_KEY is required in production');
   });
 
   it('throws when scanner enabled without callback secret', async () => {
-    process.env['SCANNER_ENABLED'] = 'true';
-    process.env['SCANNER_CALLBACK_SECRET'] = '';
+    process.env.SCANNER_ENABLED = 'true';
+    process.env.SCANNER_CALLBACK_SECRET = '';
     const { validateConfig } = await import('../src/config.js');
-    expect(() => validateConfig()).toThrow('SCANNER_CALLBACK_SECRET is required when SCANNER_ENABLED=true');
+    expect(() => validateConfig()).toThrow(
+      'SCANNER_CALLBACK_SECRET is required when SCANNER_ENABLED=true',
+    );
   });
 
   it('passes with valid development config', async () => {
-    process.env['DATABASE_URL'] = 'postgresql://localhost:5432/test';
-    process.env['SCANNER_ENABLED'] = 'false';
+    process.env.DATABASE_URL = 'postgresql://localhost:5432/test';
+    process.env.SCANNER_ENABLED = 'false';
     const { validateConfig } = await import('../src/config.js');
     expect(() => validateConfig()).not.toThrow();
   });

@@ -3,10 +3,10 @@
  * Singleton pattern for database connection management
  */
 
-import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
 import type { Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import pg from 'pg';
 
 let prismaInstance: PrismaClient | null = null;
 let pgPool: pg.Pool | null = null;
@@ -17,14 +17,14 @@ let pgPool: pg.Pool | null = null;
 export function getPrismaClient(): PrismaClient {
   if (!prismaInstance) {
     pgPool = new pg.Pool({
-      connectionString: process.env['DATABASE_URL'],
+      connectionString: process.env.DATABASE_URL,
     });
 
     const adapter = new PrismaPg(pgPool);
 
     prismaInstance = new PrismaClient({
       adapter,
-      log: process.env['NODE_ENV'] === 'development' ? ['error', 'warn'] : ['error'],
+      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
     });
   }
   return prismaInstance;
@@ -55,7 +55,7 @@ export async function runInTransaction<T>(
   options?: {
     maxWait?: number;
     timeout?: number;
-  }
+  },
 ): Promise<T> {
   const client = getPrismaClient();
   return client.$transaction(fn, {

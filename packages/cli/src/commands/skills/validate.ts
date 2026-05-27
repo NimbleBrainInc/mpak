@@ -1,8 +1,8 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
-import { join, basename } from "path";
-import matter from "gray-matter";
-import { SkillFrontmatterSchema } from "@nimblebrain/mpak-schemas";
-import type { SkillFrontmatter } from "@nimblebrain/mpak-schemas";
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import type { SkillFrontmatter } from '@nimblebrain/mpak-schemas';
+import { SkillFrontmatterSchema } from '@nimblebrain/mpak-schemas';
+import matter from 'gray-matter';
 
 export interface ValidationResult {
   valid: boolean;
@@ -41,17 +41,17 @@ export function validateSkillDirectory(skillPath: string): ValidationResult {
   }
 
   // Check SKILL.md exists
-  const skillMdPath = join(skillPath, "SKILL.md");
+  const skillMdPath = join(skillPath, 'SKILL.md');
   if (!existsSync(skillMdPath)) {
     result.valid = false;
-    result.errors.push("SKILL.md not found");
+    result.errors.push('SKILL.md not found');
     return result;
   }
 
   // Read and parse SKILL.md
   let content: string;
   try {
-    content = readFileSync(skillMdPath, "utf-8");
+    content = readFileSync(skillMdPath, 'utf-8');
   } catch (err) {
     result.valid = false;
     result.errors.push(`Failed to read SKILL.md: ${err}`);
@@ -70,7 +70,7 @@ export function validateSkillDirectory(skillPath: string): ValidationResult {
 
   if (!parsed.data || Object.keys(parsed.data).length === 0) {
     result.valid = false;
-    result.errors.push("No frontmatter found in SKILL.md");
+    result.errors.push('No frontmatter found in SKILL.md');
     return result;
   }
 
@@ -80,7 +80,7 @@ export function validateSkillDirectory(skillPath: string): ValidationResult {
   if (!validation.success) {
     result.valid = false;
     for (const issue of validation.error.issues) {
-      const path = issue.path.join(".");
+      const path = issue.path.join('.');
       result.errors.push(`${path}: ${issue.message}`);
     }
     return result;
@@ -102,39 +102,29 @@ export function validateSkillDirectory(skillPath: string): ValidationResult {
   const contents = readdirSync(skillPath);
 
   // Standard optional directories
-  const optionalDirs = ["scripts", "references", "assets"];
+  const optionalDirs = ['scripts', 'references', 'assets'];
   for (const dir of optionalDirs) {
     if (contents.includes(dir)) {
       const dirPath = join(skillPath, dir);
       if (!statSync(dirPath).isDirectory()) {
-        result.warnings.push(
-          `"${dir}" exists but is not a directory`,
-        );
+        result.warnings.push(`"${dir}" exists but is not a directory`);
       }
     }
   }
 
   // Check for discovery metadata (not required, but recommended)
   if (!validation.data.metadata) {
-    result.warnings.push(
-      "No metadata field - consider adding for better discovery",
-    );
+    result.warnings.push('No metadata field - consider adding for better discovery');
   } else {
     const meta = validation.data.metadata;
     if (!meta.tags || meta.tags.length === 0) {
-      result.warnings.push(
-        "No tags in metadata - consider adding for better discovery",
-      );
+      result.warnings.push('No tags in metadata - consider adding for better discovery');
     }
     if (!meta.category) {
-      result.warnings.push(
-        "No category in metadata - consider adding for better discovery",
-      );
+      result.warnings.push('No category in metadata - consider adding for better discovery');
     }
     if (!meta.version) {
-      result.warnings.push(
-        "No version in metadata - required for registry publishing",
-      );
+      result.warnings.push('No version in metadata - required for registry publishing');
     }
   }
 
@@ -144,9 +134,7 @@ export function validateSkillDirectory(skillPath: string): ValidationResult {
 /**
  * Format validation result for CLI output
  */
-export function formatValidationResult(
-  result: ValidationResult,
-): string {
+export function formatValidationResult(result: ValidationResult): string {
   const lines: string[] = [];
 
   if (result.valid) {
@@ -155,37 +143,29 @@ export function formatValidationResult(
     lines.push(`\u2717 Invalid: ${result.name || result.path}`);
   }
 
-  lines.push("");
+  lines.push('');
 
   if (result.frontmatter) {
-    lines.push("\u2713 SKILL.md found");
-    lines.push("\u2713 Required fields");
+    lines.push('\u2713 SKILL.md found');
+    lines.push('\u2713 Required fields');
     lines.push(`  \u251c\u2500 name: ${result.frontmatter.name}`);
     lines.push(
-      `  \u2514\u2500 description: ${result.frontmatter.description.slice(0, 60)}${result.frontmatter.description.length > 60 ? "..." : ""} (${result.frontmatter.description.length} chars)`,
+      `  \u2514\u2500 description: ${result.frontmatter.description.slice(0, 60)}${result.frontmatter.description.length > 60 ? '...' : ''} (${result.frontmatter.description.length} chars)`,
     );
 
     // Optional fields
     const optionalFields: string[] = [];
-    if (result.frontmatter.license)
-      optionalFields.push(`license: ${result.frontmatter.license}`);
+    if (result.frontmatter.license) optionalFields.push(`license: ${result.frontmatter.license}`);
     if (result.frontmatter.compatibility)
-      optionalFields.push(
-        `compatibility: ${result.frontmatter.compatibility}`,
-      );
-    if (result.frontmatter["allowed-tools"])
-      optionalFields.push(
-        `allowed-tools: ${result.frontmatter["allowed-tools"]}`,
-      );
+      optionalFields.push(`compatibility: ${result.frontmatter.compatibility}`);
+    if (result.frontmatter['allowed-tools'])
+      optionalFields.push(`allowed-tools: ${result.frontmatter['allowed-tools']}`);
 
     if (optionalFields.length > 0) {
-      lines.push("");
-      lines.push("\u2713 Optional fields");
+      lines.push('');
+      lines.push('\u2713 Optional fields');
       optionalFields.forEach((field, i) => {
-        const prefix =
-          i === optionalFields.length - 1
-            ? "\u2514\u2500"
-            : "\u251c\u2500";
+        const prefix = i === optionalFields.length - 1 ? '\u2514\u2500' : '\u251c\u2500';
         lines.push(`  ${prefix} ${field}`);
       });
     }
@@ -193,40 +173,33 @@ export function formatValidationResult(
     // Discovery metadata
     if (result.frontmatter.metadata) {
       const meta = result.frontmatter.metadata;
-      lines.push("");
-      lines.push("\u2713 Discovery metadata (metadata:)");
-      if (meta.tags)
-        lines.push(
-          `  \u251c\u2500 tags: [${meta.tags.join(", ")}]`,
-        );
-      if (meta.category)
-        lines.push(`  \u251c\u2500 category: ${meta.category}`);
-      if (meta.triggers)
-        lines.push(
-          `  \u251c\u2500 triggers: ${meta.triggers.length} defined`,
-        );
-      if (meta.version)
-        lines.push(`  \u251c\u2500 version: ${meta.version}`);
-      if (meta.author)
-        lines.push(`  \u2514\u2500 author: ${meta.author.name}`);
+      lines.push('');
+      lines.push('\u2713 Discovery metadata (metadata:)');
+      if (meta.tags) lines.push(`  \u251c\u2500 tags: [${meta.tags.join(', ')}]`);
+      if (meta.category) lines.push(`  \u251c\u2500 category: ${meta.category}`);
+      if (meta.triggers) lines.push(`  \u251c\u2500 triggers: ${meta.triggers.length} defined`);
+      if (meta.version) lines.push(`  \u251c\u2500 version: ${meta.version}`);
+      if (meta.author) lines.push(`  \u2514\u2500 author: ${meta.author.name}`);
     }
   }
 
   if (result.errors.length > 0) {
-    lines.push("");
-    lines.push("Errors:");
-    result.errors.forEach((err) => lines.push(`  \u2717 ${err}`));
+    lines.push('');
+    lines.push('Errors:');
+    result.errors.forEach((err) => {
+      lines.push(`  \u2717 ${err}`);
+    });
   }
 
   if (result.warnings.length > 0) {
-    lines.push("");
-    lines.push("Warnings:");
-    result.warnings.forEach((warn) =>
-      lines.push(`  \u26a0 ${warn}`),
-    );
+    lines.push('');
+    lines.push('Warnings:');
+    result.warnings.forEach((warn) => {
+      lines.push(`  \u26a0 ${warn}`);
+    });
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 export interface ValidateOptions {
@@ -245,9 +218,9 @@ export async function handleSkillValidate(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log("");
+    console.log('');
     console.log(`Validating ${skillPath}...`);
-    console.log("");
+    console.log('');
     console.log(formatValidationResult(result));
   }
 

@@ -53,6 +53,7 @@ export const siteConfig = {
   github: {
     org: import.meta.env.VITE_GITHUB_ORG_URL || 'https://github.com/NimbleBrainInc',
     repo: import.meta.env.VITE_GITHUB_REPO_URL || 'https://github.com/NimbleBrainInc/mpak',
-    issues: import.meta.env.VITE_GITHUB_ISSUES_URL || 'https://github.com/NimbleBrainInc/mpak/issues',
+    issues:
+      import.meta.env.VITE_GITHUB_ISSUES_URL || 'https://github.com/NimbleBrainInc/mpak/issues',
   },
 };

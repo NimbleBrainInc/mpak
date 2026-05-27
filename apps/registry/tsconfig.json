@@ -5,10 +5,6 @@
     "rootDir": "./src",
     "types": ["node"],
     "exactOptionalPropertyTypes": false,
-    "noPropertyAccessFromIndexSignature": false,
-    "noUncheckedIndexedAccess": false,
-    "exactOptionalPropertyTypes": false,
-    "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": false
   },
   "include": ["src/**/*"],

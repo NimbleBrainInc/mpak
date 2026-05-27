@@ -21,7 +21,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @nimblebrain/mpak-schemas build
-      - run: pnpm --filter @nimblebrain/mpak-schemas lint
+      - run: pnpm lint
       - run: pnpm --filter @nimblebrain/mpak-schemas typecheck
       - run: pnpm --filter @nimblebrain/mpak-schemas test
 

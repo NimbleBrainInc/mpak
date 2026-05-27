@@ -17,44 +17,40 @@
  * ```
  */
 
-// Facade — primary entry point
-export { Mpak } from './mpakSDK.js';
-export type {
-  MpakOptions,
-  PrepareServerSpec,
-  PrepareServerOptions,
-  ServerCommand,
-} from './mpakSDK.js';
-
+export type { MpakBundleCacheOptions } from './cache.js';
+export { MpakBundleCache } from './cache.js';
+export { MpakClient } from './client.js';
+export type { MpakConfigManagerOptions, PackageConfig } from './config-manager.js';
 // Components (standalone use)
 export { MpakConfigManager } from './config-manager.js';
-export type { MpakConfigManagerOptions, PackageConfig } from './config-manager.js';
-export { MpakBundleCache } from './cache.js';
-export type { MpakBundleCacheOptions } from './cache.js';
-export { MpakClient } from './client.js';
-export type { MpakClientConfig, ServerSearchParams } from './types.js';
-
-// Validation
-export { validateMcpb } from './validate.js';
-export type {
-  McpbValidationResult,
-  McpbValidationSuccess,
-  McpbValidationFailure,
-} from './validate.js';
-
-// Utilities
-export { parsePackageSpec } from './utils.js';
-export { MAX_UNCOMPRESSED_SIZE, extractZip, isSemverEqual } from './helpers.js';
-export type { ExtractZipOptions } from './helpers.js';
-
 // Errors
 export {
-  MpakError,
-  MpakNotFoundError,
-  MpakIntegrityError,
-  MpakNetworkError,
   MpakCacheCorruptedError,
   MpakConfigCorruptedError,
   MpakConfigError,
+  MpakError,
+  MpakIntegrityError,
   MpakInvalidBundleError,
+  MpakNetworkError,
+  MpakNotFoundError,
 } from './errors.js';
+export type { ExtractZipOptions } from './helpers.js';
+export { extractZip, isSemverEqual, MAX_UNCOMPRESSED_SIZE } from './helpers.js';
+export type {
+  MpakOptions,
+  PrepareServerOptions,
+  PrepareServerSpec,
+  ServerCommand,
+} from './mpakSDK.js';
+// Facade — primary entry point
+export { Mpak } from './mpakSDK.js';
+export type { MpakClientConfig, ServerSearchParams } from './types.js';
+// Utilities
+export { parsePackageSpec } from './utils.js';
+export type {
+  McpbValidationFailure,
+  McpbValidationResult,
+  McpbValidationSuccess,
+} from './validate.js';
+// Validation
+export { validateMcpb } from './validate.js';

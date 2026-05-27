@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { z } from 'zod';
 
 import {
   AnnounceRequestSchema,
@@ -12,16 +12,16 @@ import {
   PackageSearchResponseSchema,
   VersionDetailSchema,
   VersionsResponseSchema,
-} from "./api-responses.js";
-import { UserProfileSchema } from "./auth.js";
-import { MpakJsonSchema } from "./mpak-json.js";
-import { PackageSearchParamsSchema } from "./package.js";
+} from './api-responses.js';
+import { UserProfileSchema } from './auth.js';
+import { MpakJsonSchema } from './mpak-json.js';
+import { PackageSearchParamsSchema } from './package.js';
 import {
   SkillAnnounceRequestSchema,
   SkillDetailSchema,
   SkillFrontmatterSchema,
   SkillSearchResponseSchema,
-} from "./skill.js";
+} from './skill.js';
 
 // =============================================================================
 // Validation Result Type
@@ -43,17 +43,14 @@ export type ValidationResult<T> =
 /**
  * Validate unknown data against a Zod schema, returning a friendly result.
  */
-function validate<T>(
-  schema: z.ZodType<T>,
-  data: unknown,
-): ValidationResult<T> {
+function validate<T>(schema: z.ZodType<T>, data: unknown): ValidationResult<T> {
   const result = schema.safeParse(data);
   if (result.success) {
     return { success: true, data: result.data };
   }
 
   const errors = result.error.issues.map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+    const path = issue.path.length > 0 ? issue.path.join('.') : '(root)';
     return `${path}: ${issue.message}`;
   });
 

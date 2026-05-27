@@ -14,7 +14,11 @@ export default function LoginPage() {
         ) : (
           <div className="text-center text-mpak-gray-500 border border-white/[0.08] rounded-lg p-8">
             <p>Authentication is not configured for local development.</p>
-            <p className="mt-2 text-sm">Set <code className="bg-surface-overlay px-1 rounded">VITE_CLERK_PUBLISHABLE_KEY</code> in your .env to enable sign-in.</p>
+            <p className="mt-2 text-sm">
+              Set{' '}
+              <code className="bg-surface-overlay px-1 rounded">VITE_CLERK_PUBLISHABLE_KEY</code> in
+              your .env to enable sign-in.
+            </p>
           </div>
         )}
       </div>

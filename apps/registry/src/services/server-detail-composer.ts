@@ -34,16 +34,16 @@
  * in logs, never reaches consumers.
  */
 
-import type { Artifact, Package as DbPackage, PackageVersion } from "@prisma/client";
 import {
   resolveReverseDnsName,
   type ServerDetail,
   ServerDetailSchema,
   type ServerPackage,
-} from "@nimblebrain/mpak-schemas";
+} from '@nimblebrain/mpak-schemas';
+import type { Artifact, Package as DbPackage, PackageVersion } from '@prisma/client';
 
 const UPSTREAM_SCHEMA_URL =
-  "https://raw.githubusercontent.com/modelcontextprotocol/registry/main/docs/reference/server-json/draft/server.schema.json";
+  'https://raw.githubusercontent.com/modelcontextprotocol/registry/main/docs/reference/server-json/draft/server.schema.json';
 
 /**
  * Inputs to {@link composeServerDetail}. Carries everything mpak knows
@@ -55,7 +55,7 @@ export interface ComposerInput {
    * projection itself; the rest of the row is here so callers can
    * pass the live record without additional selection.
    */
-  pkg: Pick<DbPackage, "name" | "latestVersion" | "totalDownloads"> & {
+  pkg: Pick<DbPackage, 'name' | 'latestVersion' | 'totalDownloads'> & {
     githubRepo?: string | null;
   };
   /**
@@ -65,10 +65,10 @@ export interface ComposerInput {
    */
   version: Pick<
     PackageVersion,
-    "version" | "manifest" | "publishedAt" | "publishMethod" | "provenance" | "downloadCount"
+    'version' | 'manifest' | 'publishedAt' | 'publishMethod' | 'provenance' | 'downloadCount'
   >;
   /** Per-platform artifacts. Empty array is fine — packages[] is omitted. */
-  artifacts: Pick<Artifact, "os" | "arch" | "digest" | "sizeBytes" | "sourceUrl" | "storagePath">[];
+  artifacts: Pick<Artifact, 'os' | 'arch' | 'digest' | 'sizeBytes' | 'sourceUrl' | 'storagePath'>[];
   /** Top certification record for this version, if any. */
   certification?: {
     level: number;
@@ -117,11 +117,11 @@ export function composeServerDetailOrThrow(input: ComposerInput): ServerDetail {
  */
 function buildDetail(input: ComposerInput): Record<string, unknown> {
   const manifest = (input.version.manifest ?? {}) as Record<string, unknown>;
-  const manifestMeta = (manifest["_meta"] as Record<string, unknown> | undefined) ?? null;
+  const manifestMeta = (manifest._meta as Record<string, unknown> | undefined) ?? null;
 
-  const description = truncate(stringField(manifest, "description") ?? input.pkg.name, 100);
+  const description = truncate(stringField(manifest, 'description') ?? input.pkg.name, 100);
   const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
-  const display = stringField(manifest, "display_name");
+  const display = stringField(manifest, 'display_name');
   // Upstream `Title` caps at 100 chars; truncate so a long display_name
   // (or a long npm scope/name when it falls back) doesn't reject the
   // entire record at the schema boundary and 500 the route.
@@ -138,19 +138,19 @@ function buildDetail(input: ComposerInput): Record<string, unknown> {
     version: input.version.version,
   };
 
-  const homepage = stringField(manifest, "homepage");
-  if (homepage && isHttpUrl(homepage)) detail["websiteUrl"] = homepage;
+  const homepage = stringField(manifest, 'homepage');
+  if (homepage && isHttpUrl(homepage)) detail.websiteUrl = homepage;
 
   const repository = projectRepository(manifest, input.pkg.githubRepo);
-  if (repository) detail["repository"] = repository;
+  if (repository) detail.repository = repository;
 
   const icons = projectIcons(manifest);
-  if (icons.length > 0) detail["icons"] = icons;
+  if (icons.length > 0) detail.icons = icons;
 
   const packages = projectPackages(input, manifest);
-  if (packages.length > 0) detail["packages"] = packages;
+  if (packages.length > 0) detail.packages = packages;
 
-  detail["_meta"] = composeMeta(input, manifest, manifestMeta);
+  detail._meta = composeMeta(input, manifest, manifestMeta);
 
   return detail;
 }
@@ -161,11 +161,11 @@ function projectRepository(
   manifest: Record<string, unknown>,
   fallbackGithubRepo: string | null | undefined,
 ): { url: string; source: string; id?: string; subfolder?: string } | null {
-  const repo = manifest["repository"];
-  if (repo && typeof repo === "object") {
-    const url = stringField(repo as Record<string, unknown>, "url");
+  const repo = manifest.repository;
+  if (repo && typeof repo === 'object') {
+    const url = stringField(repo as Record<string, unknown>, 'url');
     if (url && isHttpUrl(url)) {
-      return { url, source: "github" };
+      return { url, source: 'github' };
     }
   }
   // Fall back to the package's tracked GitHub repo when the manifest
@@ -173,7 +173,7 @@ function projectRepository(
   // manifests pre-date the repository field.
   if (fallbackGithubRepo) {
     const url = `https://github.com/${fallbackGithubRepo}`;
-    return { url, source: "github" };
+    return { url, source: 'github' };
   }
   return null;
 }
@@ -194,48 +194,51 @@ function projectRepository(
 function projectIcons(
   manifest: Record<string, unknown>,
 ): { src: string; sizes?: string[]; mimeType?: string; theme?: string }[] {
-  const icons = manifest["icons"];
+  const icons = manifest.icons;
   if (Array.isArray(icons)) {
     return icons
       .map(projectIcon)
-      .filter((i): i is { src: string; sizes?: string[]; mimeType?: string; theme?: string } => i !== null);
+      .filter(
+        (i): i is { src: string; sizes?: string[]; mimeType?: string; theme?: string } =>
+          i !== null,
+      );
   }
   // Single-icon legacy field.
-  const single = stringField(manifest, "icon");
+  const single = stringField(manifest, 'icon');
   if (single && isHttpUrl(single) && single.length <= 255) {
-    return [{ src: single, sizes: ["any"] }];
+    return [{ src: single, sizes: ['any'] }];
   }
   return [];
 }
 
 const ICON_SIZE_PATTERN = /^(\d+x\d+|any)$/;
 const ICON_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/svg+xml",
-  "image/webp",
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/svg+xml',
+  'image/webp',
 ]);
 
 function projectIcon(
   raw: unknown,
 ): { src: string; sizes?: string[]; mimeType?: string; theme?: string } | null {
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
-  const src = stringField(obj, "src");
+  const src = stringField(obj, 'src');
   if (!src || !isHttpUrl(src) || src.length > 255) return null;
   const out: { src: string; sizes?: string[]; mimeType?: string; theme?: string } = { src };
-  const sizes = obj["sizes"];
+  const sizes = obj.sizes;
   if (Array.isArray(sizes)) {
     const valid = sizes.filter(
-      (s): s is string => typeof s === "string" && ICON_SIZE_PATTERN.test(s),
+      (s): s is string => typeof s === 'string' && ICON_SIZE_PATTERN.test(s),
     );
     if (valid.length > 0) out.sizes = valid;
   }
-  const mimeType = stringField(obj, "mimeType");
+  const mimeType = stringField(obj, 'mimeType');
   if (mimeType && ICON_MIME_TYPES.has(mimeType)) out.mimeType = mimeType;
-  const theme = stringField(obj, "theme");
-  if (theme === "light" || theme === "dark") out.theme = theme;
+  const theme = stringField(obj, 'theme');
+  if (theme === 'light' || theme === 'dark') out.theme = theme;
   return out;
 }
 
@@ -250,21 +253,21 @@ function projectPackages(input: ComposerInput, manifest: Record<string, unknown>
   if (input.artifacts.length === 0) {
     return [
       {
-        registryType: "mpak",
+        registryType: 'mpak',
         identifier: input.pkg.name,
         version: input.version.version,
-        transport: { type: "stdio" },
+        transport: { type: 'stdio' },
         ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
       },
     ];
   }
   return input.artifacts.map((art) => {
-    const sha = art.digest.replace(/^sha256:/, "");
+    const sha = art.digest.replace(/^sha256:/, '');
     const pkg: ServerPackage = {
-      registryType: "mpak",
+      registryType: 'mpak',
       identifier: input.pkg.name,
       version: input.version.version,
-      transport: { type: "stdio" },
+      transport: { type: 'stdio' },
       ...(envVars.length > 0 ? { environmentVariables: envVars } : {}),
     };
     // Upstream `fileSha256` requires 64 hex chars. A malformed digest
@@ -283,25 +286,29 @@ function projectPackages(input: ComposerInput, manifest: Record<string, unknown>
  * manifest declares which user_config field maps to which env var);
  * falls back to the field's upper-snake-cased key.
  */
-function projectEnvironmentVariables(
-  manifest: Record<string, unknown>,
-): { name: string; description?: string; isSecret?: boolean; isRequired?: boolean; default?: string }[] {
-  const userConfig = manifest["user_config"];
-  if (!userConfig || typeof userConfig !== "object") return [];
+function projectEnvironmentVariables(manifest: Record<string, unknown>): {
+  name: string;
+  description?: string;
+  isSecret?: boolean;
+  isRequired?: boolean;
+  default?: string;
+}[] {
+  const userConfig = manifest.user_config;
+  if (!userConfig || typeof userConfig !== 'object') return [];
   const envMap = readEnvMap(manifest);
   const out: ReturnType<typeof projectEnvironmentVariables> = [];
   for (const [field, raw] of Object.entries(userConfig)) {
-    if (!raw || typeof raw !== "object") continue;
+    if (!raw || typeof raw !== 'object') continue;
     const f = raw as Record<string, unknown>;
     const envName = envMap[field] ?? field.toUpperCase();
     const entry: ReturnType<typeof projectEnvironmentVariables>[number] = { name: envName };
-    const description = stringField(f, "description");
+    const description = stringField(f, 'description');
     if (description) entry.description = description;
-    if (typeof f["sensitive"] === "boolean") entry.isSecret = f["sensitive"] as boolean;
-    if (typeof f["required"] === "boolean") entry.isRequired = f["required"] as boolean;
-    const def = f["default"];
-    if (typeof def === "string") entry.default = def;
-    else if (typeof def === "number" || typeof def === "boolean") entry.default = String(def);
+    if (typeof f.sensitive === 'boolean') entry.isSecret = f.sensitive as boolean;
+    if (typeof f.required === 'boolean') entry.isRequired = f.required as boolean;
+    const def = f.default;
+    if (typeof def === 'string') entry.default = def;
+    else if (typeof def === 'number' || typeof def === 'boolean') entry.default = String(def);
     out.push(entry);
   }
   return out;
@@ -313,15 +320,15 @@ function projectEnvironmentVariables(
  * field name on the right side so we can map field → env var name.
  */
 function readEnvMap(manifest: Record<string, unknown>): Record<string, string> {
-  const server = manifest["server"];
-  if (!server || typeof server !== "object") return {};
-  const mcpConfig = (server as Record<string, unknown>)["mcp_config"];
-  if (!mcpConfig || typeof mcpConfig !== "object") return {};
-  const env = (mcpConfig as Record<string, unknown>)["env"];
-  if (!env || typeof env !== "object") return {};
+  const server = manifest.server;
+  if (!server || typeof server !== 'object') return {};
+  const mcpConfig = (server as Record<string, unknown>).mcp_config;
+  if (!mcpConfig || typeof mcpConfig !== 'object') return {};
+  const env = (mcpConfig as Record<string, unknown>).env;
+  if (!env || typeof env !== 'object') return {};
   const out: Record<string, string> = {};
   for (const [envName, value] of Object.entries(env)) {
-    if (typeof value !== "string") continue;
+    if (typeof value !== 'string') continue;
     const m = /\$\{?user_config\.([a-zA-Z0-9_]+)\}?/.exec(value);
     if (m?.[1]) {
       out[m[1]] = envName;
@@ -347,34 +354,34 @@ function composeMeta(
   };
   // Carry author overrides under `dev.mpak/registry` (e.g. their reverse-DNS
   // `name`) verbatim alongside our enrichment.
-  const authorMpak = manifestMeta?.["dev.mpak/registry"];
-  if (authorMpak && typeof authorMpak === "object") {
+  const authorMpak = manifestMeta?.['dev.mpak/registry'];
+  if (authorMpak && typeof authorMpak === 'object') {
     Object.assign(mpakBlock, authorMpak);
-    mpakBlock["npmName"] = input.pkg.name; // mpak source-of-truth wins
+    mpakBlock.npmName = input.pkg.name; // mpak source-of-truth wins
   }
   const downloads = Number(input.pkg.totalDownloads ?? input.version.downloadCount ?? 0);
-  if (Number.isFinite(downloads)) mpakBlock["downloads"] = downloads;
+  if (Number.isFinite(downloads)) mpakBlock.downloads = downloads;
   if (input.version.publishedAt) {
-    mpakBlock["published_at"] = input.version.publishedAt.toISOString();
+    mpakBlock.published_at = input.version.publishedAt.toISOString();
   }
   if (input.version.publishMethod) {
-    mpakBlock["publishMethod"] = input.version.publishMethod;
+    mpakBlock.publishMethod = input.version.publishMethod;
   }
   if (input.version.provenance) {
-    mpakBlock["provenance"] = input.version.provenance;
+    mpakBlock.provenance = input.version.provenance;
   }
   if (input.certification) {
-    mpakBlock["certification"] = input.certification;
+    mpakBlock.certification = input.certification;
   }
   if (input.artifacts.length > 0) {
-    mpakBlock["artifacts"] = input.artifacts.map((a) => ({
+    mpakBlock.artifacts = input.artifacts.map((a) => ({
       platform: { os: a.os, arch: a.arch },
       url: a.sourceUrl,
-      sha256: a.digest.replace(/^sha256:/, ""),
+      sha256: a.digest.replace(/^sha256:/, ''),
       size: Number(a.sizeBytes),
     }));
   }
-  meta["dev.mpak/registry"] = mpakBlock;
+  meta['dev.mpak/registry'] = mpakBlock;
   return meta;
 }
 
@@ -382,7 +389,7 @@ function composeMeta(
 
 function stringField(obj: Record<string, unknown>, key: string): string | undefined {
   const v = obj[key];
-  return typeof v === "string" ? v : undefined;
+  return typeof v === 'string' ? v : undefined;
 }
 
 function truncate(s: string, max: number): string {
@@ -393,7 +400,7 @@ function truncate(s: string, max: number): string {
 function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
   }

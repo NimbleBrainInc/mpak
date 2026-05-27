@@ -1,5 +1,5 @@
-import { render, screen } from '../test/test-utils';
 import userEvent from '@testing-library/user-event';
+import { render, screen } from '../test/test-utils';
 import LostInTransit from './LostInTransit';
 
 describe('LostInTransit', () => {

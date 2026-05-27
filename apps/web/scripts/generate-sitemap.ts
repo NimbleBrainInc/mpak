@@ -65,7 +65,7 @@ async function fetchWithTimeout<T>(url: string, label: string): Promise<T | null
 async function fetchAllPackages(): Promise<Package[]> {
   const data = await fetchWithTimeout<PackageApiResponse>(
     `${API_URL}/app/packages?limit=1000`,
-    'packages'
+    'packages',
   );
   return data?.packages ?? [];
 }
@@ -73,7 +73,7 @@ async function fetchAllPackages(): Promise<Package[]> {
 async function fetchAllSkills(): Promise<Skill[]> {
   const data = await fetchWithTimeout<SkillApiResponse>(
     `${API_URL}/v1/skills/search?limit=1000`,
-    'skills'
+    'skills',
   );
   return data?.skills ?? [];
 }
@@ -119,9 +119,9 @@ function generateSitemap(packages: Package[], skills: Skill[]): string {
     <loc>${BASE_URL}${url.loc}</loc>
     <changefreq>${url.changefreq}</changefreq>
     <priority>${url.priority}</priority>${
-        'lastmod' in url ? `\n    <lastmod>${url.lastmod}</lastmod>` : ''
-      }
-  </url>`
+      'lastmod' in url ? `\n    <lastmod>${url.lastmod}</lastmod>` : ''
+    }
+  </url>`,
     )
     .join('\n');
 
@@ -133,18 +133,15 @@ ${urlEntries}
 
 async function main() {
   console.log('Fetching data from API...');
-  const [packages, skills] = await Promise.all([
-    fetchAllPackages(),
-    fetchAllSkills(),
-  ]);
+  const [packages, skills] = await Promise.all([fetchAllPackages(), fetchAllSkills()]);
   console.log(`Found ${packages.length} packages, ${skills.length} skills`);
 
   console.log('Generating sitemap...');
   const sitemap = generateSitemap(packages, skills);
 
   // Write to file
-  const fs = await import('fs');
-  const path = await import('path');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
   const outputPath = path.join(process.cwd(), 'public', 'sitemap.xml');
 
   const staticPageCount = 10;

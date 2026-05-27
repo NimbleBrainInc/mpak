@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  MpakConfigError,
   MpakError,
-  MpakNotFoundError,
   MpakIntegrityError,
   MpakNetworkError,
-  MpakConfigError,
+  MpakNotFoundError,
 } from '../src/errors.js';
 
 describe('MpakError', () => {

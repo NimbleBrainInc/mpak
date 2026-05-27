@@ -1,14 +1,14 @@
+import type { PackageDetail } from './api';
 import {
   generateBreadcrumbSchema,
-  generatePackageSchema,
-  generateFAQSchema,
-  generateItemListSchema,
-  generateHowToSchema,
-  generateOrganizationSchema,
-  generateWebSiteSchema,
   generateCLIToolSchema,
+  generateFAQSchema,
+  generateHowToSchema,
+  generateItemListSchema,
+  generateOrganizationSchema,
+  generatePackageSchema,
+  generateWebSiteSchema,
 } from './schema';
-import type { PackageDetail } from './api';
 import { SITE_URL } from './siteConfig';
 
 function makePackageDetail(overrides: Partial<PackageDetail> = {}): PackageDetail {
@@ -85,7 +85,9 @@ describe('generatePackageSchema', () => {
   });
 
   it('includes aggregate rating for packages with stars', () => {
-    const pkg = makePackageDetail({ github: { repo: 'test/repo', stars: 150, forks: 10, watchers: 5 } });
+    const pkg = makePackageDetail({
+      github: { repo: 'test/repo', stars: 150, forks: 10, watchers: 5 },
+    });
     const schema = generatePackageSchema(pkg);
     expect(schema.aggregateRating).toEqual({
       '@type': 'AggregateRating',
@@ -103,24 +105,38 @@ describe('generatePackageSchema', () => {
 
   it('calculates rating tiers correctly', () => {
     // 1000+ stars = 5
-    const pkg1000 = makePackageDetail({ github: { repo: 'a/b', stars: 1000, forks: 0, watchers: 0 } });
-    expect((generatePackageSchema(pkg1000).aggregateRating as Record<string, unknown>).ratingValue).toBe(5);
+    const pkg1000 = makePackageDetail({
+      github: { repo: 'a/b', stars: 1000, forks: 0, watchers: 0 },
+    });
+    expect(
+      (generatePackageSchema(pkg1000).aggregateRating as Record<string, unknown>).ratingValue,
+    ).toBe(5);
 
     // 100-999 stars = 4.5
-    const pkg100 = makePackageDetail({ github: { repo: 'a/b', stars: 100, forks: 0, watchers: 0 } });
-    expect((generatePackageSchema(pkg100).aggregateRating as Record<string, unknown>).ratingValue).toBe(4.5);
+    const pkg100 = makePackageDetail({
+      github: { repo: 'a/b', stars: 100, forks: 0, watchers: 0 },
+    });
+    expect(
+      (generatePackageSchema(pkg100).aggregateRating as Record<string, unknown>).ratingValue,
+    ).toBe(4.5);
 
     // 50-99 stars = 4
     const pkg50 = makePackageDetail({ github: { repo: 'a/b', stars: 50, forks: 0, watchers: 0 } });
-    expect((generatePackageSchema(pkg50).aggregateRating as Record<string, unknown>).ratingValue).toBe(4);
+    expect(
+      (generatePackageSchema(pkg50).aggregateRating as Record<string, unknown>).ratingValue,
+    ).toBe(4);
 
     // 10-49 stars = 3.5
     const pkg10 = makePackageDetail({ github: { repo: 'a/b', stars: 10, forks: 0, watchers: 0 } });
-    expect((generatePackageSchema(pkg10).aggregateRating as Record<string, unknown>).ratingValue).toBe(3.5);
+    expect(
+      (generatePackageSchema(pkg10).aggregateRating as Record<string, unknown>).ratingValue,
+    ).toBe(3.5);
 
     // <10 stars = 3
     const pkg5 = makePackageDetail({ github: { repo: 'a/b', stars: 5, forks: 0, watchers: 0 } });
-    expect((generatePackageSchema(pkg5).aggregateRating as Record<string, unknown>).ratingValue).toBe(3);
+    expect(
+      (generatePackageSchema(pkg5).aggregateRating as Record<string, unknown>).ratingValue,
+    ).toBe(3);
   });
 
   it('maps operating systems from version artifacts', () => {

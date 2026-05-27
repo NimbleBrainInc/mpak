@@ -5,12 +5,12 @@
  * Public endpoints for viewing scan status and security badges
  */
 
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
-import { timingSafeEqual } from 'crypto';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { ForbiddenError, handleError, NotFoundError, UnauthorizedError } from '../errors/index.js';
 import { toJsonSchema } from '../lib/zod-schema.js';
-import { ForbiddenError, NotFoundError, UnauthorizedError, handleError } from '../errors/index.js';
 import { triggerSecurityScan } from '../services/scanner.js';
 
 // Callback request schema
@@ -29,22 +29,31 @@ const SecuritySummarySchema = z.object({
   risk_score: z.string().nullable(),
   status: z.string(),
   scanned_at: z.string().nullable(),
-  summary: z.object({
-    critical_findings: z.number(),
-    high_findings: z.number(),
-    medium_findings: z.number(),
-    low_findings: z.number(),
-    total_findings: z.number(),
-  }).nullable(),
-  scans: z.record(z.string(), z.object({
-    status: z.string(),
-    finding_count: z.number(),
-  })).nullable(),
+  summary: z
+    .object({
+      critical_findings: z.number(),
+      high_findings: z.number(),
+      medium_findings: z.number(),
+      low_findings: z.number(),
+      total_findings: z.number(),
+    })
+    .nullable(),
+  scans: z
+    .record(
+      z.string(),
+      z.object({
+        status: z.string(),
+        finding_count: z.number(),
+      }),
+    )
+    .nullable(),
 });
 
 // Manual scan trigger request schema
 const ScanTriggerSchema = z.object({
-  packageName: z.string().regex(/^@[a-z0-9-]+\/[a-z0-9-]+$/, 'Must be scoped package name like @scope/name'),
+  packageName: z
+    .string()
+    .regex(/^@[a-z0-9-]+\/[a-z0-9-]+$/, 'Must be scoped package name like @scope/name'),
   version: z.string().optional(),
 });
 
@@ -76,15 +85,17 @@ function extractCertificationData(report: Record<string, unknown> | null): Certi
   }
 
   // Extract compliance data from mpak-scanner report format
-  const compliance = report['compliance'] as {
-    level?: number;
-    controls_passed?: number;
-    controls_failed?: number;
-    controls_total?: number;
-  } | undefined;
+  const compliance = report.compliance as
+    | {
+        level?: number;
+        controls_passed?: number;
+        controls_failed?: number;
+        controls_total?: number;
+      }
+    | undefined;
 
   // Extract findings for summary
-  const findings = report['findings'] as Array<{ severity?: string }> | undefined;
+  const findings = report.findings as Array<{ severity?: string }> | undefined;
   let critical = 0;
   let high = 0;
   let medium = 0;
@@ -118,7 +129,6 @@ function extractCertificationData(report: Record<string, unknown> | null): Certi
   };
 }
 
-
 /**
  * Extract finding counts from scan report
  */
@@ -131,7 +141,7 @@ function extractFindingCounts(report: Record<string, unknown> | null): {
   }
 
   // First try mpak-scanner format (findings array at top level)
-  const findings = report['findings'] as Array<{ severity?: string }> | undefined;
+  const findings = report.findings as Array<{ severity?: string }> | undefined;
   if (Array.isArray(findings)) {
     let critical = 0;
     let high = 0;
@@ -156,7 +166,9 @@ function extractFindingCounts(report: Record<string, unknown> | null): {
     }
 
     // Extract domain-level scan status from mpak-scanner format
-    const domains = report['domains'] as Record<string, { controls?: Record<string, { status?: string; findings?: unknown[] }> }> | undefined;
+    const domains = report.domains as
+      | Record<string, { controls?: Record<string, { status?: string; findings?: unknown[] }> }>
+      | undefined;
     const scans: Record<string, { status: string; finding_count: number }> = {};
 
     if (domains) {
@@ -274,7 +286,8 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           throw new UnauthorizedError('Invalid callback secret');
         }
 
-        const { scan_id, status, risk_score, report, report_s3_uri, pdf_s3_uri, error } = request.body;
+        const { scan_id, status, risk_score, report, report_s3_uri, pdf_s3_uri, error } =
+          request.body;
 
         // Find the scan record
         const scan = await fastify.prisma.securityScan.findUnique({
@@ -288,7 +301,10 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Reject callbacks for already-completed scans (idempotency guard)
         if (scan.status === 'completed' || scan.status === 'failed') {
-          fastify.log.warn({ scanId: scan_id, existingStatus: scan.status }, 'Received callback for already-finalized scan, ignoring');
+          fastify.log.warn(
+            { scanId: scan_id, existingStatus: scan.status },
+            'Received callback for already-finalized scan, ignoring',
+          );
           return { success: true };
         }
 
@@ -315,13 +331,16 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
 
-        fastify.log.info({
-          scanId: scan_id,
-          status,
-          riskScore: risk_score,
-          certificationLevel: certData.certificationLevel,
-          controlsPassed: certData.controlsPassed,
-        }, `Scan callback received: ${status}`);
+        fastify.log.info(
+          {
+            scanId: scan_id,
+            status,
+            riskScore: risk_score,
+            certificationLevel: certData.certificationLevel,
+            controlsPassed: certData.controlsPassed,
+          },
+          `Scan callback received: ${status}`,
+        );
 
         return { success: true };
       } catch (err) {
@@ -342,11 +361,13 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
       description: 'Manually trigger a security scan (admin only)',
       body: toJsonSchema(ScanTriggerSchema),
       response: {
-        200: toJsonSchema(z.object({
-          success: z.boolean(),
-          scanId: z.string().optional(),
-          message: z.string(),
-        })),
+        200: toJsonSchema(
+          z.object({
+            success: z.boolean(),
+            scanId: z.string().optional(),
+            message: z.string(),
+          }),
+        ),
       },
     },
     handler: async (request, reply) => {
@@ -427,12 +448,15 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           orderBy: { startedAt: 'desc' },
         });
 
-        fastify.log.info({
-          packageName,
-          version: targetVersion,
-          scanId: newScan?.scanId,
-          triggeredBy: request.user?.email,
-        }, 'Manual scan triggered');
+        fastify.log.info(
+          {
+            packageName,
+            version: targetVersion,
+            scanId: newScan?.scanId,
+            triggeredBy: request.user?.email,
+          },
+          'Manual scan triggered',
+        );
 
         return {
           success: true,
@@ -462,10 +486,12 @@ export const securityRoutes: FastifyPluginAsync = async (fastify) => {
     schema: {
       tags: ['bundles', 'security'],
       description: 'Get security scan status for a bundle',
-      params: toJsonSchema(z.object({
-        scope: z.string(),
-        package: z.string(),
-      })),
+      params: toJsonSchema(
+        z.object({
+          scope: z.string(),
+          package: z.string(),
+        }),
+      ),
       response: {
         200: toJsonSchema(SecuritySummarySchema),
       },
@@ -511,7 +537,9 @@ export const securityRoutes: FastifyPluginAsync = async (fastify) => {
           };
         }
 
-        const { summary, scans } = extractFindingCounts(scan.report as Record<string, unknown> | null);
+        const { summary, scans } = extractFindingCounts(
+          scan.report as Record<string, unknown> | null,
+        );
 
         return {
           risk_score: scan.riskScore,
@@ -525,5 +553,4 @@ export const securityRoutes: FastifyPluginAsync = async (fastify) => {
       }
     },
   });
-
 };

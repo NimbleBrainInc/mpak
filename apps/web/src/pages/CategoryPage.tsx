@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, Package } from '../lib/api';
-import { useSEO } from '../hooks/useSEO';
-import RuntimeIcon from '../components/RuntimeIcon';
 import Breadcrumbs from '../components/Breadcrumbs';
+import RuntimeIcon from '../components/RuntimeIcon';
+import { useSEO } from '../hooks/useSEO';
+import { api, type Package } from '../lib/api';
 
 // Category metadata for SEO
 const categoryMeta: Record<string, { title: string; description: string; keywords: string[] }> = {
@@ -42,13 +42,14 @@ export default function CategoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const meta = category && categoryMeta[category]
-    ? categoryMeta[category]
-    : {
-        title: `${category} MCP Servers`,
-        description: `Browse ${category} MCP servers on mpak. Find and install packages for Claude and AI assistants.`,
-        keywords: [`${category} mcp`, 'mcp server', 'model context protocol'],
-      };
+  const meta =
+    category && categoryMeta[category]
+      ? categoryMeta[category]
+      : {
+          title: `${category} MCP Servers`,
+          description: `Browse ${category} MCP servers on mpak. Find and install packages for Claude and AI assistants.`,
+          keywords: [`${category} mcp`, 'mcp server', 'model context protocol'],
+        };
 
   useSEO({
     title: meta.title,
@@ -57,11 +58,7 @@ export default function CategoryPage() {
     keywords: meta.keywords,
   });
 
-  useEffect(() => {
-    loadPackages();
-  }, [category]);
-
-  async function loadPackages() {
+  const loadPackages = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -70,9 +67,7 @@ export default function CategoryPage() {
         sort: 'downloads',
       });
       // Filter packages by category
-      const filtered = result.packages.filter(
-        (pkg) => getCategory(pkg.server_type) === category
-      );
+      const filtered = result.packages.filter((pkg) => getCategory(pkg.server_type) === category);
       setPackages(filtered);
     } catch (err) {
       console.error('Failed to load packages:', err);
@@ -80,7 +75,11 @@ export default function CategoryPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [category]);
+
+  useEffect(() => {
+    loadPackages();
+  }, [loadPackages]);
 
   if (loading) {
     return (
@@ -189,11 +188,17 @@ export default function CategoryPage() {
                     <RuntimeIcon runtime={pkg.server_type} className="w-4 h-4" />
                     {pkg.server_type}
                   </span>
-                  <span className="text-xs text-mpak-gray-500 font-medium">v{pkg.latest_version}</span>
+                  <span className="text-xs text-mpak-gray-500 font-medium">
+                    v{pkg.latest_version}
+                  </span>
                 </div>
                 {pkg.github?.stars != null && (
                   <span className="text-mpak-gray-600 flex items-center gap-1 text-xs font-medium">
-                    <svg className="w-4 h-4 text-accent-gold-400 fill-current" viewBox="0 0 24 24">
+                    <svg
+                      aria-hidden="true"
+                      className="w-4 h-4 text-accent-gold-400 fill-current"
+                      viewBox="0 0 24 24"
+                    >
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
                     {pkg.github.stars.toLocaleString()}
@@ -206,6 +211,7 @@ export default function CategoryPage() {
       ) : (
         <div className="text-center py-16 workshop-card">
           <svg
+            aria-hidden="true"
             className="w-16 h-16 text-mpak-gray-400 mx-auto mb-4"
             fill="none"
             stroke="currentColor"
@@ -220,7 +226,10 @@ export default function CategoryPage() {
           </svg>
           <h3 className="text-lg font-semibold text-mpak-gray-900 mb-2">No packages found</h3>
           <p className="text-mpak-gray-600 mb-4">No {category} packages are available yet.</p>
-          <Link to="/bundles" className="text-accent-gold-400 hover:text-accent-gold-300 font-medium">
+          <Link
+            to="/bundles"
+            className="text-accent-gold-400 hover:text-accent-gold-300 font-medium"
+          >
             Browse all packages
           </Link>
         </div>

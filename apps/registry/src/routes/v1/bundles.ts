@@ -1,43 +1,43 @@
-import type { Artifact } from '@prisma/client';
-import type { FastifyPluginAsync } from 'fastify';
-import { createHash, randomUUID } from 'crypto';
-import { createWriteStream, createReadStream, promises as fs } from 'fs';
-import { tmpdir } from 'os';
-import path from 'path';
-import { config } from '../../config.js';
-import { runInTransaction } from '../../db/index.js';
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
-  BadRequestError,
-  NotFoundError,
-  UnauthorizedError,
-  handleError,
-} from '../../errors/index.js';
-import { toJsonSchema } from '../../lib/zod-schema.js';
-import { verifyGitHubOIDC, buildProvenance, type ProvenanceRecord } from '../../lib/oidc.js';
-import {
-  BundleSearchResponseSchema,
-  BundleDetailSchema,
-  VersionsResponseSchema,
-  VersionDetailSchema,
-  DownloadInfoSchema,
-  MCPBIndexSchema,
   AnnounceRequestSchema,
   AnnounceResponseSchema,
-  BundleSearchParamsSchema,
+  BundleDetailSchema,
+  type BundleDownloadParams,
   BundleDownloadParamsSchema,
   type BundleSearchParams,
-  type BundleDownloadParams,
+  BundleSearchParamsSchema,
   type BundleSearchResponse,
+  BundleSearchResponseSchema,
+  DownloadInfoSchema,
+  MCPBIndexSchema,
   type PackageTool,
+  VersionDetailSchema,
+  VersionsResponseSchema,
 } from '@nimblebrain/mpak-schemas';
+import type { Artifact } from '@prisma/client';
+import type { FastifyPluginAsync } from 'fastify';
+import { config } from '../../config.js';
+import { runInTransaction } from '../../db/index.js';
 import type { PackageSearchFilters } from '../../db/types.js';
 import {
-  BundleVersionPathParamsSchema,
+  BadRequestError,
+  handleError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../../errors/index.js';
+import { buildProvenance, type ProvenanceRecord, verifyGitHubOIDC } from '../../lib/oidc.js';
+import { toJsonSchema } from '../../lib/zod-schema.js';
+import {
   type BundleVersionPathParams,
+  BundleVersionPathParamsSchema,
 } from '../../schemas/bundles.js';
+import { triggerSecurityScan } from '../../services/scanner.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
-import { triggerSecurityScan } from '../../services/scanner.js';
 
 // GitHub release asset type
 interface GitHubReleaseAsset {
@@ -72,11 +72,7 @@ function isValidScopedPackageName(name: string): boolean {
  * - Only one of os/arch → throws BadRequestError
  * - Both os and arch → return exact match, or null
  */
-function resolveArtifact(
-  artifacts: Artifact[],
-  os?: string,
-  arch?: string,
-): Artifact | null {
+function resolveArtifact(artifacts: Artifact[], os?: string, arch?: string): Artifact | null {
   if ((os && !arch) || (!os && arch)) {
     throw new BadRequestError('Both os and arch are required when specifying platform');
   }
@@ -196,28 +192,31 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Search packages
       const startTime = Date.now();
-      const { packages, total } = await packageRepo.search(
-        filters,
-        {
-          skip: offset,
-          take: limit,
-          orderBy,
-        }
-      );
+      const { packages, total } = await packageRepo.search(filters, {
+        skip: offset,
+        take: limit,
+        orderBy,
+      });
 
-      fastify.log.info({
-        op: 'search',
-        query: q ?? null,
-        type: type ?? null,
-        sort,
-        results: total,
-        ms: Date.now() - startTime,
-      }, `search: q="${q ?? '*'}" returned ${total} results`);
+      fastify.log.info(
+        {
+          op: 'search',
+          query: q ?? null,
+          type: type ?? null,
+          sort,
+          results: total,
+          ms: Date.now() - startTime,
+        },
+        `search: q="${q ?? '*'}" returned ${total} results`,
+      );
 
       // Get package versions with tools info and certification
       const bundles = await Promise.all(
         packages.map(async (pkg) => {
-          const latestVersion = await packageRepo.findVersionWithLatestScan(pkg.id, pkg.latestVersion);
+          const latestVersion = await packageRepo.findVersionWithLatestScan(
+            pkg.id,
+            pkg.latestVersion,
+          );
           const manifest = (latestVersion?.manifest ?? {}) as Record<string, unknown>;
           const scan = latestVersion?.securityScans[0];
 
@@ -229,14 +228,14 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             latest_version: pkg.latestVersion,
             icon: pkg.iconUrl,
             server_type: pkg.serverType,
-            tools: (manifest['tools'] as PackageTool[]) ?? [],
+            tools: (manifest.tools as PackageTool[]) ?? [],
             downloads: Number(pkg.totalDownloads),
-            published_at: latestVersion?.publishedAt ?? pkg.createdAt as Date,
+            published_at: latestVersion?.publishedAt ?? (pkg.createdAt as Date),
             verified: Boolean(pkg.verified),
             provenance: latestVersion ? getProvenanceSummary(latestVersion) : null,
             certification_level: scan?.certificationLevel ?? null,
           };
-        })
+        }),
       );
 
       const response: BundleSearchResponse = {
@@ -288,15 +287,23 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const scan = latestVersion?.securityScans[0];
 
       // Build certification object from scan
-      const CERT_LEVEL_LABELS: Record<number, string> = { 1: 'L1 Basic', 2: 'L2 Verified', 3: 'L3 Hardened', 4: 'L4 Certified' };
+      const CERT_LEVEL_LABELS: Record<number, string> = {
+        1: 'L1 Basic',
+        2: 'L2 Verified',
+        3: 'L3 Hardened',
+        4: 'L4 Certified',
+      };
       const certLevel = scan?.certificationLevel ?? null;
-      const certification = certLevel != null ? {
-        level: certLevel,
-        level_name: CERT_LEVEL_LABELS[certLevel] ?? null,
-        controls_passed: scan?.controlsPassed ?? null,
-        controls_failed: scan?.controlsFailed ?? null,
-        controls_total: scan?.controlsTotal ?? null,
-      } : null;
+      const certification =
+        certLevel != null
+          ? {
+              level: certLevel,
+              level_name: CERT_LEVEL_LABELS[certLevel] ?? null,
+              controls_passed: scan?.controlsPassed ?? null,
+              controls_failed: scan?.controlsFailed ?? null,
+              controls_total: scan?.controlsTotal ?? null,
+            }
+          : null;
 
       return {
         name: pkg.name,
@@ -306,7 +313,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         latest_version: pkg.latestVersion,
         icon: pkg.iconUrl,
         server_type: pkg.serverType,
-        tools: (manifest['tools'] as unknown[]) ?? [],
+        tools: (manifest.tools as unknown[]) ?? [],
         downloads: Number(pkg.totalDownloads),
         published_at: pkg.createdAt,
         verified: pkg.verified,
@@ -328,7 +335,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/@:scope/:package/badge.svg', {
     schema: {
       tags: ['bundles'],
-      description: 'Get an SVG badge for a bundle. Shows version for uncertified packages, or certification level for certified ones.',
+      description:
+        'Get an SVG badge for a bundle. Shows version for uncertified packages, or certification level for certified ones.',
       params: {
         type: 'object',
         properties: {
@@ -429,7 +437,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             platform: { os: artifact.os, arch: artifact.arch },
             urls: [url, artifact.sourceUrl].filter(Boolean),
           };
-        })
+        }),
       );
 
       // Build conformant MCPB index.json
@@ -442,9 +450,16 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         bundles: bundleArtifacts,
         annotations: {
           ...(latestVersion.releaseUrl && { 'dev.mpak.release.url': latestVersion.releaseUrl }),
-          ...(latestVersion.provenanceRepository && { 'dev.mpak.provenance.repository': latestVersion.provenanceRepository }),
-          ...(latestVersion.provenanceSha && { 'dev.mpak.provenance.sha': latestVersion.provenanceSha }),
-          ...(latestVersion.publishMethod && { 'dev.mpak.provenance.provider': latestVersion.publishMethod === 'oidc' ? 'github_oidc' : latestVersion.publishMethod }),
+          ...(latestVersion.provenanceRepository && {
+            'dev.mpak.provenance.repository': latestVersion.provenanceRepository,
+          }),
+          ...(latestVersion.provenanceSha && {
+            'dev.mpak.provenance.sha': latestVersion.provenanceSha,
+          }),
+          ...(latestVersion.publishMethod && {
+            'dev.mpak.provenance.provider':
+              latestVersion.publishMethod === 'oidc' ? 'github_oidc' : latestVersion.publishMethod,
+          }),
         },
       };
 
@@ -518,7 +533,11 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (request) => {
-      const { scope, package: packageName, version } = request.params as {
+      const {
+        scope,
+        package: packageName,
+        version,
+      } = request.params as {
         scope: string;
         package: string;
         version: string;
@@ -549,7 +568,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             download_url: downloadUrl,
             source_url: a.sourceUrl || undefined,
           };
-        })
+        }),
       );
 
       return {
@@ -559,10 +578,12 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         downloads: Number(packageVersion.downloadCount),
         artifacts,
         manifest: packageVersion.manifest,
-        release: packageVersion.releaseUrl ? {
-          tag: packageVersion.releaseTag,
-          url: packageVersion.releaseUrl,
-        } : undefined,
+        release: packageVersion.releaseUrl
+          ? {
+              tag: packageVersion.releaseTag,
+              url: packageVersion.releaseUrl,
+            }
+          : undefined,
         publish_method: packageVersion.publishMethod,
         provenance: getProvenanceFull(packageVersion),
       };
@@ -613,21 +634,22 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Log download
       const platform = artifact.os === 'any' ? 'universal' : `${artifact.os}-${artifact.arch}`;
-      fastify.log.info({
-        op: 'download',
-        pkg: name,
-        version,
-        platform,
-      }, `download: ${name}@${version} (${platform})`);
+      fastify.log.info(
+        {
+          op: 'download',
+          pkg: name,
+          version,
+          platform,
+        },
+        `download: ${name}@${version} (${platform})`,
+      );
 
       // Increment download counts atomically in a single transaction
       void runInTransaction(async (tx) => {
         await packageRepo.incrementArtifactDownloads(artifact.id, tx);
         await packageRepo.incrementVersionDownloads(pkg.id, version, tx);
         await packageRepo.incrementDownloads(pkg.id, tx);
-      }).catch((err: unknown) =>
-        fastify.log.error({ err }, 'Failed to update download counts')
-      );
+      }).catch((err: unknown) => fastify.log.error({ err }, 'Failed to update download counts'));
 
       // Check if client wants JSON response (CLI/API) or redirect (browser)
       const acceptHeader = request.headers.accept ?? '';
@@ -639,7 +661,9 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       if (wantsJson) {
         // CLI/API mode: Return JSON with download URL and metadata
         const expiresAt = new Date();
-        expiresAt.setSeconds(expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900));
+        expiresAt.setSeconds(
+          expiresAt.getSeconds() + (config.storage.cloudfront.urlExpirationSeconds || 900),
+        );
 
         return {
           url: downloadUrl,
@@ -674,7 +698,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/announce', {
     schema: {
       tags: ['bundles'],
-      description: 'Announce a single artifact for a bundle version from a GitHub release (OIDC only). Idempotent - can be called multiple times for different artifacts of the same version.',
+      description:
+        'Announce a single artifact for a bundle version from a GitHub release (OIDC only). Idempotent - can be called multiple times for different artifacts of the same version.',
       body: toJsonSchema(AnnounceRequestSchema),
       response: {
         200: toJsonSchema(AnnounceResponseSchema),
@@ -685,19 +710,24 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         // Extract OIDC token from Authorization header
         const authHeader = request.headers.authorization;
         if (!authHeader?.startsWith('Bearer ')) {
-          throw new UnauthorizedError('Missing OIDC token. This endpoint requires a GitHub Actions OIDC token.');
+          throw new UnauthorizedError(
+            'Missing OIDC token. This endpoint requires a GitHub Actions OIDC token.',
+          );
         }
 
         const token = authHeader.substring(7);
         const announceStart = Date.now();
 
         // Verify the OIDC token
-        let claims;
+        let claims: Awaited<ReturnType<typeof verifyGitHubOIDC>>;
         try {
           claims = await verifyGitHubOIDC(token);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Token verification failed';
-          fastify.log.warn({ op: 'announce', error: message }, `announce: OIDC verification failed`);
+          fastify.log.warn(
+            { op: 'announce', error: message },
+            `announce: OIDC verification failed`,
+          );
           throw new UnauthorizedError(`Invalid OIDC token: ${message}`);
         }
 
@@ -732,26 +762,26 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         const VALID_ARCH = ['x64', 'arm64', 'any'];
         if (!VALID_OS.includes(artifactInfo.os)) {
           throw new BadRequestError(
-            `Invalid artifact os: "${artifactInfo.os}". Must be one of: ${VALID_OS.join(', ')}`
+            `Invalid artifact os: "${artifactInfo.os}". Must be one of: ${VALID_OS.join(', ')}`,
           );
         }
         if (!VALID_ARCH.includes(artifactInfo.arch)) {
           throw new BadRequestError(
-            `Invalid artifact arch: "${artifactInfo.arch}". Must be one of: ${VALID_ARCH.join(', ')}`
+            `Invalid artifact arch: "${artifactInfo.arch}". Must be one of: ${VALID_ARCH.join(', ')}`,
           );
         }
         // Validate artifact filename (path traversal, extension, length)
         const filenameError = validateArtifactFilename(artifactInfo.filename);
         if (filenameError) {
           throw new BadRequestError(
-            `Invalid artifact filename: "${artifactInfo.filename}". ${filenameError}`
+            `Invalid artifact filename: "${artifactInfo.filename}". ${filenameError}`,
           );
         }
 
         // Validate package name
         if (!isValidScopedPackageName(name)) {
           throw new BadRequestError(
-            `Invalid package name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`
+            `Invalid package name: "${rawName}". Must be scoped (@scope/name) with alphanumeric characters and hyphens.`,
           );
         }
 
@@ -765,35 +795,43 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         const scopeLower = parsed.scope.toLowerCase();
 
         if (scopeLower !== repoOwnerLower) {
-          fastify.log.warn({
+          fastify.log.warn(
+            {
+              op: 'announce',
+              pkg: name,
+              version,
+              repo: claims.repository,
+              error: 'scope_mismatch',
+            },
+            `announce: scope mismatch @${parsed.scope} != ${claims.repository_owner}`,
+          );
+          throw new UnauthorizedError(
+            `Scope mismatch: Package scope "@${parsed.scope}" does not match repository owner "${claims.repository_owner}". ` +
+              `OIDC publishing requires the package scope to match the GitHub organization or user.`,
+          );
+        }
+
+        fastify.log.info(
+          {
             op: 'announce',
             pkg: name,
             version,
             repo: claims.repository,
-            error: 'scope_mismatch',
-          }, `announce: scope mismatch @${parsed.scope} != ${claims.repository_owner}`);
-          throw new UnauthorizedError(
-            `Scope mismatch: Package scope "@${parsed.scope}" does not match repository owner "${claims.repository_owner}". ` +
-            `OIDC publishing requires the package scope to match the GitHub organization or user.`
-          );
-        }
-
-        fastify.log.info({
-          op: 'announce',
-          pkg: name,
-          version,
-          repo: claims.repository,
-          tag: release_tag,
-          prerelease,
-          artifact: artifactInfo.filename,
-          platform: `${artifactInfo.os}-${artifactInfo.arch}`,
-        }, `announce: starting ${name}@${version} artifact ${artifactInfo.filename}`);
+            tag: release_tag,
+            prerelease,
+            artifact: artifactInfo.filename,
+            platform: `${artifactInfo.os}-${artifactInfo.arch}`,
+          },
+          `announce: starting ${name}@${version} artifact ${artifactInfo.filename}`,
+        );
 
         // Extract server_type from manifest
-        const serverObj = manifest['server'] as Record<string, unknown> | undefined;
-        const serverType = (serverObj?.['type'] as string) ?? (manifest['server_type'] as string);
+        const serverObj = manifest.server as Record<string, unknown> | undefined;
+        const serverType = (serverObj?.type as string) ?? (manifest.server_type as string);
         if (!serverType) {
-          throw new BadRequestError('Manifest must contain server type (server.type or server_type)');
+          throw new BadRequestError(
+            'Manifest must contain server type (server.type or server_type)',
+          );
         }
 
         // Build provenance record
@@ -805,17 +843,19 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
         const releaseResponse = await fetch(releaseApiUrl, {
           headers: {
-            'Accept': 'application/vnd.github+json',
+            Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
             'User-Agent': 'mpak-registry/1.0',
           },
         });
 
         if (!releaseResponse.ok) {
-          throw new BadRequestError(`Failed to fetch release ${release_tag}: ${releaseResponse.statusText}`);
+          throw new BadRequestError(
+            `Failed to fetch release ${release_tag}: ${releaseResponse.statusText}`,
+          );
         }
 
-        const release = await releaseResponse.json() as {
+        const release = (await releaseResponse.json()) as {
           tag_name: string;
           html_url: string;
           assets: GitHubReleaseAsset[];
@@ -823,27 +863,36 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
         // Check for server.json in the release assets (for MCP Registry discovery)
         let serverJson: Record<string, unknown> | null = null;
-        const serverJsonAsset = release.assets.find((a: GitHubReleaseAsset) => a.name === 'server.json');
+        const serverJsonAsset = release.assets.find(
+          (a: GitHubReleaseAsset) => a.name === 'server.json',
+        );
         if (serverJsonAsset) {
           try {
             fastify.log.info(`Fetching server.json from release ${release_tag}`);
             const sjResponse = await fetch(serverJsonAsset.browser_download_url);
             if (sjResponse.ok) {
-              const sjData = await sjResponse.json() as Record<string, unknown>;
+              const sjData = (await sjResponse.json()) as Record<string, unknown>;
               // Strip packages[] before storing (the registry populates it dynamically at serve time)
-              delete sjData['packages'];
+              delete sjData.packages;
               serverJson = sjData;
               fastify.log.info(`Loaded server.json for MCP Registry discovery`);
             }
           } catch (sjError) {
-            fastify.log.warn({ err: sjError }, 'Failed to fetch server.json from release, continuing without it');
+            fastify.log.warn(
+              { err: sjError },
+              'Failed to fetch server.json from release, continuing without it',
+            );
           }
         }
 
         // Find the specific artifact by filename
-        const asset = release.assets.find((a: GitHubReleaseAsset) => a.name === artifactInfo.filename);
+        const asset = release.assets.find(
+          (a: GitHubReleaseAsset) => a.name === artifactInfo.filename,
+        );
         if (!asset) {
-          throw new BadRequestError(`Artifact "${artifactInfo.filename}" not found in release ${release_tag}`);
+          throw new BadRequestError(
+            `Artifact "${artifactInfo.filename}" not found in release ${release_tag}`,
+          );
         }
 
         // Download artifact to temp file while computing hash (memory-efficient streaming)
@@ -856,7 +905,9 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           fastify.log.info(`Downloading artifact: ${asset.name}`);
           const assetResponse = await fetch(asset.browser_download_url);
           if (!assetResponse.ok || !assetResponse.body) {
-            throw new BadRequestError(`Failed to download ${asset.name}: ${assetResponse.statusText}`);
+            throw new BadRequestError(
+              `Failed to download ${asset.name}: ${assetResponse.statusText}`,
+            );
           }
 
           // Stream to temp file while computing hash
@@ -887,7 +938,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           // Verify size
           if (bytesWritten !== artifactInfo.size) {
             throw new BadRequestError(
-              `Size mismatch for ${asset.name}: declared ${artifactInfo.size} bytes, got ${bytesWritten} bytes`
+              `Size mismatch for ${asset.name}: declared ${artifactInfo.size} bytes, got ${bytesWritten} bytes`,
             );
           }
 
@@ -895,7 +946,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           computedSha256 = hash.digest('hex');
           if (computedSha256 !== artifactInfo.sha256) {
             throw new BadRequestError(
-              `SHA256 mismatch for ${asset.name}: declared ${artifactInfo.sha256}, computed ${computedSha256}`
+              `SHA256 mismatch for ${asset.name}: declared ${artifactInfo.sha256}, computed ${computedSha256}`,
             );
           }
 
@@ -908,11 +959,13 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             uploadStream,
             computedSha256,
             bytesWritten,
-            platformStr || undefined
+            platformStr || undefined,
           );
           storagePath = result.path;
 
-          fastify.log.info(`Stored ${asset.name} -> ${storagePath} (${artifactInfo.os}-${artifactInfo.arch})`);
+          fastify.log.info(
+            `Stored ${asset.name} -> ${storagePath} (${artifactInfo.os}-${artifactInfo.arch})`,
+          );
         } finally {
           // Always clean up temp file
           await fs.unlink(tempPath).catch(() => {});
@@ -928,21 +981,28 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         try {
           const txResult = await runInTransaction(async (tx) => {
             // Find or create package (handles race conditions atomically)
-            const { package: existingPackage, created: packageCreated } = await packageRepo.upsertPackage({
-              name,
-              displayName: (manifest['display_name'] as string) ?? undefined,
-              description: (manifest['description'] as string) ?? undefined,
-              authorName: (manifest['author'] as Record<string, unknown>)?.['name'] as string ?? undefined,
-              authorEmail: (manifest['author'] as Record<string, unknown>)?.['email'] as string ?? undefined,
-              authorUrl: (manifest['author'] as Record<string, unknown>)?.['url'] as string ?? undefined,
-              homepage: (manifest['homepage'] as string) ?? undefined,
-              license: (manifest['license'] as string) ?? undefined,
-              iconUrl: (manifest['icon'] as string) ?? undefined,
-              serverType,
-              verified: false,
-              latestVersion: version,
-              githubRepo: claims.repository,
-            }, tx);
+            const { package: existingPackage, created: packageCreated } =
+              await packageRepo.upsertPackage(
+                {
+                  name,
+                  displayName: (manifest.display_name as string) ?? undefined,
+                  description: (manifest.description as string) ?? undefined,
+                  authorName:
+                    ((manifest.author as Record<string, unknown>)?.name as string) ?? undefined,
+                  authorEmail:
+                    ((manifest.author as Record<string, unknown>)?.email as string) ?? undefined,
+                  authorUrl:
+                    ((manifest.author as Record<string, unknown>)?.url as string) ?? undefined,
+                  homepage: (manifest.homepage as string) ?? undefined,
+                  license: (manifest.license as string) ?? undefined,
+                  iconUrl: (manifest.icon as string) ?? undefined,
+                  serverType,
+                  verified: false,
+                  latestVersion: version,
+                  githubRepo: claims.repository,
+                },
+                tx,
+              );
 
             const packageId = existingPackage.id;
             let versionCreated = packageCreated; // New package means new version
@@ -951,7 +1011,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             let readme: string | null = null;
             const existingVersion = await packageRepo.findVersion(packageId, version, tx);
 
-            if (!existingVersion || !existingVersion.readme) {
+            if (!existingVersion?.readme) {
               // Fetch README.md from the repository at the release tag
               try {
                 const readmeUrl = `https://api.github.com/repos/${claims.repository}/contents/README.md?ref=${release_tag}`;
@@ -959,41 +1019,51 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
 
                 const readmeResponse = await fetch(readmeUrl, {
                   headers: {
-                    'Accept': 'application/vnd.github+json',
+                    Accept: 'application/vnd.github+json',
                     'X-GitHub-Api-Version': '2022-11-28',
                     'User-Agent': 'mpak-registry/1.0',
                   },
                 });
 
                 if (readmeResponse.ok) {
-                  const readmeData = await readmeResponse.json() as { content?: string; encoding?: string };
+                  const readmeData = (await readmeResponse.json()) as {
+                    content?: string;
+                    encoding?: string;
+                  };
                   if (readmeData.content && readmeData.encoding === 'base64') {
                     readme = Buffer.from(readmeData.content, 'base64').toString('utf-8');
                     fastify.log.info(`Fetched README.md (${readme.length} chars)`);
                   }
                 }
               } catch (readmeError) {
-                fastify.log.warn({ err: readmeError }, 'Failed to fetch README.md, continuing without it');
+                fastify.log.warn(
+                  { err: readmeError },
+                  'Failed to fetch README.md, continuing without it',
+                );
               }
             }
 
             // Upsert version
-            const { version: packageVersion, created } = await packageRepo.upsertVersion(packageId, {
+            const { version: packageVersion, created } = await packageRepo.upsertVersion(
               packageId,
-              version,
-              manifest,
-              prerelease,
-              publishedBy: null,
-              publishedByEmail: null,
-              releaseTag: release_tag,
-              releaseUrl: release.html_url,
-              readme: readme ?? undefined,
-              publishMethod: 'oidc',
-              provenanceRepository: provenance.repository,
-              provenanceSha: provenance.sha,
-              provenance,
-              serverJson: serverJson ?? undefined,
-            }, tx);
+              {
+                packageId,
+                version,
+                manifest,
+                prerelease,
+                publishedBy: null,
+                publishedByEmail: null,
+                releaseTag: release_tag,
+                releaseUrl: release.html_url,
+                readme: readme ?? undefined,
+                publishMethod: 'oidc',
+                provenanceRepository: provenance.repository,
+                provenanceSha: provenance.sha,
+                provenance,
+                serverJson: serverJson ?? undefined,
+              },
+              tx,
+            );
 
             versionCreated = created;
 
@@ -1003,7 +1073,11 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
                 await packageRepo.updateLatestVersion(packageId, version, tx);
               } else {
                 // Check if current latest is a prerelease - if so, update to newer prerelease
-                const currentLatest = await packageRepo.findVersion(packageId, existingPackage.latestVersion, tx);
+                const currentLatest = await packageRepo.findVersion(
+                  packageId,
+                  existingPackage.latestVersion,
+                  tx,
+                );
                 if (currentLatest?.prerelease) {
                   await packageRepo.updateLatestVersion(packageId, version, tx);
                 }
@@ -1011,15 +1085,18 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             }
 
             // Upsert artifact
-            const artifactResult = await packageRepo.upsertArtifact({
-              versionId: packageVersion.id,
-              os: artifactInfo.os,
-              arch: artifactInfo.arch,
-              digest: `sha256:${computedSha256}`,
-              sizeBytes: BigInt(artifactInfo.size),
-              storagePath,
-              sourceUrl: asset.browser_download_url,
-            }, tx);
+            const artifactResult = await packageRepo.upsertArtifact(
+              {
+                versionId: packageVersion.id,
+                os: artifactInfo.os,
+                arch: artifactInfo.arch,
+                digest: `sha256:${computedSha256}`,
+                sizeBytes: BigInt(artifactInfo.size),
+                storagePath,
+                sourceUrl: asset.browser_download_url,
+              },
+              tx,
+            );
 
             status = artifactResult.created ? 'created' : 'updated';
             oldStoragePath = artifactResult.oldStoragePath;
@@ -1037,7 +1114,10 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             await fastify.storage.deleteBundle(storagePath);
             fastify.log.info(`Cleaned up after transaction failure: ${storagePath}`);
           } catch (cleanupError) {
-            fastify.log.error({ err: cleanupError, path: storagePath }, 'Failed to cleanup uploaded file');
+            fastify.log.error(
+              { err: cleanupError, path: storagePath },
+              'Failed to cleanup uploaded file',
+            );
           }
           throw error;
         }
@@ -1048,21 +1128,27 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             await fastify.storage.deleteBundle(oldStoragePath);
             fastify.log.info(`Cleaned up old artifact: ${oldStoragePath}`);
           } catch (cleanupError) {
-            fastify.log.warn({ err: cleanupError, path: oldStoragePath }, 'Failed to cleanup old artifact file');
+            fastify.log.warn(
+              { err: cleanupError, path: oldStoragePath },
+              'Failed to cleanup old artifact file',
+            );
           }
         }
 
-        fastify.log.info({
-          op: 'announce',
-          pkg: name,
-          version,
-          repo: claims.repository,
-          artifact: artifactInfo.filename,
-          platform: `${artifactInfo.os}-${artifactInfo.arch}`,
-          status,
-          totalArtifacts,
-          ms: Date.now() - announceStart,
-        }, `announce: ${status} ${name}@${version} artifact ${artifactInfo.filename} (${totalArtifacts} total, ${Date.now() - announceStart}ms)`);
+        fastify.log.info(
+          {
+            op: 'announce',
+            pkg: name,
+            version,
+            repo: claims.repository,
+            artifact: artifactInfo.filename,
+            platform: `${artifactInfo.os}-${artifactInfo.arch}`,
+            status,
+            totalArtifacts,
+            ms: Date.now() - announceStart,
+          },
+          `announce: ${status} ${name}@${version} artifact ${artifactInfo.filename} (${totalArtifacts} total, ${Date.now() - announceStart}ms)`,
+        );
 
         // Non-blocking Discord notification for new or updated bundles
         notifyDiscordAnnounce({ name, version, type: 'bundle', repo: claims.repository });
@@ -1089,7 +1175,10 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           status,
         };
       } catch (error) {
-        fastify.log.error({ op: 'announce', error: error instanceof Error ? error.message : 'unknown' }, `announce: failed`);
+        fastify.log.error(
+          { op: 'announce', error: error instanceof Error ? error.message : 'unknown' },
+          `announce: failed`,
+        );
         return handleError(error, request, reply);
       }
     },

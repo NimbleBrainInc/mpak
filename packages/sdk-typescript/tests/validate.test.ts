@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -154,6 +155,7 @@ describe('validateMcpb', () => {
       name: '@test/bad',
       // missing: version, description, server
     };
+    // biome-ignore lint/suspicious/noExplicitAny: deliberate test of malformed manifest
     const mcpbPath = createMcpb(testDir, 'missing-fields', badManifest as any);
 
     const result = await validateMcpb(mcpbPath);

@@ -1,12 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import {
   ClerkProvider,
   useAuth as useClerkAuth,
   useUser as useClerkUser,
 } from '@clerk/clerk-react';
+import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { type User, useMe } from '../hooks/useAuthQueries';
 import { addAccessTokenInterceptor } from '../lib/httpClient';
-import { useMe, type User } from '../hooks/useAuthQueries';
 
 // Whether Clerk auth is configured (build-time constant)
 export const authEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -35,12 +35,12 @@ export function useAuth(): AuthState {
 // Conditional rendering helpers (replace Clerk's <SignedIn>/<SignedOut>)
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : null;
+  return isAuthenticated ? children : null;
 }
 
 export function GuestGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoaded } = useAuth();
-  return isLoaded && !isAuthenticated ? <>{children}</> : null;
+  return isLoaded && !isAuthenticated ? children : null;
 }
 
 // --- Clerk implementation (only rendered when VITE_CLERK_PUBLISHABLE_KEY is set) ---
@@ -62,7 +62,7 @@ function ClerkAuthInner({ children }: { children: ReactNode }) {
 
   // Fetch backend user when signed in and interceptor is ready
   const { data: user, error: meError } = useMe(
-    interceptorReady && isLoaded && !!isSignedIn && !!clerkUser
+    interceptorReady && isLoaded && !!isSignedIn && !!clerkUser,
   );
 
   const value: AuthState = {

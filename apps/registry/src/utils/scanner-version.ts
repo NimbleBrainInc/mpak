@@ -9,6 +9,6 @@
 export function extractScannerVersion(
   report: Record<string, unknown> | undefined | null,
 ): string | null {
-  const scanMeta = report?.['scan'] as Record<string, unknown> | undefined;
-  return (scanMeta?.['scanner_version'] as string) ?? null;
+  const scanMeta = report?.scan as Record<string, unknown> | undefined;
+  return (scanMeta?.scanner_version as string) ?? null;
 }

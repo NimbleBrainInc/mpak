@@ -7,10 +7,11 @@
  *   tsx scripts/prerender.ts
  *   SKIP_PRERENDER=true tsx scripts/prerender.ts  # skip in CI
  */
+
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
 import { chromium } from '@playwright/test';
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
 
 const DIST = path.resolve(import.meta.dirname, '../dist');
 const PORT = 4173;
@@ -29,10 +30,7 @@ const STATIC_ROUTES = [
 ];
 
 // Browse pages - will wait longer for API data
-const DATA_ROUTES = [
-  '/bundles',
-  '/skills',
-];
+const DATA_ROUTES = ['/bundles', '/skills'];
 
 const ALL_ROUTES = [...STATIC_ROUTES, ...DATA_ROUTES];
 
@@ -122,8 +120,14 @@ async function prerender() {
       let html = await page.content();
 
       // Strip Vite HMR scripts if any leaked through
-      html = html.replace(/<script[^>]*type="module"[^>]*src="\/@vite\/client"[^>]*><\/script>/g, '');
-      html = html.replace(/<script[^>]*type="module"[^>]*src="\/@react-refresh"[^>]*><\/script>/g, '');
+      html = html.replace(
+        /<script[^>]*type="module"[^>]*src="\/@vite\/client"[^>]*><\/script>/g,
+        '',
+      );
+      html = html.replace(
+        /<script[^>]*type="module"[^>]*src="\/@react-refresh"[^>]*><\/script>/g,
+        '',
+      );
 
       // Determine output path
       let outputPath: string;

@@ -1,5 +1,5 @@
-import Fastify, { FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
 
 /**
  * Create a test Fastify instance with common configuration.

@@ -76,7 +76,7 @@ export interface ClaudeCodeConfig {
  */
 export function generateMcpConfig(
   pkgName: string,
-  manifest: Record<string, unknown> | MCPBManifest | null | undefined
+  manifest: Record<string, unknown> | MCPBManifest | null | undefined,
 ): string {
   const serverName = pkgName.split('/').pop() || pkgName;
 
@@ -89,9 +89,7 @@ export function generateMcpConfig(
   if (userConfig && Object.keys(userConfig).length > 0) {
     for (const [key] of Object.entries(userConfig)) {
       // Find the env var that maps to this user_config key
-      const envEntry = Object.entries(mcpEnv).find(
-        ([, val]) => val === `\${user_config.${key}}`
-      );
+      const envEntry = Object.entries(mcpEnv).find(([, val]) => val === `\${user_config.${key}}`);
       if (envEntry) {
         env[envEntry[0]] = 'YOUR_VALUE_HERE';
       }
@@ -144,7 +142,7 @@ export function generateBaseMcpConfig(pkgName: string): string {
  */
 export function generateCliCommands(
   pkgName: string,
-  manifest: Record<string, unknown> | MCPBManifest | null | undefined
+  manifest: Record<string, unknown> | MCPBManifest | null | undefined,
 ): string[] {
   const commands: string[] = [];
   const userConfig = manifest?.user_config as Record<string, UserConfigField> | undefined;
@@ -152,7 +150,7 @@ export function generateCliCommands(
   if (userConfig && Object.keys(userConfig).length > 0) {
     // Build key=value pairs for the config set command
     const pairs = Object.keys(userConfig)
-      .map(key => `${key}=YOUR_VALUE_HERE`)
+      .map((key) => `${key}=YOUR_VALUE_HERE`)
       .join(' ');
     commands.push(`mpak config set ${pkgName} ${pairs}`);
   }
@@ -169,7 +167,7 @@ export function generateCliCommands(
  */
 export function generateClaudeCodeCommand(
   pkgName: string,
-  manifest: Record<string, unknown> | MCPBManifest | null | undefined
+  manifest: Record<string, unknown> | MCPBManifest | null | undefined,
 ): string {
   const serverName = pkgName.split('/').pop() || pkgName;
 
@@ -182,9 +180,7 @@ export function generateClaudeCodeCommand(
   if (userConfig && Object.keys(userConfig).length > 0) {
     for (const [key] of Object.entries(userConfig)) {
       // Find the env var that maps to this user_config key
-      const envEntry = Object.entries(mcpEnv).find(
-        ([, val]) => val === `\${user_config.${key}}`
-      );
+      const envEntry = Object.entries(mcpEnv).find(([, val]) => val === `\${user_config.${key}}`);
       if (envEntry) {
         envFlags.push(`--env ${envEntry[0]}=YOUR_VALUE_HERE`);
       }

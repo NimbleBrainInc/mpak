@@ -1,9 +1,9 @@
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import type { PrepareServerSpec, ServerCommand } from '@nimblebrain/mpak-sdk';
 import { MpakConfigError, parsePackageSpec } from '@nimblebrain/mpak-sdk';
-import { spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
-import { createInterface } from 'readline';
 import { mpak } from '../../utils/config.js';
 
 export interface RunOptions {

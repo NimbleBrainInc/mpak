@@ -1,14 +1,15 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { McpbManifest } from '@nimblebrain/mpak-schemas';
-import { Mpak } from '../src/mpakSDK.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MpakBundleCache } from '../src/cache.js';
 import { MpakClient } from '../src/client.js';
 import { MpakConfigManager } from '../src/config-manager.js';
 import { MpakCacheCorruptedError, MpakConfigError, MpakInvalidBundleError } from '../src/errors.js';
+import { Mpak } from '../src/mpakSDK.js';
 
 describe('Mpak facade', () => {
   let testDir: string;
@@ -305,7 +306,7 @@ describe('Mpak facade', () => {
 
       expect(['python', 'python3']).toContain(result.command);
       expect(result.args).toEqual([`${cacheDir}/main.py`]);
-      expect(result.env['PYTHONPATH']).toContain(join(cacheDir, 'deps'));
+      expect(result.env.PYTHONPATH).toContain(join(cacheDir, 'deps'));
     });
 
     it('resolves a binary server', async () => {
@@ -366,7 +367,7 @@ describe('Mpak facade', () => {
         },
       );
 
-      expect(result.env['MPAK_WORKSPACE']).toBe('/custom/workspace');
+      expect(result.env.MPAK_WORKSPACE).toBe('/custom/workspace');
     });
 
     it('defaults MPAK_WORKSPACE to $cwd/.mpak', async () => {
@@ -374,7 +375,7 @@ describe('Mpak facade', () => {
 
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
-      expect(result.env['MPAK_WORKSPACE']).toBe(join(process.cwd(), '.mpak'));
+      expect(result.env.MPAK_WORKSPACE).toBe(join(process.cwd(), '.mpak'));
     });
 
     it('caller env overrides MPAK_WORKSPACE default', async () => {
@@ -387,7 +388,7 @@ describe('Mpak facade', () => {
         },
       );
 
-      expect(result.env['MPAK_WORKSPACE']).toBe('/caller/wins');
+      expect(result.env.MPAK_WORKSPACE).toBe('/caller/wins');
     });
 
     it('merges caller-provided env on top of manifest env', async () => {
@@ -410,9 +411,9 @@ describe('Mpak facade', () => {
         },
       );
 
-      expect(result.env['FROM_MANIFEST']).toBe('original');
-      expect(result.env['FROM_CALLER']).toBe('added');
-      expect(result.env['SHARED']).toBe('caller-wins');
+      expect(result.env.FROM_MANIFEST).toBe('original');
+      expect(result.env.FROM_CALLER).toBe('added');
+      expect(result.env.SHARED).toBe('caller-wins');
     });
 
     it('substitutes user_config placeholders in manifest env', async () => {
@@ -434,7 +435,7 @@ describe('Mpak facade', () => {
 
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
-      expect(result.env['API_KEY']).toBe('sk-secret');
+      expect(result.env.API_KEY).toBe('sk-secret');
     });
 
     it('uses default value when user config is not stored', async () => {
@@ -455,7 +456,7 @@ describe('Mpak facade', () => {
 
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
-      expect(result.env['PORT']).toBe('3000');
+      expect(result.env.PORT).toBe('3000');
     });
 
     it('throws MpakConfigError when required user config is missing', async () => {
@@ -672,7 +673,7 @@ describe('Mpak facade', () => {
         { userConfig: { api_key: 'sk-from-caller' } },
       );
 
-      expect(result.env['API_KEY']).toBe('sk-from-caller');
+      expect(result.env.API_KEY).toBe('sk-from-caller');
     });
 
     it('caller userConfig takes precedence over stored config for the same field', async () => {
@@ -688,7 +689,7 @@ describe('Mpak facade', () => {
         { userConfig: { api_key: 'sk-from-caller' } },
       );
 
-      expect(result.env['API_KEY']).toBe('sk-from-caller');
+      expect(result.env.API_KEY).toBe('sk-from-caller');
       // Stored value is NOT mutated — precedence is runtime only.
       expect(sdk.configManager.getPackageConfig('@scope/echo')).toEqual({
         api_key: 'sk-from-stored',
@@ -716,8 +717,8 @@ describe('Mpak facade', () => {
         { userConfig: { api_key: 'sk-from-caller' } },
       );
 
-      expect(result.env['API_KEY']).toBe('sk-from-caller');
-      expect(result.env['ENDPOINT']).toBe('https://stored.example.com');
+      expect(result.env.API_KEY).toBe('sk-from-caller');
+      expect(result.env.ENDPOINT).toBe('https://stored.example.com');
     });
 
     it('still throws MpakConfigError when userConfig lacks a required field', async () => {
@@ -757,8 +758,8 @@ describe('Mpak facade', () => {
       const withOmitted = await sdk.prepareServer({ name: '@scope/echo' });
       const withEmpty = await sdk.prepareServer({ name: '@scope/echo' }, { userConfig: {} });
 
-      expect(withOmitted.env['API_KEY']).toBe('sk-from-stored');
-      expect(withEmpty.env['API_KEY']).toBe('sk-from-stored');
+      expect(withOmitted.env.API_KEY).toBe('sk-from-stored');
+      expect(withEmpty.env.API_KEY).toBe('sk-from-stored');
     });
 
     it('empty userConfig {} still throws when stored config is missing required field', async () => {
@@ -784,7 +785,7 @@ describe('Mpak facade', () => {
         { userConfig: { unrelated: 'ignored' } },
       );
 
-      expect(result.env['PORT']).toBe('3000');
+      expect(result.env.PORT).toBe('3000');
     });
 
     it('userConfig overrides manifest default when caller provides the field', async () => {
@@ -798,7 +799,7 @@ describe('Mpak facade', () => {
         { userConfig: { port: '8080' } },
       );
 
-      expect(result.env['PORT']).toBe('8080');
+      expect(result.env.PORT).toBe('8080');
     });
 
     it('omitting userConfig preserves the original stored-then-default resolution', async () => {
@@ -814,8 +815,8 @@ describe('Mpak facade', () => {
 
       const result = await sdk.prepareServer({ name: '@scope/echo' });
 
-      expect(result.env['API_KEY']).toBe('sk-stored');
-      expect(result.env['PORT']).toBe('3000');
+      expect(result.env.API_KEY).toBe('sk-stored');
+      expect(result.env.PORT).toBe('3000');
     });
   });
 
@@ -967,7 +968,7 @@ describe('Mpak facade', () => {
 
       expect(['python', 'python3']).toContain(result.command);
       expect(result.args).toEqual([`${result.cwd}/main.py`]);
-      expect(result.env['PYTHONPATH']).toContain(join(result.cwd, 'deps'));
+      expect(result.env.PYTHONPATH).toContain(join(result.cwd, 'deps'));
     });
 
     it('sets MPAK_WORKSPACE from options', async () => {
@@ -981,7 +982,7 @@ describe('Mpak facade', () => {
         },
       );
 
-      expect(result.env['MPAK_WORKSPACE']).toBe('/custom/workspace');
+      expect(result.env.MPAK_WORKSPACE).toBe('/custom/workspace');
     });
 
     it('throws MpakConfigError when required user config is missing', async () => {
@@ -1076,7 +1077,7 @@ describe('Mpak facade', () => {
 
       await withEnv('NEWSAPI_API_KEY', 'sk-from-env', async () => {
         const result = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-from-env');
+        expect(result.env.NEWSAPI_API_KEY).toBe('sk-from-env');
       });
     });
 
@@ -1094,24 +1095,24 @@ describe('Mpak facade', () => {
           { name: '@scope/newsapi' },
           { userConfig: { api_key: 'from-override' } },
         );
-        expect(withOverride.env['NEWSAPI_API_KEY']).toBe('from-override');
+        expect(withOverride.env.NEWSAPI_API_KEY).toBe('from-override');
 
         // Stored wins over env and default.
         const withStored = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(withStored.env['NEWSAPI_API_KEY']).toBe('from-stored');
+        expect(withStored.env.NEWSAPI_API_KEY).toBe('from-stored');
       });
 
       // Env wins over default when no stored value.
       sdk.configManager.clearPackageConfig('@scope/newsapi');
       await withEnv('NEWSAPI_API_KEY', 'from-env', async () => {
         const withEnvOnly = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(withEnvOnly.env['NEWSAPI_API_KEY']).toBe('from-env');
+        expect(withEnvOnly.env.NEWSAPI_API_KEY).toBe('from-env');
       });
 
       // Default wins when env is unset.
       await withEnv('NEWSAPI_API_KEY', undefined, async () => {
         const withDefault = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(withDefault.env['NEWSAPI_API_KEY']).toBe('default-val');
+        expect(withDefault.env.NEWSAPI_API_KEY).toBe('default-val');
       });
     });
 
@@ -1146,14 +1147,14 @@ describe('Mpak facade', () => {
         await withEnv('ANTHROPIC_API_KEY', undefined, async () => {
           // Only the alias is set — alias wins because canonical is empty.
           const result = await sdk.prepareServer({ name: '@scope/newsapi' });
-          expect(result.env['ANTHROPIC_API_KEY']).toBe('from-claude');
-          expect(result.env['CLAUDE_API_KEY']).toBe('from-claude');
+          expect(result.env.ANTHROPIC_API_KEY).toBe('from-claude');
+          expect(result.env.CLAUDE_API_KEY).toBe('from-claude');
         });
 
         await withEnv('ANTHROPIC_API_KEY', 'from-anthropic', async () => {
           // Both set — canonical (declared first) wins.
           const result = await sdk.prepareServer({ name: '@scope/newsapi' });
-          expect(result.env['ANTHROPIC_API_KEY']).toBe('from-anthropic');
+          expect(result.env.ANTHROPIC_API_KEY).toBe('from-anthropic');
         });
       });
     });
@@ -1234,7 +1235,7 @@ describe('Mpak facade', () => {
 
       await withEnv('NEWSAPI_API_KEY', 'sk-from-env', async () => {
         const result = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-from-env');
+        expect(result.env.NEWSAPI_API_KEY).toBe('sk-from-env');
       });
     });
 
@@ -1255,9 +1256,9 @@ describe('Mpak facade', () => {
             ...baseManifest.server.mcp_config,
             env: {
               // Intentionally malformed to exercise the non-string guard.
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              // biome-ignore lint/suspicious/noExplicitAny: deliberate test of malformed input
               NUMBER_VAL: 42 as any,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              // biome-ignore lint/suspicious/noExplicitAny: deliberate test of malformed input
               NULL_VAL: null as any,
               NEWSAPI_API_KEY: '${user_config.api_key}',
             },
@@ -1270,7 +1271,7 @@ describe('Mpak facade', () => {
         // Valid string entry still reverses; malformed entries are skipped
         // without taking down the resolver.
         const result = await sdk.prepareServer({ name: '@scope/newsapi' });
-        expect(result.env['NEWSAPI_API_KEY']).toBe('sk-survives');
+        expect(result.env.NEWSAPI_API_KEY).toBe('sk-survives');
       });
     });
 

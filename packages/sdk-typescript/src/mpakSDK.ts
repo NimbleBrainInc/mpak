@@ -198,7 +198,7 @@ export class Mpak {
     const { command, args, env } = this.resolveCommand(manifest, cacheDir, userConfigValues);
 
     // Set MPAK_WORKSPACE
-    env['MPAK_WORKSPACE'] = options?.workspaceDir ?? join(process.cwd(), '.mpak');
+    env.MPAK_WORKSPACE = options?.workspaceDir ?? join(process.cwd(), '.mpak');
 
     // Merge caller-provided env (wins over defaults)
     if (options?.env) {
@@ -449,7 +449,7 @@ export class Mpak {
 
         // Set PYTHONPATH to deps/ directory
         const depsDir = join(cacheDir, 'deps');
-        env['PYTHONPATH'] = env['PYTHONPATH'] ? `${depsDir}:${env['PYTHONPATH']}` : depsDir;
+        env.PYTHONPATH = env.PYTHONPATH ? `${depsDir}:${env.PYTHONPATH}` : depsDir;
         break;
       }
 

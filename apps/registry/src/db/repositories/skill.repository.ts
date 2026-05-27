@@ -3,7 +3,7 @@
  * Handles operations for skills and skill versions
  */
 
-import type { Skill, SkillVersion, Prisma } from '@prisma/client';
+import type { Prisma, Skill, SkillVersion } from '@prisma/client';
 import { getPrismaClient, type TransactionClient } from '../client.js';
 import type { FindOptions } from '../types.js';
 
@@ -69,7 +69,7 @@ export class SkillRepository {
    */
   async findByNameWithVersions(
     name: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<(Skill & { versions: SkillVersion[] }) | null> {
     const client = tx ?? getPrismaClient();
     return client.skill.findUnique({
@@ -88,7 +88,7 @@ export class SkillRepository {
   async search(
     filters: SkillSearchFilters,
     options: FindOptions,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<SkillSearchResult> {
     const client = tx ?? getPrismaClient();
 
@@ -116,7 +116,9 @@ export class SkillRepository {
         where,
         skip: options.skip,
         take: options.take,
-        orderBy: (options.orderBy as Prisma.SkillOrderByWithRelationInput) ?? { totalDownloads: 'desc' },
+        orderBy: (options.orderBy as Prisma.SkillOrderByWithRelationInput) ?? {
+          totalDownloads: 'desc',
+        },
       }),
       client.skill.count({ where }),
     ]);
@@ -154,7 +156,7 @@ export class SkillRepository {
    */
   async upsertSkill(
     data: CreateSkillData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ skill: Skill; created: boolean }> {
     const client = tx ?? getPrismaClient();
 
@@ -201,11 +203,7 @@ export class SkillRepository {
   /**
    * Update latest version
    */
-  async updateLatestVersion(
-    id: string,
-    version: string,
-    tx?: TransactionClient
-  ): Promise<Skill> {
+  async updateLatestVersion(id: string, version: string, tx?: TransactionClient): Promise<Skill> {
     const client = tx ?? getPrismaClient();
     return client.skill.update({
       where: { id },
@@ -234,7 +232,7 @@ export class SkillRepository {
   async findVersion(
     skillId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<SkillVersion | null> {
     const client = tx ?? getPrismaClient();
     return client.skillVersion.findUnique({
@@ -258,10 +256,7 @@ export class SkillRepository {
   /**
    * Create a skill version
    */
-  async createVersion(
-    data: CreateSkillVersionData,
-    tx?: TransactionClient
-  ): Promise<SkillVersion> {
+  async createVersion(data: CreateSkillVersionData, tx?: TransactionClient): Promise<SkillVersion> {
     const client = tx ?? getPrismaClient();
     return client.skillVersion.create({
       data: {
@@ -290,7 +285,7 @@ export class SkillRepository {
   async upsertVersion(
     skillId: string,
     data: CreateSkillVersionData,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<{ version: SkillVersion; created: boolean; oldStoragePath: string | null }> {
     const client = tx ?? getPrismaClient();
 
@@ -335,7 +330,7 @@ export class SkillRepository {
   async incrementVersionDownloads(
     skillId: string,
     version: string,
-    tx?: TransactionClient
+    tx?: TransactionClient,
   ): Promise<void> {
     const client = tx ?? getPrismaClient();
     await client.skillVersion.update({

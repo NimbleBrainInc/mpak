@@ -88,13 +88,12 @@ export interface PackageVersion {
 }
 
 // API response types - imported from shared schemas package
+// API query params - imported from shared schemas package
 export type {
   Package as PackageListItem,
   PackageDetail as PackageInfo,
+  PackageSearchParams,
 } from '@nimblebrain/mpak-schemas';
-
-// API query params - imported from shared schemas package
-export type { PackageSearchParams } from '@nimblebrain/mpak-schemas';
 
 // MCP Registry types
 export interface MCPServerDetail {

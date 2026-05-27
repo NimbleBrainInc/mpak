@@ -1,6 +1,6 @@
+import { type UserProfile, UserProfileSchema } from '@nimblebrain/mpak-schemas';
 import type { FastifyPluginAsync } from 'fastify';
 import { toJsonSchema } from '../lib/zod-schema.js';
-import { UserProfileSchema, type UserProfile } from '@nimblebrain/mpak-schemas';
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /app/auth/me - Get current authenticated user

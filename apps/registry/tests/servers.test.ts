@@ -7,9 +7,9 @@
  * use of the pre-joined security-scan column.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/config.js', () => ({
   config: {
@@ -33,13 +33,8 @@ vi.mock('../src/db/index.js', () => ({
   disconnectDatabase: vi.fn(),
 }));
 
-import {
-  createMockPackageRepo,
-  mockArtifact,
-  mockPackage,
-  mockVersion,
-} from './helpers.js';
 import { errorHandler } from '../src/errors/middleware.js';
+import { createMockPackageRepo, mockArtifact, mockPackage, mockVersion } from './helpers.js';
 
 /**
  * Build a "lookup row" — Package + versions[] each carrying artifacts
@@ -214,7 +209,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server'),
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -226,7 +221,7 @@ describe('MCP Registry routes', () => {
 
       await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@Test/MCP-Server'),
+        url: `/servers/${encodeURIComponent('@Test/MCP-Server')}`,
       });
 
       expect(packageRepo.findPackageForServerLookup).toHaveBeenCalledWith('@test/mcp-server');
@@ -247,7 +242,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('ai.nimblebrain/echo'),
+        url: `/servers/${encodeURIComponent('ai.nimblebrain/echo')}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -261,7 +256,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@missing/server'),
+        url: `/servers/${encodeURIComponent('@missing/server')}`,
       });
 
       expect(res.statusCode).toBe(404);
@@ -285,7 +280,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server'),
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -314,7 +309,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server') + '/versions/1.0.0',
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}/versions/1.0.0`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -327,7 +322,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server') + '/versions/latest',
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}/versions/latest`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -340,7 +335,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server') + '/versions/9.9.9',
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}/versions/9.9.9`,
       });
 
       expect(res.statusCode).toBe(404);
@@ -357,7 +352,7 @@ describe('MCP Registry routes', () => {
 
       const res = await app.inject({
         method: 'GET',
-        url: '/servers/' + encodeURIComponent('@test/mcp-server') + '/versions',
+        url: `/servers/${encodeURIComponent('@test/mcp-server')}/versions`,
       });
 
       expect(res.statusCode).toBe(200);

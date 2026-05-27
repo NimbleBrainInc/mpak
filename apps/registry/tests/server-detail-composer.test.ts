@@ -1,8 +1,9 @@
+/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 import { describe, expect, it } from 'vitest';
 import {
+  type ComposerInput,
   composeServerDetail,
   composeServerDetailOrThrow,
-  type ComposerInput,
 } from '../src/services/server-detail-composer.js';
 
 const FULL_MANIFEST = {
@@ -67,7 +68,12 @@ function input(over: Partial<ComposerInput> = {}): ComposerInput {
         storagePath: '@nimblebraininc/echo/0.1.6/linux-x64.mcpb',
       },
     ],
-    certification: over.certification ?? { level: 1, controlsPassed: 15, controlsFailed: 1, controlsTotal: 16 },
+    certification: over.certification ?? {
+      level: 1,
+      controlsPassed: 15,
+      controlsFailed: 1,
+      controlsTotal: 16,
+    },
   };
 }
 
@@ -97,18 +103,18 @@ describe('composeServerDetail', () => {
       permissions: { native: 'none' },
     });
     const mpakMeta = detail?._meta?.['dev.mpak/registry'] as Record<string, unknown>;
-    expect(mpakMeta['npmName']).toBe('@nimblebraininc/echo');
-    expect(mpakMeta['downloads']).toBe(412);
-    expect(mpakMeta['published_at']).toBe('2026-04-09T12:00:00.000Z');
-    expect(mpakMeta['publishMethod']).toBe('oidc');
-    expect(mpakMeta['certification']).toEqual({
+    expect(mpakMeta.npmName).toBe('@nimblebraininc/echo');
+    expect(mpakMeta.downloads).toBe(412);
+    expect(mpakMeta.published_at).toBe('2026-04-09T12:00:00.000Z');
+    expect(mpakMeta.publishMethod).toBe('oidc');
+    expect(mpakMeta.certification).toEqual({
       level: 1,
       controlsPassed: 15,
       controlsFailed: 1,
       controlsTotal: 16,
     });
-    expect(Array.isArray(mpakMeta['artifacts'])).toBe(true);
-    expect((mpakMeta['artifacts'] as unknown[])[0]).toMatchObject({
+    expect(Array.isArray(mpakMeta.artifacts)).toBe(true);
+    expect((mpakMeta.artifacts as unknown[])[0]).toMatchObject({
       platform: { os: 'linux', arch: 'x64' },
       url: 'https://github.com/NimbleBrainInc/mcp-echo/releases/download/v0.1.6/x.mcpb',
       sha256: '7352521191f69533f3e05fd905dea30ed43c329c930ee9840ccf9796a531f41b',
@@ -116,7 +122,7 @@ describe('composeServerDetail', () => {
     });
   });
 
-  it('honors author reverse-DNS override under the publisher\'s curated org-mapped namespace', () => {
+  it("honors author reverse-DNS override under the publisher's curated org-mapped namespace", () => {
     // @nimblebraininc → ai.nimblebrain (per ORG_REVERSE_DNS_MAP),
     // so this publisher may claim any ai.nimblebrain/* name.
     const m = {
@@ -127,7 +133,7 @@ describe('composeServerDetail', () => {
     expect(detail?.name).toBe('ai.nimblebrain/custom-name');
   });
 
-  it('honors author override under the publisher\'s mechanical-default namespace', () => {
+  it("honors author override under the publisher's mechanical-default namespace", () => {
     // Any publisher implicitly owns `dev.mpak.<their-scope>/*`.
     const m = {
       ...FULL_MANIFEST,
@@ -137,7 +143,7 @@ describe('composeServerDetail', () => {
     expect(detail?.name).toBe('dev.mpak.nimblebraininc/relabeled');
   });
 
-  it('silently ignores a squatted override (publisher claiming a namespace they don\'t own)', () => {
+  it("silently ignores a squatted override (publisher claiming a namespace they don't own)", () => {
     // @nimblebraininc trying to label themselves under com.acme — not
     // their org, not their mechanical default. Override drops; record
     // falls back to the curated/mechanical default. Prevents

@@ -18,7 +18,7 @@ export const SkillNameSchema = z
   .max(64)
   .regex(
     /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
-    'Lowercase alphanumeric with single hyphens, cannot start/end with hyphen'
+    'Lowercase alphanumeric with single hyphens, cannot start/end with hyphen',
   );
 
 /**
@@ -118,10 +118,7 @@ export const SkillFrontmatterSchema = z.object({
  */
 export const ScopedSkillNameSchema = z
   .string()
-  .regex(
-    /^@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/,
-    'Scoped name format: @scope/name'
-  );
+  .regex(/^@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/, 'Scoped name format: @scope/name');
 
 /**
  * Skill artifact info for announce endpoint
@@ -212,11 +209,14 @@ export const SkillDetailSchema = z.object({
   downloads: z.number(),
   published_at: z.string(),
   content: z.string().nullable().optional(),
-  provenance: z.object({
-    publish_method: z.string().nullable().optional(),
-    repository: z.string(),
-    sha: z.string().nullable().optional(),
-  }).nullable().optional(),
+  provenance: z
+    .object({
+      publish_method: z.string().nullable().optional(),
+      repository: z.string(),
+      sha: z.string().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   author: SkillAuthorSchema.optional(),
   examples: z.array(SkillExampleSchema).optional(),
   versions: z.array(
@@ -224,7 +224,7 @@ export const SkillDetailSchema = z.object({
       version: z.string(),
       published_at: z.string(),
       downloads: z.number(),
-    })
+    }),
   ),
 });
 

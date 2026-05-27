@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // Pin to empty: schemas depends only on zod. Without this, tsc auto-discovers every @types/* reachable via node_modules hoisting, which breaks the build when pnpm reshuffles hoisting. Do not remove.
+    "types": []
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

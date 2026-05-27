@@ -1,16 +1,28 @@
-import type { PackageSearchParams, Package, PackageDetail, UserProfile } from '../schemas/generated';
 import type {
+  Package,
+  PackageDetail,
+  PackageSearchParams,
+  UserProfile,
+} from '../schemas/generated';
+import type {
+  SkillDetail,
   SkillSearchParams,
   SkillSearchResponse,
-  SkillDetail,
   SkillSummary,
 } from '../schemas/generated/skill';
 import { API_URL } from './siteConfig';
 
 // Re-export for convenience
 export type SearchParams = PackageSearchParams;
-export type { Package, PackageDetail, UserProfile };
-export type { SkillSearchParams, SkillSearchResponse, SkillDetail, SkillSummary };
+export type {
+  Package,
+  PackageDetail,
+  SkillDetail,
+  SkillSearchParams,
+  SkillSearchResponse,
+  SkillSummary,
+  UserProfile,
+};
 
 /**
  * Converts a Package (from browse/search) to a PackageDetail for use as placeholder data.
@@ -52,10 +64,7 @@ class ApiClient {
     this.baseUrl = API_URL;
   }
 
-  private async fetch<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async fetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
@@ -68,9 +77,10 @@ class ApiClient {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
       // Handle error.error being either a string or an object with a message property
-      const errorMessage = typeof error.error === 'string'
-        ? error.error
-        : error.error?.message || error.message || `HTTP ${response.status}`;
+      const errorMessage =
+        typeof error.error === 'string'
+          ? error.error
+          : error.error?.message || error.message || `HTTP ${response.status}`;
       throw new Error(errorMessage);
     }
 
@@ -103,7 +113,11 @@ class ApiClient {
     return this.fetch(`/app/packages${this.packageNameToPath(name)}`);
   }
 
-  getPackageDownloadUrl(name: string, version: string, platform?: { os: string; arch: string }): string {
+  getPackageDownloadUrl(
+    name: string,
+    version: string,
+    platform?: { os: string; arch: string },
+  ): string {
     const base = `${this.baseUrl}/app/packages${this.packageNameToPath(name)}/versions/${version}/download`;
     if (platform) {
       return `${base}?os=${platform.os}&arch=${platform.arch}`;
@@ -113,7 +127,7 @@ class ApiClient {
 
   async publishPackage(
     file: File,
-    token: string
+    token: string,
   ): Promise<{
     success: boolean;
     package: {
@@ -127,23 +141,21 @@ class ApiClient {
     const formData = new FormData();
     formData.append('bundle', file);
 
-    const response = await fetch(
-      `${this.baseUrl}/app/packages`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      }
-    );
+    const response = await fetch(`${this.baseUrl}/app/packages`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload failed' }));
       // Handle error.error being either a string or an object with a message property
-      const errorMessage = typeof error.error === 'string'
-        ? error.error
-        : error.error?.message || error.message || `HTTP ${response.status}`;
+      const errorMessage =
+        typeof error.error === 'string'
+          ? error.error
+          : error.error?.message || error.message || `HTTP ${response.status}`;
       throw new Error(errorMessage);
     }
 
@@ -158,7 +170,10 @@ class ApiClient {
     });
   }
 
-  async getMyPackages(token: string, params: { limit?: number; offset?: number; sort?: string } = {}): Promise<{
+  async getMyPackages(
+    token: string,
+    params: { limit?: number; offset?: number; sort?: string } = {},
+  ): Promise<{
     packages: Package[];
     total: number;
     pagination: {
@@ -182,7 +197,10 @@ class ApiClient {
     });
   }
 
-  async getClaimStatus(name: string, token?: string): Promise<{
+  async getClaimStatus(
+    name: string,
+    token?: string,
+  ): Promise<{
     claimable: boolean;
     package_name?: string;
     github_repo?: string;
@@ -209,7 +227,7 @@ class ApiClient {
   async claimPackage(
     name: string,
     githubRepo: string,
-    token: string
+    token: string,
   ): Promise<{
     success: boolean;
     message: string;
@@ -233,15 +251,16 @@ class ApiClient {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ github_repo: githubRepo }),
-      }
+      },
     );
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Claim failed' }));
       // Handle error.error being either a string or an object with a message property
-      const errorMessage = typeof error.error === 'string'
-        ? error.error
-        : error.error?.message || error.message || `HTTP ${response.status}`;
+      const errorMessage =
+        typeof error.error === 'string'
+          ? error.error
+          : error.error?.message || error.message || `HTTP ${response.status}`;
       throw new Error(errorMessage);
     }
 

@@ -39,7 +39,9 @@ export async function handleSkillShow(name: string, options: ShowOptions): Promi
     if (skill.triggers && skill.triggers.length > 0) {
       logger.info('');
       logger.info('Triggers:');
-      skill.triggers.forEach((t) => logger.info(`  - ${t}`));
+      skill.triggers.forEach((t) => {
+        logger.info(`  - ${t}`);
+      });
     }
 
     // Examples
