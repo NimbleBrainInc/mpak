@@ -266,45 +266,42 @@ export class PackageRepository {
       where: { name: data.name },
     });
 
+    // Manifest-derived metadata refreshed on every announce so re-releases
+    // pick up changes (display name, description, icon, author, etc.).
+    // `undefined` values are skipped by Prisma, so a manifest that omits a
+    // field leaves the existing value intact rather than nulling it.
+    // Hoisted into one object and reused for both create and update so the
+    // two clauses cannot drift — the empty `update: {}` that this object
+    // replaces was itself a create/update drift bug.
+    const manifestMetadata = {
+      displayName: data.displayName,
+      description: data.description,
+      authorName: data.authorName,
+      authorEmail: data.authorEmail,
+      authorUrl: data.authorUrl,
+      homepage: data.homepage,
+      license: data.license,
+      iconUrl: data.iconUrl,
+      serverType: data.serverType,
+      githubRepo: data.githubRepo,
+    };
+
     const pkg = await client.package.upsert({
       where: { name: data.name },
       create: {
         name: data.name,
-        displayName: data.displayName,
-        description: data.description,
-        authorName: data.authorName,
-        authorEmail: data.authorEmail,
-        authorUrl: data.authorUrl,
-        homepage: data.homepage,
-        license: data.license,
-        iconUrl: data.iconUrl,
-        serverType: data.serverType,
+        ...manifestMetadata,
+        // Ownership/trust and version ordering are set only at creation.
+        // On update they are owned elsewhere: `latestVersion` by
+        // updateLatestVersion, `verified`/`claimedBy`/`claimedAt` by the
+        // claim flow — never overwritten by an announce.
         verified: data.verified ?? false,
         latestVersion: data.latestVersion,
         createdBy: data.createdBy,
-        githubRepo: data.githubRepo,
         claimedBy: data.claimedBy,
         claimedAt: data.claimedAt,
       },
-      // Refresh manifest-derived metadata on every announce so re-releases
-      // pick up changes (display name, description, icon, author, etc.).
-      // `undefined` values are skipped by Prisma, so a manifest that omits a
-      // field leaves the existing value intact rather than nulling it.
-      // Ownership/trust (verified, createdBy, claimedBy/At) and version
-      // ordering (latestVersion — handled by updateLatestVersion) are
-      // intentionally left untouched here.
-      update: {
-        displayName: data.displayName,
-        description: data.description,
-        authorName: data.authorName,
-        authorEmail: data.authorEmail,
-        authorUrl: data.authorUrl,
-        homepage: data.homepage,
-        license: data.license,
-        iconUrl: data.iconUrl,
-        serverType: data.serverType,
-        githubRepo: data.githubRepo,
-      },
+      update: manifestMetadata,
     });
 
     return { package: pkg, created: !existing };
