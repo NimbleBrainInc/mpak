@@ -174,7 +174,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         200: toJsonSchema(BundleSearchResponseSchema),
       },
     },
-    handler: async (request) => {
+    handler: async (request, reply) => {
       const { q, type, sort, limit, offset } = request.query;
 
       // Build filters
@@ -247,6 +247,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           has_more: offset + bundles.length < total,
         },
       };
+      // Public, crawled listing — let a shared cache absorb repeat hits.
+      reply.header('Cache-Control', 'public, max-age=60, s-maxage=300');
       return response;
     },
   });
@@ -268,7 +270,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         200: toJsonSchema(BundleDetailSchema),
       },
     },
-    handler: async (request) => {
+    handler: async (request, reply) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
@@ -305,6 +307,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
             }
           : null;
 
+      reply.header('Cache-Control', 'public, max-age=60, s-maxage=300');
       return {
         name: pkg.name,
         display_name: pkg.displayName,
