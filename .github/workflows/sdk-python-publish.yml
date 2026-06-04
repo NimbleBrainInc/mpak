@@ -59,6 +59,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk-python/dist/
+          # Idempotent: a re-pushed/backfilled tag skips an already-published
+          # version instead of failing; the Release job still runs.
+          skip-existing: true
 
   release:
     needs: publish

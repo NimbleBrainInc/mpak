@@ -57,9 +57,17 @@ jobs:
 
       - name: Publish to npm
         run: |
-          # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
-          pnpm pack
-          npm publish nimblebrain-mpak-*.tgz --provenance --access public
+          # The tag is the source of truth; publishing is idempotent so a re-pushed
+          # or backfilled tag won't fail on an already-published version.
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already on npm — skipping publish (Release still created)"
+          else
+            # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
+            pnpm pack
+            npm publish nimblebrain-mpak-*.tgz --provenance --access public
+          fi
         working-directory: packages/cli
 
   release:
