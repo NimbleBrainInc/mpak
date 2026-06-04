@@ -58,13 +58,21 @@ isn't pushed, the release didn't happen.
 | `sdk-typescript` | `packages/sdk-typescript/package.json` | npm `@nimblebrain/mpak-sdk` | `sdk-typescript-v*` |
 | `schemas` | `packages/schemas/package.json` | npm `@nimblebrain/mpak-schemas` | `schemas-v*` |
 | `sdk-python` | `packages/sdk-python/pyproject.toml` | PyPI `mpak` | `sdk-python-v*` |
-| `scanner` | `apps/scanner/pyproject.toml` | PyPI `mpak-scanner` | `scanner-v*` |
+| `scanner` | `apps/scanner/pyproject.toml` | PyPI `mpak-scanner` **+ GHCR Docker image** | `scanner-v*` |
+
+`scanner` is the one package that ships two artifacts from a single tag: the PyPI
+package and a Docker image published to GHCR.
 
 ### Idempotency — re-tagging is safe
 
-The publish step is idempotent: if the version is already on npm/PyPI it **skips
-the publish** and the workflow still (re)creates the GitHub Release. So a
+The npm/PyPI publish step is idempotent: if the version is already published it
+**skips the publish** and the workflow still (re)creates the GitHub Release. So a
 re-pushed or backfilled tag never errors on "version already exists."
+
+One exception: `scanner`'s Docker image is **rebuilt and re-pushed** on a re-tag
+(it overwrites the same image tag rather than skipping). That's a benign
+overwrite, not a failure — but it does redundant work, so avoid re-tagging
+`scanner` casually.
 
 ### Recovering from drift
 
