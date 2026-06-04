@@ -12,10 +12,35 @@ export type PackageVersionWithArtifacts = PackageVersion & {
   artifacts: Artifact[];
 };
 
-// Version with artifacts and security scans included
+// Minimal version fields for public version listings (see getVersions)
+export type VersionListItem = Pick<PackageVersion, 'version' | 'publishedAt' | 'downloadCount'>;
+
+/**
+ * Scan columns the listing/lookup paths actually use — just the MTF
+ * certification summary. The full `SecurityScan.report` JSON averages
+ * ~120 KB uncompressed on the wire (TOAST-compressed to ~16 KB on
+ * disk), so eager-loading whole scan rows on hot, crawled endpoints was
+ * the dominant source of database egress. These four scalars are all
+ * `scanToCertification` / the `/v1/bundles` certification block read;
+ * the report itself is served only by the dedicated scan endpoints,
+ * which run their own queries. Keep this in sync with `SCAN_CERT_SELECT`.
+ */
+export type ScanCertFields = Pick<
+  SecurityScan,
+  'certificationLevel' | 'controlsPassed' | 'controlsFailed' | 'controlsTotal'
+>;
+
+const SCAN_CERT_SELECT = {
+  certificationLevel: true,
+  controlsPassed: true,
+  controlsFailed: true,
+  controlsTotal: true,
+} as const satisfies Prisma.SecurityScanSelect;
+
+// Version with artifacts and the latest completed scan's certification summary
 export type PackageVersionWithArtifactsAndScans = PackageVersion & {
   artifacts: Artifact[];
-  securityScans: SecurityScan[];
+  securityScans: ScanCertFields[];
 };
 
 /**
@@ -23,12 +48,13 @@ export type PackageVersionWithArtifactsAndScans = PackageVersion & {
  * (when present) the latest completed security scan per version. The
  * shape `findPackageForServerLookup` and `findPackagesForServerListing`
  * return — both pull the same data in one query so the route layer
- * can compose `ServerDetail` without further round-trips.
+ * can compose `ServerDetail` without further round-trips. Scans are
+ * projected to the certification summary only (see {@link ScanCertFields}).
  */
 export type PackageForServerLookup = Package & {
   versions: (PackageVersion & {
     artifacts: Artifact[];
-    securityScans: SecurityScan[];
+    securityScans: ScanCertFields[];
   })[];
 };
 
@@ -346,6 +372,7 @@ export class PackageRepository {
               where: { status: 'completed' },
               orderBy: { startedAt: 'desc' },
               take: 1,
+              select: SCAN_CERT_SELECT,
             },
           },
         },
@@ -405,6 +432,7 @@ export class PackageRepository {
                 where: { status: 'completed' },
                 orderBy: { startedAt: 'desc' },
                 take: 1,
+                select: SCAN_CERT_SELECT,
               },
             },
           },
@@ -440,6 +468,7 @@ export class PackageRepository {
           where: { status: 'completed' },
           orderBy: { startedAt: 'desc' },
           take: 1,
+          select: SCAN_CERT_SELECT,
         },
       },
     });
@@ -465,13 +494,19 @@ export class PackageRepository {
   }
 
   /**
-   * Get all versions for a package
+   * Get the version list for a package — just the fields the public
+   * version listing renders. Deliberately omits the heavy `manifest`,
+   * `readme`, `serverJson`, `sourceIndex`, and `provenance` columns: a
+   * package's full version history was being fetched in full to emit
+   * three small fields per version, multiplying egress on the bundle
+   * detail endpoint.
    */
-  async getVersions(packageId: string, tx?: TransactionClient): Promise<PackageVersion[]> {
+  async getVersions(packageId: string, tx?: TransactionClient): Promise<VersionListItem[]> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findMany({
       where: { packageId },
       orderBy: { publishedAt: 'desc' },
+      select: { version: true, publishedAt: true, downloadCount: true },
     });
   }
 

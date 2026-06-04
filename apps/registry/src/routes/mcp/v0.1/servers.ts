@@ -232,7 +232,7 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
       const skip = parseIntParam(request.query.cursor, 0);
       const updatedSince = parseUpdatedSince(request.query.updated_since);
@@ -264,6 +264,8 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       if (nextIdx < total) {
         response.metadata.next_cursor = String(nextIdx);
       }
+      // Public, crawled listing — let a shared cache absorb repeat hits.
+      reply.header('Cache-Control', 'public, max-age=60, s-maxage=300');
       return response;
     },
   );
@@ -287,7 +289,7 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const limit = Math.min(parseIntParam(request.query.limit, 100), 500);
       const skip = parseIntParam(request.query.cursor, 0);
       const { packages, total } = await packageRepo.findPackagesForServerListing(
@@ -312,6 +314,8 @@ export const mcpRegistryRoutes: FastifyPluginAsync = async (fastify) => {
       if (nextIdx < total) {
         response.metadata.next_cursor = String(nextIdx);
       }
+      // Public, crawled search — let a shared cache absorb repeat hits.
+      reply.header('Cache-Control', 'public, max-age=60, s-maxage=300');
       return response;
     },
   );
