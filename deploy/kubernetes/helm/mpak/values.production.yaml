@@ -28,10 +28,10 @@ registry:
     MAX_BUNDLE_SIZE_MB: "100"
     SCANNER_ENABLED: "true"
 
-  podAnnotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "3200"
-    prometheus.io/path: "/metrics"
+  # Scrape via the ServiceMonitor below (operator-based), which targets the
+  # dedicated internal metrics port — not the public app port.
+  serviceMonitor:
+    enabled: true
 
   affinity:
     podAntiAffinity:

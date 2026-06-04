@@ -12,5 +12,9 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: {{ .Values.registry.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
   selector:
     {{- include "mpak.registry.selectorLabels" . | nindent 4 }}

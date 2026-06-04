@@ -13,6 +13,11 @@ export const config = {
         .map((s) => s.trim())
         .filter(Boolean) || [],
   },
+  metrics: {
+    // Prometheus /metrics is served on its own internal port so it is NOT
+    // exposed through the public ingress (which routes `/` to the app).
+    port: parseInt(process.env.METRICS_PORT || '9090', 10),
+  },
   clerk: {
     publishableKey: process.env.CLERK_PUBLISHABLE_KEY || '',
     secretKey: process.env.CLERK_SECRET_KEY || '',

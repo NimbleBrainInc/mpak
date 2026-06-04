@@ -7,6 +7,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import Fastify from 'fastify';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './errors/index.js';
+import { enableDefaultMetrics } from './metrics.js';
+import { buildMetricsServer, registerHttpMetrics } from './metrics-server.js';
 import { authPlugin } from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { storagePlugin } from './plugins/storage.js';
@@ -39,6 +41,12 @@ async function start() {
   // fast-json-stringify is very strict and requires exact schema matches, which is
   // incompatible with z.toJSONSchema() output for complex types like nullable unions.
   fastify.setReplySerializer((payload) => JSON.stringify(payload));
+
+  // Record RED metrics for every request. Exposition is served on a separate
+  // internal port (started after listen, below) so /metrics scrapes never flow
+  // through this hook and the endpoint isn't on the public catch-all ingress.
+  registerHttpMetrics(fastify);
+  const metricsServer = buildMetricsServer();
 
   // Register plugins
   await fastify.register(sensible);
@@ -259,7 +267,7 @@ async function start() {
     }, 10000);
 
     try {
-      await fastify.close();
+      await Promise.all([fastify.close(), metricsServer.close()]);
       clearTimeout(forceExitTimeout);
       console.log('Server closed gracefully');
       process.exit(0);
@@ -283,6 +291,18 @@ async function start() {
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);
+  }
+
+  // Process metrics + the internal metrics endpoint, started after the main
+  // server is up. Metrics must never take down the registry: a bind failure
+  // here (e.g. the metrics port is already in use) degrades to "no metrics +
+  // a TargetDown alert", never a crash of an otherwise-healthy registry.
+  try {
+    enableDefaultMetrics();
+    await metricsServer.listen({ port: config.metrics.port, host: config.server.host });
+    console.log(`Metrics listening on ${config.server.host}:${config.metrics.port}/metrics`);
+  } catch (error) {
+    console.error('Metrics server failed to start; continuing without metrics:', error);
   }
 }
 

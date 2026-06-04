@@ -42,10 +42,15 @@ spec:
             - name: http
               containerPort: {{ .Values.registry.service.port }}
               protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.registry.metrics.port }}
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "mpak.fullname" . }}
           env:
+            - name: METRICS_PORT
+              value: {{ .Values.registry.metrics.port | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
