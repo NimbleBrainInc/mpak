@@ -13,9 +13,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -33,9 +33,9 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
@@ -57,9 +57,17 @@ jobs:
 
       - name: Publish to npm
         run: |
-          # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
-          pnpm pack
-          npm publish nimblebrain-mpak-sdk-*.tgz --provenance --access public
+          # The tag is the source of truth; publishing is idempotent so a re-pushed
+          # or backfilled tag won't fail on an already-published version.
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already on npm — skipping publish (Release still created)"
+          else
+            # pnpm pack resolves workspace:* to real versions; npm publish keeps provenance
+            pnpm pack
+            npm publish nimblebrain-mpak-sdk-*.tgz --provenance --access public
+          fi
         working-directory: packages/sdk-typescript
 
   release:
@@ -68,7 +76,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0   # full history + tags so we can find the previous same-prefix tag
       - name: Create GitHub Release

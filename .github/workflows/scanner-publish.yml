@@ -20,7 +20,7 @@ jobs:
       run:
         working-directory: apps/scanner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -41,7 +41,7 @@ jobs:
       run:
         working-directory: apps/scanner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -63,6 +63,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: apps/scanner/dist/
+          # Idempotent: a re-pushed/backfilled tag skips an already-published
+          # version instead of failing; the Release job still runs.
+          skip-existing: true
 
   publish-docker:
     needs: [verify, publish-pypi]
@@ -71,7 +74,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract version from tag
         id: version
@@ -102,7 +105,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0   # full history + tags so we can find the previous same-prefix tag
       - name: Create GitHub Release
