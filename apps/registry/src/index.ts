@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import Fastify from 'fastify';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './errors/index.js';
+import { enableDefaultMetrics, metricsRegistry, recordHttpRequest } from './metrics.js';
 import { authPlugin } from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { storagePlugin } from './plugins/storage.js';
@@ -39,6 +40,28 @@ async function start() {
   // fast-json-stringify is very strict and requires exact schema matches, which is
   // incompatible with z.toJSONSchema() output for complex types like nullable unions.
   fastify.setReplySerializer((payload) => JSON.stringify(payload));
+
+  // Record RED metrics for every request. The `route` label is the matched
+  // route pattern (e.g. /servers/:id), not the raw path, to bound cardinality.
+  // Exposition is served on a separate internal port (below), so /metrics
+  // scrapes never flow through this hook.
+  fastify.addHook('onResponse', async (request, reply) => {
+    recordHttpRequest(
+      request.method,
+      request.routeOptions?.url ?? '/*',
+      reply.statusCode,
+      reply.elapsedTime / 1000,
+    );
+  });
+
+  // Separate, internal-only server for Prometheus scraping. Bound to its own
+  // port so /metrics is NOT reachable through the public catch-all ingress;
+  // only the in-cluster ServiceMonitor hits it.
+  const metricsServer = Fastify({ logger: false });
+  metricsServer.get('/metrics', async (_request, reply) => {
+    reply.header('Content-Type', metricsRegistry.contentType);
+    return metricsRegistry.metrics();
+  });
 
   // Register plugins
   await fastify.register(sensible);
@@ -259,7 +282,7 @@ async function start() {
     }, 10000);
 
     try {
-      await fastify.close();
+      await Promise.all([fastify.close(), metricsServer.close()]);
       clearTimeout(forceExitTimeout);
       console.log('Server closed gracefully');
       process.exit(0);
@@ -280,6 +303,12 @@ async function start() {
       host: config.server.host,
     });
     console.log(`Server listening on ${config.server.host}:${config.server.port}`);
+
+    // Process metrics + the internal metrics endpoint, started after the main
+    // server is up so a scrape failure can't block serving traffic.
+    enableDefaultMetrics();
+    await metricsServer.listen({ port: config.metrics.port, host: config.server.host });
+    console.log(`Metrics listening on ${config.server.host}:${config.metrics.port}/metrics`);
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);

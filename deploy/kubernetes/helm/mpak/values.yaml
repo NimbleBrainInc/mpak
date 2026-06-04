@@ -21,6 +21,17 @@ registry:
     type: ClusterIP
     port: 3200
 
+  # Prometheus metrics are served on a separate internal port so /metrics is
+  # NOT reachable through the public ingress (which routes `/` to the app).
+  metrics:
+    port: 9090
+
+  # Optional ServiceMonitor (requires the Prometheus Operator CRDs). Off by
+  # default for self-hosters without the operator; enable per environment.
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
   resources:
     requests:
       cpu: 250m

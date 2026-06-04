@@ -1,0 +1,18 @@
+{{- if .Values.registry.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "mpak.fullname" . }}-registry
+  namespace: {{ include "mpak.namespace" . }}
+  labels:
+    {{- include "mpak.registry.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mpak.registry.selectorLabels" . | nindent 6 }}
+  endpoints:
+    # Scrape the internal metrics port, not the public app port.
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.registry.serviceMonitor.interval | default "30s" }}
+{{- end }}
