@@ -7,7 +7,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import Fastify from 'fastify';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './errors/index.js';
-import { enableDefaultMetrics, metricsRegistry, recordHttpRequest } from './metrics.js';
+import { enableDefaultMetrics } from './metrics.js';
+import { buildMetricsServer, registerHttpMetrics } from './metrics-server.js';
 import { authPlugin } from './plugins/auth.js';
 import prismaPlugin from './plugins/prisma.js';
 import { storagePlugin } from './plugins/storage.js';
@@ -41,27 +42,11 @@ async function start() {
   // incompatible with z.toJSONSchema() output for complex types like nullable unions.
   fastify.setReplySerializer((payload) => JSON.stringify(payload));
 
-  // Record RED metrics for every request. The `route` label is the matched
-  // route pattern (e.g. /servers/:id), not the raw path, to bound cardinality.
-  // Exposition is served on a separate internal port (below), so /metrics
-  // scrapes never flow through this hook.
-  fastify.addHook('onResponse', async (request, reply) => {
-    recordHttpRequest(
-      request.method,
-      request.routeOptions?.url ?? '/*',
-      reply.statusCode,
-      reply.elapsedTime / 1000,
-    );
-  });
-
-  // Separate, internal-only server for Prometheus scraping. Bound to its own
-  // port so /metrics is NOT reachable through the public catch-all ingress;
-  // only the in-cluster ServiceMonitor hits it.
-  const metricsServer = Fastify({ logger: false });
-  metricsServer.get('/metrics', async (_request, reply) => {
-    reply.header('Content-Type', metricsRegistry.contentType);
-    return metricsRegistry.metrics();
-  });
+  // Record RED metrics for every request. Exposition is served on a separate
+  // internal port (started after listen, below) so /metrics scrapes never flow
+  // through this hook and the endpoint isn't on the public catch-all ingress.
+  registerHttpMetrics(fastify);
+  const metricsServer = buildMetricsServer();
 
   // Register plugins
   await fastify.register(sensible);
@@ -303,15 +288,21 @@ async function start() {
       host: config.server.host,
     });
     console.log(`Server listening on ${config.server.host}:${config.server.port}`);
+  } catch (error) {
+    fastify.log.error(error);
+    process.exit(1);
+  }
 
-    // Process metrics + the internal metrics endpoint, started after the main
-    // server is up so a scrape failure can't block serving traffic.
+  // Process metrics + the internal metrics endpoint, started after the main
+  // server is up. Metrics must never take down the registry: a bind failure
+  // here (e.g. the metrics port is already in use) degrades to "no metrics +
+  // a TargetDown alert", never a crash of an otherwise-healthy registry.
+  try {
     enableDefaultMetrics();
     await metricsServer.listen({ port: config.metrics.port, host: config.server.host });
     console.log(`Metrics listening on ${config.server.host}:${config.metrics.port}/metrics`);
   } catch (error) {
-    fastify.log.error(error);
-    process.exit(1);
+    console.error('Metrics server failed to start; continuing without metrics:', error);
   }
 }
 
