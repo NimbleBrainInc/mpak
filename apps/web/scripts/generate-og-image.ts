@@ -158,12 +158,11 @@ const html = `<!DOCTYPE html>
     </div>
 
     <div class="tagline">
-      The <em>secure registry</em> for MCP servers and skills
+      The <em>secure registry</em> for MCP servers
     </div>
 
     <div class="badges">
       <span class="badge gold">bundles</span>
-      <span class="badge purple">skills</span>
       <span class="badge">25 security controls</span>
       <span class="badge">trust scores</span>
     </div>

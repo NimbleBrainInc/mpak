@@ -3,4 +3,3 @@
 export * from './api-responses';
 export * from './auth';
 export * from './package';
-export * from './skill';

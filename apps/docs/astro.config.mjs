@@ -55,16 +55,6 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Skills',
-          items: [
-            { label: 'What are Skills?', slug: 'skills/what-are-skills' },
-            { label: 'Publishing', slug: 'skills/overview' },
-            { label: 'SKILL.md Reference', slug: 'skills/skill-md' },
-            { label: 'GitHub Action', slug: 'skills/github-action' },
-            { label: 'Monorepo Guide', slug: 'skills/monorepo-guide' },
-          ],
-        },
-        {
           label: 'Registry',
           items: [
             { label: 'How It Works', slug: 'registry/how-it-works' },
@@ -91,7 +81,6 @@ export default defineConfig({
             { label: 'show', slug: 'cli/show' },
             { label: 'pull', slug: 'cli/pull' },
             { label: 'run', slug: 'cli/run' },
-            { label: 'skill', slug: 'cli/skills' },
             { label: 'config', slug: 'cli/config' },
             { label: 'completion', slug: 'cli/completion' },
             { label: 'cache', slug: 'cli/cache' },

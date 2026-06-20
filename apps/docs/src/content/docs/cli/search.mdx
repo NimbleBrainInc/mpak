@@ -1,13 +1,11 @@
 ---
 title: mpak search
-description: Search for bundles and skills in the registry
+description: Search for bundles in the registry
 ---
 
-Find MCP bundles and skills in the mpak registry.
+Find MCP bundles in the mpak registry.
 
-## Unified Search
-
-Search across both bundles and skills at once:
+## Search
 
 ```bash
 mpak search <query>
@@ -16,14 +14,8 @@ mpak search <query>
 ### Examples
 
 ```bash
-# Search everything
+# Search for bundles
 mpak search postgres
-
-# Filter to bundles only
-mpak search --type bundle echo
-
-# Filter to skills only
-mpak search --type skill deploy
 
 # Sort and limit results
 mpak search --sort downloads --limit 10 mcp
@@ -33,7 +25,6 @@ mpak search --sort downloads --limit 10 mcp
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--type <type>` | Filter by type: `bundle`, `skill` | All types |
 | `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
 | `--limit <n>` | Maximum results to return | `20` |
 | `--offset <n>` | Pagination offset | `0` |
@@ -41,7 +32,7 @@ mpak search --sort downloads --limit 10 mcp
 
 ## Bundle Search
 
-Search only bundles with additional filtering:
+Search bundles with additional filtering by server type:
 
 ```bash
 mpak bundle search <query>
@@ -67,40 +58,6 @@ mpak bundle search --sort downloads --limit 10 mcp
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--type <type>` | Filter by server type: `node`, `python`, `binary` | All types |
-| `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
-| `--limit <n>` | Maximum results to return | `20` |
-| `--offset <n>` | Pagination offset | `0` |
-| `--json` | Output as JSON | Human-readable |
-
-## Skill Search
-
-Search only skills with skill-specific filtering:
-
-```bash
-mpak skill search <query>
-```
-
-### Examples
-
-```bash
-# Search skills
-mpak skill search deploy
-
-# Filter by tags or category
-mpak skill search --tags "ci,deploy" build
-mpak skill search --category development test
-
-# Filter by surface
-mpak skill search --surface claude-code lint
-```
-
-### Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--tags <tags>` | Filter by tags (comma-separated) | All tags |
-| `--category <category>` | Filter by category | All categories |
-| `--surface <surface>` | Filter by surface: `claude-code`, `claude-api`, `claude-ai` | All surfaces |
 | `--sort <field>` | Sort by: `downloads`, `recent`, `name` | `downloads` |
 | `--limit <n>` | Maximum results to return | `20` |
 | `--offset <n>` | Pagination offset | `0` |

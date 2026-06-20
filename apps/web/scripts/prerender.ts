@@ -22,7 +22,6 @@ const STATIC_ROUTES = [
   '/security/controls',
   '/publish',
   '/publish/bundles',
-  '/publish/skills',
   '/about',
   '/contact',
   '/privacy',
@@ -30,7 +29,7 @@ const STATIC_ROUTES = [
 ];
 
 // Browse pages - will wait longer for API data
-const DATA_ROUTES = ['/bundles', '/skills'];
+const DATA_ROUTES = ['/bundles'];
 
 const ALL_ROUTES = [...STATIC_ROUTES, ...DATA_ROUTES];
 

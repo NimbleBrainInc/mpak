@@ -3,28 +3,22 @@ import { API_URL, SITE_URL } from '../lib/siteConfig';
 
 interface BadgeSectionProps {
   packageName: string;
-  packageType?: 'bundle' | 'skill';
 }
 
 // Production URLs for the generated markdown (what users will copy)
 const PROD_API_URL = 'https://registry.mpak.dev';
 
-export default function BadgeSection({ packageName, packageType = 'bundle' }: BadgeSectionProps) {
+export default function BadgeSection({ packageName }: BadgeSectionProps) {
   const [copied, setCopied] = useState(false);
 
   const isProd = import.meta.env.PROD;
 
-  // API route differs by package type
-  const apiRoute = packageType === 'skill' ? 'skills' : 'bundles';
-  // Frontend route differs by package type
-  const siteRoute = packageType === 'skill' ? 'skills' : 'packages';
-
   // For preview: use current API server
-  const previewBadgeUrl = `${API_URL}/v1/${apiRoute}/${packageName}/badge.svg`;
+  const previewBadgeUrl = `${API_URL}/v1/bundles/${packageName}/badge.svg`;
 
   // For markdown snippet: always use production URLs so users get the right code
-  const badgeUrl = `${isProd ? PROD_API_URL : API_URL}/v1/${apiRoute}/${packageName}/badge.svg`;
-  const packageUrl = `${isProd ? SITE_URL : window.location.origin}/${siteRoute}/${packageName}`;
+  const badgeUrl = `${isProd ? PROD_API_URL : API_URL}/v1/bundles/${packageName}/badge.svg`;
+  const packageUrl = `${isProd ? SITE_URL : window.location.origin}/packages/${packageName}`;
 
   const markdownCode = `[![mpak](${badgeUrl})](${packageUrl})`;
 

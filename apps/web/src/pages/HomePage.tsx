@@ -17,11 +17,6 @@ const faqs = [
       'Bundles are pre-packaged MCP servers that give your AI new capabilities: database access, API integrations, file operations. They contain everything needed to run: binaries, configs, and metadata. Works across macOS, Linux, and Windows.',
   },
   {
-    question: 'What are Skills?',
-    answer:
-      'Skills are markdown instructions that teach your AI new behaviors and domain expertise: code review patterns, writing styles, specialized knowledge. They follow the Agent Skills specification and work across AI platforms.',
-  },
-  {
     question: 'How is mpak different from the MCP Registry?',
     answer:
       'The MCP Registry is a metaregistry that aggregates server listings from multiple sources. mpak is a package registry: it hosts the actual bundles, scans them for security, computes trust scores, and serves them to the CLI. The MCP Registry can point to mpak as a source.',
@@ -34,7 +29,7 @@ const faqs = [
   {
     question: 'How do I install a package?',
     answer:
-      'First install the CLI: npm install -g @nimblebrain/mpak. Then for bundles: mpak bundle pull @scope/bundle-name. For skills: mpak skill install @scope/skill-name.',
+      'First install the CLI: npm install -g @nimblebrain/mpak. Then pull a bundle: mpak bundle pull @scope/bundle-name.',
   },
   {
     question: 'Is mpak free to use?',
@@ -58,7 +53,7 @@ export default function HomePage() {
 
   // SEO for homepage
   useSEO({
-    title: 'mpak - Secure MCP Server & Skills Registry | Open Source',
+    title: 'mpak - Secure MCP Server Registry | Open Source',
     description:
       'Open-source package registry for MCP servers. Every bundle scanned with 25 security controls. Trust scores on every package.',
     canonical: 'https://www.mpak.dev/',
@@ -66,7 +61,6 @@ export default function HomePage() {
       'ai',
       'package manager',
       'mcp',
-      'agent skills',
       'bundles',
       'ai tools',
       'model context protocol',
@@ -189,8 +183,7 @@ export default function HomePage() {
               OPEN SOURCE · SECURE · MCP-NATIVE
             </span>
             <h1 className="text-4xl sm:text-5xl font-bold text-mpak-gray-900 tracking-tight">
-              The <span className="text-accent-gold-400">secure registry</span> for MCP servers and
-              skills.
+              The <span className="text-accent-gold-400">secure registry</span> for MCP servers.
             </h1>
             <p className="mt-4 text-lg text-mpak-gray-600">
               Every bundle scanned. Every trust score public. Open source from day one.
@@ -237,13 +230,6 @@ export default function HomePage() {
               className="text-accent-gold-400 hover:text-accent-gold-300 font-medium"
             >
               Browse bundles
-            </Link>
-            {' · '}
-            <Link
-              to="/skills"
-              className="text-accent-purple-400 hover:text-accent-purple-300 font-medium"
-            >
-              Browse skills
             </Link>
             {' · '}
             <Link to="/publish" className="text-mpak-gray-600 hover:text-mpak-gray-800 font-medium">
@@ -496,7 +482,7 @@ export default function HomePage() {
       >
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold text-mpak-gray-900 mb-8 text-center">Extend your AI</h2>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="max-w-xl mx-auto">
             {/* Bundles */}
             <div className="workshop-card workshop-card-gold p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -551,61 +537,6 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
-
-            {/* Skills */}
-            <div className="workshop-card workshop-card-purple p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-accent-purple-glow rounded-lg flex items-center justify-center border border-accent-purple-border">
-                  <svg
-                    aria-hidden="true"
-                    className="w-5 h-5 text-accent-purple-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-mpak-gray-900">Skills</h3>
-                  <p className="text-xs text-mpak-gray-500 uppercase tracking-wide">Expertise</p>
-                </div>
-              </div>
-              <p className="text-sm text-mpak-gray-600 mb-4">
-                Instructions that teach your AI new behaviors and domain knowledge. Shape how it
-                thinks and responds.
-              </p>
-              <ul className="text-sm text-mpak-gray-500 space-y-1 mb-5">
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 bg-accent-purple-400 rounded-full"></span>
-                  Code review patterns
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 bg-accent-purple-400 rounded-full"></span>
-                  Writing styles
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 bg-accent-purple-400 rounded-full"></span>
-                  Domain expertise
-                </li>
-              </ul>
-              <div className="flex items-center justify-between">
-                <code className="text-xs bg-surface px-2 py-1 rounded text-mpak-gray-600 font-mono">
-                  mpak skill install @org/skill
-                </code>
-                <Link
-                  to="/skills"
-                  className="text-sm text-accent-purple-400 hover:text-accent-purple-300 font-medium"
-                >
-                  Browse skills →
-                </Link>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -621,8 +552,7 @@ export default function HomePage() {
               Built something for AI?
             </h3>
             <p className="text-mpak-gray-500 text-sm">
-              Publish bundles or skills to mpak. Security scanning, verified provenance, one-command
-              installs.
+              Publish bundles to mpak. Security scanning, verified provenance, one-command installs.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
@@ -631,12 +561,6 @@ export default function HomePage() {
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-gold-400 text-mpak-dark font-medium rounded-lg hover:bg-accent-gold-500 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all"
             >
               Publish a bundle →
-            </Link>
-            <Link
-              to="/publish/skills"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-purple-400 text-white font-medium rounded-lg hover:bg-accent-purple-400/90 transition-all"
-            >
-              Publish a skill →
             </Link>
           </div>
         </div>

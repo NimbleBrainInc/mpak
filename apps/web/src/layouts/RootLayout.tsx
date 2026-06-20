@@ -23,13 +23,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         Bundles
       </Link>
       <Link
-        to="/skills"
-        className="text-sm font-medium text-mpak-gray-600 hover:text-accent-purple-400 transition-colors"
-        onClick={() => setMobileMenuOpen(false)}
-      >
-        Skills
-      </Link>
-      <Link
         to="/publish"
         className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
         onClick={() => setMobileMenuOpen(false)}

@@ -91,18 +91,6 @@ POST /v1/bundles/announce
 
 Used by the `mcpb-pack` GitHub Action to register a new bundle version. Requires a GitHub OIDC token in the `Authorization` header. **Not intended for direct use.** See [Publishing](/bundles/publishing).
 
-## Skill Endpoints
-
-{/* TODO: Document skill-specific endpoints once finalized. Expected to mirror bundle endpoints: /v1/skills/search, /v1/skills/<scope>/<name>, /v1/skills/announce */}
-
-Skills follow the same pattern as bundles:
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /v1/skills/search?q=<query>` | Search skills |
-| `GET /v1/skills/<scope>/<name>` | Get skill metadata |
-| `POST /v1/skills/announce` | Announce a skill (via GitHub Action) |
-
 ## Badge Endpoints
 
 Generate SVG badges for your README:
