@@ -33,12 +33,6 @@ my-server.mcpb
 
 `manifest.json` is the required entry point. It declares the package name, version, server type (`node`, `python`, or `binary`), platform-specific run commands, and the tools/prompts/resources the server exposes. The schema is defined in `packages/schemas`.
 
-### Skills
-
-Skills are the knowledge counterpart to bundles. While bundles give an AI agent the ability to *do* things (call APIs, run commands), skills give it the ability to *think* about things (domain expertise, workflow instructions).
-
-A skill is a markdown file (`SKILL.md`) with YAML frontmatter that declares metadata (name, description, category, trigger phrases). Skills can be packaged as `.skill` files (also ZIP archives) and distributed through the registry.
-
 ### Trust levels
 
 Every bundle receives a trust score from the MTF scanner. The score has two parts: a level (L1 through L4) and a numeric score (0 to 100) representing how many controls passed within that level. See the full framework at [mpaktrust.org](https://mpaktrust.org).
@@ -161,13 +155,13 @@ scanner  (standalone Python project, not in pnpm workspaces)
 
 ### `packages/schemas`
 
-Zod schemas and inferred TypeScript types for the MCPB manifest format, API responses, trust scores, skills, and validation helpers. This is the source of truth for data shapes across the entire stack.
+Zod schemas and inferred TypeScript types for the MCPB manifest format, API responses, trust scores, and validation helpers. This is the source of truth for data shapes across the entire stack.
 
-**Key exports:** `BundleSchema`, `SkillSchema`, `MpakJsonSchema`, `SearchParamsSchema`, validation functions.
+**Key exports:** `BundleSchema`, `MpakJsonSchema`, `SearchParamsSchema`, validation functions.
 
 ### `packages/sdk-typescript`
 
-TypeScript SDK for interacting with a mpak registry. Wraps the HTTP API with typed methods for searching, downloading, and inspecting bundles and skills.
+TypeScript SDK for interacting with a mpak registry. Wraps the HTTP API with typed methods for searching, downloading, and inspecting bundles.
 
 ```typescript
 import { MpakClient } from "@nimblebrain/mpak-sdk";
@@ -183,16 +177,11 @@ The `mpak` command-line tool. Built with [Commander.js](https://github.com/tj/co
 
 | Command | Description |
 |---------|-------------|
-| `mpak search <query>` | Search bundles and skills |
-| `mpak bundle search <query>` | Search bundles only |
+| `mpak search <query>` | Search bundles |
+| `mpak bundle search <query>` | Search bundles |
 | `mpak bundle show <name>` | Show bundle details and trust score |
 | `mpak bundle pull <name>` | Download a bundle |
 | `mpak bundle run <name>` | Download and run an MCP server |
-| `mpak skill search <query>` | Search skills |
-| `mpak skill show <name>` | Show skill details |
-| `mpak skill install <name>` | Install a skill to `~/.claude/skills/` |
-| `mpak skill validate <path>` | Validate a skill directory |
-| `mpak skill pack <path>` | Create a `.skill` bundle |
 | `mpak config set <pkg> <key=value>` | Set config for a package |
 | `mpak config get <pkg>` | Show config for a package |
 
@@ -205,7 +194,6 @@ The registry API server. Fastify with Prisma ORM on PostgreSQL. Handles bundle s
 **API surface:**
 
 - `/v1/bundles/*` - Native mpak API for bundle operations
-- `/v1/skills/*` - Native mpak API for skill operations
 - `/v0.1/servers` - MCP Registry spec compatibility (so MCP clients can discover bundles through the standard protocol)
 - `/app/*` - Routes used by the web UI (auth, admin, package claiming, scan results)
 - `/health` - Health check
@@ -217,7 +205,7 @@ The registry API server. Fastify with Prisma ORM on PostgreSQL. Handles bundle s
 
 ### `apps/web`
 
-React SPA for browsing the registry. Built with Vite, Tailwind CSS 4, React Router, and TanStack Query. Includes trust score visualization, bundle details, skill browsing, and an admin panel.
+React SPA for browsing the registry. Built with Vite, Tailwind CSS 4, React Router, and TanStack Query. Includes trust score visualization, bundle details, and an admin panel.
 
 ### `apps/scanner`
 
@@ -237,7 +225,7 @@ Produces a trust score from L1 (Basic) to L4 (Attested) based on which controls 
 
 ### `apps/docs`
 
-Documentation site. Covers CLI usage, bundle format, skills, integrations (VS Code, Claude Desktop, Cursor, Claude Code), and security controls.
+Documentation site. Covers CLI usage, bundle format, integrations (VS Code, Claude Desktop, Cursor, Claude Code), and security controls.
 
 ## Development setup
 
@@ -290,13 +278,13 @@ cd apps/registry && npx prisma migrate dev && cd ../..
 
 ### 5. Seed example data
 
-Populate the database with example skills so the UI has something to show:
+Populate the database with example bundles so the UI has something to show:
 
 ```bash
 cd apps/registry && npm run db:seed && cd ../..
 ```
 
-This inserts a handful of real skills (`@nimblebraininc/docs-auditor`, `@nimblebraininc/seo-optimizer`, `@nimblebraininc/strategic-thought-partner`) with multiple versions, download counts, tags, and triggers. Safe to run multiple times (uses upserts).
+This inserts a handful of example bundles with multiple versions, download counts, and trust scores. Safe to run multiple times (uses upserts).
 
 To add more seed data, edit `apps/registry/prisma/seed.ts`.
 

@@ -1,6 +1,6 @@
 # mpak
 
-mpak is an open-source MCP bundle registry: search, download, publish, and scan MCPB bundles and skills.
+mpak is an open-source MCP bundle registry: search, download, publish, and scan MCPB bundles. It does one thing: package MCP servers as portable, security-scanned MCPB bundles. (Agent Skills are out of scope; skill packaging and distribution live in the `skills.sh` / `npx skills` ecosystem.)
 
 ## Monorepo Structure
 
