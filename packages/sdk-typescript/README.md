@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/npm/l/@nimblebrain/mpak-sdk)](https://github.com/NimbleBrainInc/mpak/blob/main/packages/sdk-typescript/LICENSE)
 [![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
 
-TypeScript SDK for the mpak registry — search, download, cache, configure, and run MCPB bundles and Agent Skills.
+TypeScript SDK for the mpak registry — search, download, cache, configure, and run MCPB bundles.
 
 ## Installation
 
@@ -181,21 +181,6 @@ mpak.config.clearPackageConfigValue('@scope/name', 'api_key');  // remove one ke
 mpak.config.listPackagesWithConfig();               // list configured packages
 ```
 
-### Search & Download Skills
-
-```typescript
-const mpak = new MpakSDK();
-
-const skills = await mpak.client.searchSkills({ q: 'crm', limit: 10 });
-for (const skill of skills.skills) {
-  console.log(`${skill.name}: ${skill.description}`);
-}
-
-// Download skill with SHA256 integrity verification
-const download = await mpak.client.getSkillDownload('@nimbletools/folk-crm');
-const data = await mpak.client.downloadContent(download.url, download.skill.sha256);
-```
-
 ## Constructor Options
 
 ```typescript
@@ -257,16 +242,6 @@ Properties: `config` (ConfigManager), `client` (MpakClient), `cache` (BundleCach
 | `getBundleDownload(name, version, platform?)` | Get download URL and metadata |
 | `downloadBundle(name, version?)` | Download bundle with integrity verification |
 | `downloadContent(url, sha256)` | Download any content with SHA256 verification |
-
-#### Skill Methods
-
-| Method | Description |
-|---|---|
-| `searchSkills(params?)` | Search for skills |
-| `getSkill(name)` | Get skill details |
-| `getSkillDownload(name)` | Get latest version download info |
-| `getSkillVersionDownload(name, version)` | Get specific version download info |
-| `downloadSkillBundle(name, version?)` | Download skill bundle with integrity verification |
 
 #### Static Methods
 

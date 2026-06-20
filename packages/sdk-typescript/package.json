@@ -1,7 +1,7 @@
 {
   "name": "@nimblebrain/mpak-sdk",
   "version": "0.8.0",
-  "description": "TypeScript SDK for mpak registry - MCPB bundles and Agent Skills",
+  "description": "TypeScript SDK for mpak registry - MCPB bundles",
   "author": "NimbleBrain Inc <engineering@mpak.dev>",
   "license": "Apache-2.0",
   "repository": {
@@ -18,8 +18,7 @@
     "mcp",
     "sdk",
     "mcpb",
-    "model-context-protocol",
-    "agent-skills"
+    "model-context-protocol"
   ],
   "publishConfig": {
     "access": "public",

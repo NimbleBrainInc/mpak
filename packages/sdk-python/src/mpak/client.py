@@ -1,4 +1,4 @@
-"""mpak SDK client for bundle and skill resolution."""
+"""mpak SDK client for bundle resolution."""
 
 import json
 import zipfile
@@ -18,7 +18,7 @@ class MpakClient:
     """Client for interacting with the mpak registry.
 
     This client provides methods to search, resolve, and download MCPB bundles
-    and Agent Skills from the mpak registry.
+    from the mpak registry.
 
     Example:
         >>> client = MpakClient()

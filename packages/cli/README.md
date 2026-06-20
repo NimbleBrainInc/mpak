@@ -1,6 +1,6 @@
 # @nimblebrain/mpak
 
-CLI for downloading MCPB bundles and Agent Skills from the [mpak registry](https://mpak.dev).
+CLI for downloading MCPB bundles from the [mpak registry](https://mpak.dev).
 
 ## Installation
 
@@ -12,12 +12,10 @@ npm install -g @nimblebrain/mpak
 
 ### Search
 
-Search across both bundles and skills:
+Search bundles:
 
 ```bash
 mpak search <query>
-mpak search <query> --type bundle
-mpak search <query> --type skill
 ```
 
 ### Bundles
@@ -37,31 +35,6 @@ mpak bundle pull @scope/name@1.0.0
 mpak run @scope/name
 mpak bundle run @scope/name --update
 mpak bundle run --local ./path/to/bundle.mcpb
-```
-
-### Skills
-
-```bash
-# Validate a skill directory
-mpak skill validate ./path/to/skill
-
-# Pack a skill into a .skill bundle
-mpak skill pack ./path/to/skill
-
-# Search skills in the registry
-mpak skill search <query>
-
-# Show skill details
-mpak skill show @scope/name
-
-# Download a .skill bundle
-mpak skill pull @scope/name
-
-# Install a skill to ~/.claude/skills/
-mpak skill install @scope/name
-
-# List installed skills
-mpak skill list
 ```
 
 ### Configuration

@@ -72,7 +72,6 @@ describe('MCP Registry routes', () => {
     app.decorate('repositories', {
       packages: packageRepo,
       users: {},
-      skills: {},
     });
 
     const { mcpRegistryRoutes } = await import('../src/routes/mcp/v0.1/servers.js');

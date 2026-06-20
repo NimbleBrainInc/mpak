@@ -9,7 +9,7 @@ describe('createProgram', () => {
 
   it('should have a description', () => {
     const program = createProgram();
-    expect(program.description()).toBe('CLI for MCP bundles and Agent Skills');
+    expect(program.description()).toBe('CLI for MCP bundles');
   });
 
   it('should have version option', () => {

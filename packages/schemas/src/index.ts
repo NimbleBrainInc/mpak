@@ -15,8 +15,6 @@ export * from './package.js';
 
 // MCP registry server.json (ServerDetail) schema
 export * from './server-detail.js';
-// Skill schemas
-export * from './skill.js';
 
 // Validation helpers
 export * from './validation.js';

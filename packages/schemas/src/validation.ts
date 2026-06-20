@@ -16,12 +16,6 @@ import {
 import { UserProfileSchema } from './auth.js';
 import { MpakJsonSchema } from './mpak-json.js';
 import { PackageSearchParamsSchema } from './package.js';
-import {
-  SkillAnnounceRequestSchema,
-  SkillDetailSchema,
-  SkillFrontmatterSchema,
-  SkillSearchResponseSchema,
-} from './skill.js';
 
 // =============================================================================
 // Validation Result Type
@@ -137,28 +131,4 @@ export function validateUserProfile(data: unknown) {
 /** Validate data as an mpak.json file. */
 export function validateMpakJson(data: unknown) {
   return validate(MpakJsonSchema, data);
-}
-
-// =============================================================================
-// Skill Validators
-// =============================================================================
-
-/** Validate SKILL.md frontmatter. */
-export function validateSkillFrontmatter(data: unknown) {
-  return validate(SkillFrontmatterSchema, data);
-}
-
-/** Validate a skill announce request. */
-export function validateSkillAnnounceRequest(data: unknown) {
-  return validate(SkillAnnounceRequestSchema, data);
-}
-
-/** Validate a skill search response. */
-export function validateSkillSearchResponse(data: unknown) {
-  return validate(SkillSearchResponseSchema, data);
-}
-
-/** Validate a skill detail response. */
-export function validateSkillDetail(data: unknown) {
-  return validate(SkillDetailSchema, data);
 }

@@ -6,10 +6,7 @@
  */
 
 // Re-export input types from schemas — all fields optional (pre-default).
-export type {
-  BundleSearchParamsInput as BundleSearchParams,
-  SkillSearchParamsInput as SkillSearchParams,
-} from '@nimblebrain/mpak-schemas';
+export type { BundleSearchParamsInput as BundleSearchParams } from '@nimblebrain/mpak-schemas';
 
 /**
  * Query params for `MpakClient.searchServers`. Mirrors the

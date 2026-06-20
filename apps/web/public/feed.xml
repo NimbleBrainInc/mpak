@@ -3,10 +3,170 @@
   <channel>
     <title>mpak - New Packages</title>
     <link>https://www.mpak.dev</link>
-    <description>Recently published MCP server bundles on mpak.</description>
+    <description>Recently published MCP server bundles and agent skills on mpak.</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 20 Jun 2026 21:41:50 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 20 Jun 2026 21:54:29 GMT</lastBuildDate>
     <atom:link href="https://www.mpak.dev/feed.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>@nimblebraininc/docs-auditor</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/docs-auditor</link>
+      <description>Systematically audit documentation against actual codebase to determine accuracy, staleness, and relevance. Use when auditing docs for accuracy, cleaning up stale docs after refactoring, validating docs match implementation, or building documentation health reports.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/docs-auditor</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/qa-tester</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/qa-tester</link>
+      <description>Comprehensive QA engineer that designs test strategies, writes test cases, identifies edge cases, and validates implementations. Use when writing tests, reviewing test coverage, planning QA strategy, identifying edge cases, or validating feature implementations. Triggers include &quot;write tests for&quot;, &quot;test this feature&quot;, &quot;what are the edge cases&quot;, &quot;review test coverage&quot;, or &quot;QA this&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/qa-tester</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/skill-author</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/skill-author</link>
+      <description>Creates production-grade Claude Code skills from natural language descriptions. Use when building new skills, requested with &quot;build me a skill that...&quot;, &quot;create a skill for...&quot;, or &quot;I need a skill to...&quot;. Generates complete skill files with proper frontmatter, context references, and quality self-assessment.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/skill-author</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/seo-optimizer</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/seo-optimizer</link>
+      <description>Analyzes and optimizes content for search engine visibility. Use when reviewing blog posts for SEO, optimizing landing pages, checking meta descriptions, analyzing keyword usage, or improving content discoverability. Triggers include &quot;optimize for SEO&quot;, &quot;check SEO&quot;, &quot;improve search ranking&quot;, or &quot;keyword analysis&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/seo-optimizer</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/strategic-thought-partner</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/strategic-thought-partner</link>
+      <description>Collaborative strategic thinking for founders, operators, and decision-makers. Use when someone needs help working through business strategy, product direction, positioning, prioritization, or major decisions. Triggers include requests to think through strategy, evaluate tradeoffs, pressure-test ideas, clarify direction, scope products, or navigate pivots. Not for execution, for clarification and decision-making.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/strategic-thought-partner</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/whitepaper-editor</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/whitepaper-editor</link>
+      <description>Brutal technical white paper editor that performs merciless review with research-backed validation. Use when reviewing, editing, or improving white papers, technical documents, research papers, or any document requiring rigorous technical scrutiny. Triggers on requests to review white papers, validate citations, check technical accuracy, perform gap analysis, or score document quality.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/whitepaper-editor</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/blog-editor</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/blog-editor</link>
+      <description>Brutal content editor that tears apart drafts for substance, readability, and voice alignment. Use when reviewing blog posts, articles, or marketing copy. Triggers include &quot;review this draft&quot;, &quot;edit my post&quot;, &quot;check this article&quot;, &quot;is this ready to publish&quot;, or &quot;tear apart my writing&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/blog-editor</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/contrarian-thought-partner</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/contrarian-thought-partner</link>
+      <description>Brutal, honest critique of strategies, plans, and analyses. Use when someone explicitly wants their thinking torn apart, stress-tested to destruction, or called out on weak logic. Triggers include requests like &quot;tear this apart&quot;, &quot;be brutal&quot;, &quot;what&apos;s wrong with this&quot;, &quot;play devil&apos;s advocate&quot;, &quot;tell me why this won&apos;t work&quot;, or &quot;poke holes in this&quot;. This is adversarial by design, not for collaborative exploration, but for ruthless pressure-testing.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/contrarian-thought-partner</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/zoom</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/zoom</link>
+      <description>Handles Zoom meeting creation with proper invitation delivery. Use when scheduling Zoom meetings or when user mentions meeting participants. Triggers include &quot;schedule zoom&quot;, &quot;create meeting with&quot;, &quot;zoom call with&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/zoom</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/googlesheets</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/googlesheets</link>
+      <description>Connection skill for Google Sheets MCP integration. Provides guidance on spreadsheet ID extraction, tool chaining, and avoiding common hallucination patterns. Use when searching sheets, listing tables, or reading data.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/googlesheets</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/ipinfo</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/ipinfo</link>
+      <description>Guides IP lookups with context reuse and proper parameters. Triggers on IP lookups, VPN detection, abuse contacts.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/ipinfo</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/folk-crm</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/folk-crm</link>
+      <description>Guides Folk CRM tool usage with correct routing for groups, people, and companies. Use when interacting with Folk CRM tools. Triggers include &quot;folk&quot;, &quot;group&quot;, &quot;leads&quot;, &quot;contacts&quot;, &quot;CRM&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/folk-crm</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/googlecalendar</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/googlecalendar</link>
+      <description>Manages Google Calendar events with proper timezone handling. Use when scheduling, updating, or patching calendar events. Triggers include &quot;schedule meeting&quot;, &quot;update event&quot;, &quot;change meeting time&quot;, &quot;reschedule&quot;, &quot;make it 30 minutes&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/googlecalendar</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/build-mcpb</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/build-mcpb</link>
+      <description>Build MCP servers end-to-end. Scaffolds a production-ready Python or TypeScript server from API documentation, implements tools, validates the MCPB bundle, creates an embedded skill resource, and guides release to the mpak registry. Covers the full lifecycle from API analysis to published bundle. Use when building a new MCP server, wrapping an API, or creating an integration. Triggers include &quot;build an MCP server&quot;, &quot;create a server for X&quot;, &quot;/build-mcpb&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/build-mcpb</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/nimblebrain-contributor</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/nimblebrain-contributor</link>
+      <description>Get started contributing to NimbleBrain open source. Find available integrations to build, set up your environment, propose new ideas, or check on your work — with depth available whenever you want it. Triggers include &quot;I&apos;m a new contributor&quot;, &quot;onboard me&quot;, &quot;what should I build&quot;, &quot;show me open issues&quot;, &quot;file an issue&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/nimblebrain-contributor</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/openweathermap</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/openweathermap</link>
+      <description>Handles location resolution and geocoding fallback for OpenWeatherMap weather queries. Use when getting weather data, forecasts, or air quality. Triggers include &quot;weather in&quot;, &quot;forecast for&quot;, &quot;air quality&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/openweathermap</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/pdfco</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/pdfco</link>
+      <description>Connection skill for PDF.co MCP server. Provides guidance on HTML-to-PDF conversion, document manipulation, and best practices for reliable PDF generation.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/pdfco</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/asana</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/asana</link>
+      <description>Guides Asana tool usage with correct workspace/project discovery, task creation, and GID handling. Use when interacting with Asana tools. Triggers include &quot;asana&quot;, &quot;task&quot;, &quot;project&quot;, &quot;my tasks&quot;, &quot;create task&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/asana</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/upjack-app-builder</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/upjack-app-builder</link>
+      <description>Builds complete, compliant NimbleBrain Upjack apps from natural language descriptions. Generates manifest, entity schemas, skills, context, seed data, and server entry point. Use when creating a new Upjack app, building an AI-native app, or scaffolding a domain-specific application. Triggers include &quot;create me a todo app&quot;, &quot;build an upjack app&quot;, &quot;new upjack app for&quot;, &quot;scaffold an app&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/upjack-app-builder</guid>
+    </item>
+    <item>
+      <title>@nimblebraininc/zoho-crm</title>
+      <link>https://www.mpak.dev/skills/@nimblebraininc/zoho-crm</link>
+      <description>Guides Zoho CRM tool usage with correct module routing for leads, contacts, deals, and tasks. Use when interacting with Zoho CRM tools. Triggers include &quot;zoho&quot;, &quot;leads&quot;, &quot;contacts&quot;, &quot;deals&quot;, &quot;tasks&quot;, &quot;overdue&quot;, &quot;CRM&quot;.</description>
+      <pubDate>Sat, 20 Jun 2026 21:54:29 GMT</pubDate>
+      <category>Skills</category>
+      <guid>https://www.mpak.dev/skills/@nimblebraininc/zoho-crm</guid>
+    </item>
     <item>
       <title>IPGeolocation.io MCP Server v1.0.20</title>
       <link>https://www.mpak.dev/packages/@ipgeolocation/ipgeolocation-io-mcp</link>
@@ -246,94 +406,6 @@
       <pubDate>Sat, 09 May 2026 22:59:56 GMT</pubDate>
       <category>Bundles</category>
       <guid>https://www.mpak.dev/packages/@nimblebraininc/synapse-crm</guid>
-    </item>
-    <item>
-      <title>obsidian-cli v0.1.5</title>
-      <link>https://www.mpak.dev/packages/@ovaculos/obsidian-cli</link>
-      <description>MCP server for Obsidian — read, write, search, and manage notes via the Obsidian CLI</description>
-      <pubDate>Tue, 05 May 2026 18:14:46 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@ovaculos/obsidian-cli</guid>
-    </item>
-    <item>
-      <title>Mailchimp v1.0.0</title>
-      <link>https://www.mpak.dev/packages/@half2me/mailchimp-mcp-server</link>
-      <description>MCP server for Mailchimp Marketing API with 100+ tools for managing audiences, campaigns, subscribers, templates, automations, and more.</description>
-      <pubDate>Thu, 09 Apr 2026 21:38:52 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@half2me/mailchimp-mcp-server</guid>
-    </item>
-    <item>
-      <title>@forge-builder/base-mcp-server v1.0.21</title>
-      <link>https://www.mpak.dev/packages/@forge-builder/base-mcp-server</link>
-      <description>MCP Server for Base — gas prices, block numbers, balances, and bytecode lookups via direct Base RPC calls</description>
-      <pubDate>Sun, 05 Apr 2026 16:20:48 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@forge-builder/base-mcp-server</guid>
-    </item>
-    <item>
-      <title>@nimblebraininc/mcp-dev-summit v0.4.0</title>
-      <link>https://www.mpak.dev/packages/@nimblebraininc/mcp-dev-summit</link>
-      <description>Conference companion for MCP Dev Summit NA 2026 — search sessions, build a personal schedule, capture notes, and get AI-powered recommendations</description>
-      <pubDate>Thu, 02 Apr 2026 04:17:02 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@nimblebraininc/mcp-dev-summit</guid>
-    </item>
-    <item>
-      <title>@nimblebraininc/mcp-polygon v0.1.0</title>
-      <link>https://www.mpak.dev/packages/@nimblebraininc/mcp-polygon</link>
-      <description>Financial market data, technical indicators, and SEC filings MCP service powered by Polygon.io API</description>
-      <pubDate>Sat, 28 Mar 2026 03:32:09 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@nimblebraininc/mcp-polygon</guid>
-    </item>
-    <item>
-      <title>@joecardoso13/asana v0.3.0</title>
-      <link>https://www.mpak.dev/packages/@joecardoso13/asana</link>
-      <description>MCP server for the Asana API</description>
-      <pubDate>Sat, 21 Mar 2026 14:39:56 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@joecardoso13/asana</guid>
-    </item>
-    <item>
-      <title>@joecardoso13/slack v0.3.0</title>
-      <link>https://www.mpak.dev/packages/@joecardoso13/slack</link>
-      <description>MCP server for the Slack API</description>
-      <pubDate>Sat, 21 Mar 2026 14:23:55 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@joecardoso13/slack</guid>
-    </item>
-    <item>
-      <title>@joecardoso13/hubspot v0.3.0</title>
-      <link>https://www.mpak.dev/packages/@joecardoso13/hubspot</link>
-      <description>MCP server for the HubSpot CRM API — manage contacts, companies, and deals</description>
-      <pubDate>Sat, 21 Mar 2026 12:59:53 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@joecardoso13/hubspot</guid>
-    </item>
-    <item>
-      <title>@joecardoso13/resend v0.3.0</title>
-      <link>https://www.mpak.dev/packages/@joecardoso13/resend</link>
-      <description>MCP server for the Resend email API — send emails, manage contacts, and track delivery</description>
-      <pubDate>Fri, 20 Mar 2026 21:36:11 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@joecardoso13/resend</guid>
-    </item>
-    <item>
-      <title>Alpha Vantage MCP v0.1.0</title>
-      <link>https://www.mpak.dev/packages/@justnsmith/alpha-vantage-mcp</link>
-      <description>MCP server exposing Alpha Vantage market data — stock quotes, historical prices, company fundamentals, technical indicators, news sentiment, and earnings history.</description>
-      <pubDate>Mon, 16 Mar 2026 02:47:12 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@justnsmith/alpha-vantage-mcp</guid>
-    </item>
-    <item>
-      <title>@nimblebraininc/todoist v0.1.0</title>
-      <link>https://www.mpak.dev/packages/@nimblebraininc/todoist</link>
-      <description>MCP server for the Todoist API</description>
-      <pubDate>Tue, 03 Mar 2026 15:21:20 GMT</pubDate>
-      <category>Bundles</category>
-      <guid>https://www.mpak.dev/packages/@nimblebraininc/todoist</guid>
     </item>
   </channel>
 </rss>

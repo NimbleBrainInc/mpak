@@ -68,7 +68,6 @@ describe('Scanner Routes', () => {
     app.decorate('repositories', {
       packages: packageRepo,
       users: {},
-      skills: {},
     });
     app.decorate('storage', createMockStorage());
     app.decorate('authenticate', async () => {});

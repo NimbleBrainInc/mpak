@@ -17,7 +17,6 @@ import { mcpRegistryRoutes } from './routes/mcp/v0.1/servers.js';
 import { packageRoutes } from './routes/packages.js';
 import { scannerRoutes, securityRoutes } from './routes/scanner.js';
 import { bundleRoutes } from './routes/v1/bundles.js';
-import { skillRoutes } from './routes/v1/skills.js';
 
 async function start() {
   // Validate configuration
@@ -75,7 +74,6 @@ async function start() {
             ],
       tags: [
         { name: 'bundles', description: 'Bundle management API' },
-        { name: 'skills', description: 'Agent Skills API' },
         { name: 'mcp-registry', description: 'MCP Registry API v0.1' },
         { name: 'health', description: 'Health check endpoints' },
       ],
@@ -184,24 +182,6 @@ async function start() {
       await instance.register(securityRoutes); // /@:scope/:package/security routes
     },
     { prefix: '/v1/bundles' },
-  );
-
-  // Skills API
-  await fastify.register(
-    async (instance) => {
-      await instance.register(cors, {
-        origin: true,
-        methods: ['GET', 'HEAD', 'POST'],
-        credentials: false,
-      });
-      // Stricter rate limit for skill operations: 10 req/min per IP
-      await instance.register(rateLimit, {
-        max: 10,
-        timeWindow: '1 minute',
-      });
-      await instance.register(skillRoutes);
-    },
-    { prefix: '/v1/skills' },
   );
 
   // MCP Registry API — mounted at both /v0.1 (the upstream MCP Registry

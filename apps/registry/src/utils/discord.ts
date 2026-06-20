@@ -5,25 +5,21 @@
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
-export type PackageType = 'bundle' | 'skill';
-
 interface AnnounceNotification {
   name: string;
   version: string;
-  type: PackageType;
   repo?: string;
 }
 
 /**
- * Send a non-blocking Discord notification for a new package announcement.
+ * Send a non-blocking Discord notification for a new bundle announcement.
  * Errors are silently logged, never thrown.
  */
 export function notifyDiscordAnnounce(data: AnnounceNotification): void {
-  const typeLabel = data.type === 'bundle' ? 'Bundle' : 'Skill';
-  const registryUrl = `https://mpak.dev/${data.type === 'bundle' ? 'packages' : 'skills'}/${encodeURIComponent(data.name)}`;
+  const registryUrl = `https://mpak.dev/packages/${encodeURIComponent(data.name)}`;
 
   const content = [
-    `**New ${typeLabel} Published**`,
+    `**New Bundle Published**`,
     `**${data.name}** v${data.version}`,
     data.repo ? `[GitHub](https://github.com/${data.repo})` : null,
     `[View on mpak.dev](${registryUrl})`,

@@ -1,7 +1,7 @@
 /**
  * @nimblebrain/mpak-sdk
  *
- * TypeScript SDK for mpak registry - MCPB bundles and Agent Skills
+ * TypeScript SDK for mpak registry - MCPB bundles
  *
  * @example
  * ```typescript

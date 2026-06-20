@@ -1,7 +1,7 @@
 {
   "name": "@nimblebrain/mpak-registry",
   "version": "0.1.0",
-  "description": "mpak registry server - bundle, skill, and MCP server registry",
+  "description": "mpak registry server - bundle and MCP server registry",
   "main": "dist/index.js",
   "private": true,
   "type": "module",

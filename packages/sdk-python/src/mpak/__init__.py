@@ -1,4 +1,4 @@
-"""mpak Python SDK - MCPB bundles and Agent Skills from the mpak registry.
+"""mpak Python SDK - MCPB bundles from the mpak registry.
 
 Example:
     >>> from mpak import MpakClient
