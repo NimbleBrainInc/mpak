@@ -177,8 +177,8 @@ The `mpak` command-line tool. Built with [Commander.js](https://github.com/tj/co
 
 | Command | Description |
 |---------|-------------|
-| `mpak search <query>` | Search bundles and skills |
-| `mpak bundle search <query>` | Search bundles only |
+| `mpak search <query>` | Search bundles |
+| `mpak bundle search <query>` | Search bundles |
 | `mpak bundle show <name>` | Show bundle details and trust score |
 | `mpak bundle pull <name>` | Download a bundle |
 | `mpak bundle run <name>` | Download and run an MCP server |
@@ -278,13 +278,13 @@ cd apps/registry && npx prisma migrate dev && cd ../..
 
 ### 5. Seed example data
 
-Populate the database with example skills so the UI has something to show:
+Populate the database with example bundles so the UI has something to show:
 
 ```bash
 cd apps/registry && npm run db:seed && cd ../..
 ```
 
-This inserts a handful of real skills (`@nimblebraininc/docs-auditor`, `@nimblebraininc/seo-optimizer`, `@nimblebraininc/strategic-thought-partner`) with multiple versions, download counts, tags, and triggers. Safe to run multiple times (uses upserts).
+This inserts a handful of example bundles with multiple versions, download counts, and trust scores. Safe to run multiple times (uses upserts).
 
 To add more seed data, edit `apps/registry/prisma/seed.ts`.
 
