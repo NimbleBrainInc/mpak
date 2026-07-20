@@ -106,6 +106,12 @@ class CQ02NoMaliciousPatterns(Control):
 
         duration = int((time.time() - start) * 1000)
 
+        # GuardDog exits non-zero on internal failure. With nothing on stdout no
+        # file was inspected, and passing here would certify the bundle free of
+        # malicious patterns on the strength of a scan that never ran.
+        if result.returncode != 0 and not result.stdout.strip():
+            return self.error(result.stderr.strip() or "Malicious pattern scan failed", duration_ms=duration)
+
         findings: list[Finding] = []
 
         # Determine dependency directory pattern based on ecosystem
@@ -152,9 +158,9 @@ class CQ02NoMaliciousPatterns(Control):
                                     )
                                 )
 
-        except json.JSONDecodeError:
-            # GuardDog might output non-JSON for some errors
-            pass
+        except json.JSONDecodeError as e:
+            # Unparseable output means the results are unknown, not empty.
+            return self.error(f"Failed to parse malicious pattern results: {e}", duration_ms=duration)
 
         # Only fail on findings in server code, not dependencies
         # Dependency findings are informational (INFO severity)

@@ -118,6 +118,24 @@ Controls use these external tools (gracefully skip if not installed):
 | Bandit | CQ-03 | Python | `uv pip install bandit` |
 | ESLint | CQ-03 | JavaScript | `npm install -g eslint eslint-plugin-security` |
 
+When a tool runs but cannot produce a result — grype without a usable
+vulnerability database, a scanner that crashes — the control reports `ERROR`,
+not `FAIL`. `FAIL` asserts the bundle failed a check; `ERROR` says the check
+never ran. Any `ERROR` on a control that feeds the compliance level marks the
+scan degraded, and a degraded scan publishes no certification at all rather
+than a level it could not measure. Prefer `ERROR` over an empty pass whenever a
+tool's output is missing or unparseable.
+
+### Grype database freshness
+
+The Docker image bakes the vulnerability database in and owns it as uid 1000,
+matching `runAsUser` in the scan Job, so grype can refresh it at runtime. Grype
+rejects a database older than `max-allowed-built-age` (5 days). A pod that has
+both an image older than that *and* no egress to `grype.anchore.io` will error
+every scan — correctly, but no bundle will certify until the image is rebuilt.
+Image rebuild cadence is therefore load-bearing on scan availability in
+restricted-egress environments.
+
 ## Test Fixtures
 
 Located in `tests/fixtures/`. Each fixture tests specific controls:

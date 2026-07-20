@@ -666,6 +666,11 @@ export class PackageRepository {
       include: {
         artifacts: true,
         securityScans: {
+          // Certification is read off this scan, so it must come from a scan
+          // that actually completed. A failed or degraded scan carries no
+          // certification, and surfacing it here would blank the level on the
+          // detail page while every other endpoint still reports it.
+          where: { status: 'completed' },
           orderBy: { startedAt: 'desc' },
           take: 1,
         },

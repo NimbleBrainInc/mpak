@@ -93,12 +93,12 @@ class ControlResult:
 class DomainResult:
     """Results for a security domain."""
 
+    # A domain deliberately has no `passed` of its own. Compliance is decided
+    # per control by calculate_compliance_level, which counts a SKIP as not
+    # passed: a control that never inspected the bundle cannot vouch for it.
+    # A domain-level rule that excluded skips would contradict that.
     domain: str
     controls: dict[str, ControlResult] = field(default_factory=dict)
-
-    @property
-    def passed(self) -> bool:
-        return all(c.passed for c in self.controls.values() if c.status != ControlStatus.SKIP)
 
 
 # Control requirements per level
