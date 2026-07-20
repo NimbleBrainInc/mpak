@@ -154,11 +154,6 @@ def calculate_compliance_level(control_results: dict[str, ControlResult]) -> Com
     return ComplianceLevel.NONE
 
 
-def is_level_bearing(control_id: str) -> bool:
-    """True if the control is required for at least one compliance level."""
-    return any(CONTROL_LEVELS.get(control_id, {}).values())
-
-
 @dataclass
 class SecurityReport:
     """Complete security report for an MCP bundle."""

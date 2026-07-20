@@ -1,0 +1,68 @@
+name: Refresh Scanner Image
+
+# The scanner image bakes in grype's vulnerability database, and grype refuses a
+# database older than max-allowed-built-age (5 days) rather than scanning against
+# stale data. Releases are infrequent, so without a rebuild the baked copy expires
+# and any scan pod that cannot reach grype.anchore.io starts erroring -- correctly,
+# but no bundle certifies until someone rebuilds. Rebuild daily so the fallback
+# database stays inside that window.
+#
+# This refreshes the GHCR image only. Deployments that pull the scanner from
+# elsewhere need the same cadence applied to their own image.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: nimblebraininc/mpak-scanner
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the released scanner version
+        id: version
+        run: |
+          TAG=$(git tag -l 'scanner-v*' --sort=-v:refname | head -n1)
+          if [ -z "$TAG" ]; then
+            echo "No scanner-v* tag found; nothing to refresh."
+            exit 1
+          fi
+          echo "version=${TAG#scanner-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Rebuilds the same released scanner version from PyPI. Only the baked
+      # vulnerability database changes, so the image contents stay reproducible
+      # apart from the data this job exists to refresh.
+      - name: Rebuild and push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/scanner
+          file: apps/scanner/Dockerfile
+          push: true
+          no-cache: true
+          build-args: |
+            SCANNER_VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest

@@ -126,6 +126,18 @@ class CQ02NoMaliciousPatterns(Control):
             if result.stdout.strip():
                 data = json.loads(result.stdout)
 
+                # GuardDog reports engine failures in-band: it exits zero and
+                # emits a full document whose `errors` map explains that rules
+                # did not run, while `results` sits empty. Non-empty output is
+                # therefore not evidence that anything was analysed, and an
+                # empty `results` under those conditions means "unknown", not
+                # "clean" -- the one answer this control must never guess at.
+                if isinstance(data, dict) and data.get("errors"):
+                    return self.error(
+                        f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
+                        duration_ms=duration,
+                    )
+
                 if isinstance(data, dict):
                     for rule_name, rule_findings in data.get("results", {}).items():
                         if rule_findings:

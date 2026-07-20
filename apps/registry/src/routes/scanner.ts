@@ -565,6 +565,13 @@ export const securityRoutes: FastifyPluginAsync = async (fastify) => {
           throw new NotFoundError(`Version ${pkg.latestVersion} not found`);
         }
 
+        // Deliberately the latest scan attempt, not the latest completed one.
+        // This endpoint reports how the last scan went; it returns no
+        // certification, so it cannot blank a level the way a certification
+        // lookup would. Filtering to completed scans here would hide a failed
+        // or degraded attempt behind a stale success, leaving a publisher with
+        // no way to see that their scan did not run -- the visibility gap this
+        // whole change exists to close.
         const scan = latestVersion.securityScans[0];
 
         if (!scan) {

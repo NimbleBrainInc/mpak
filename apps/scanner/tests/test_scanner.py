@@ -18,7 +18,6 @@ from mpak_scanner.models import (
     RiskScore,
     Severity,
     calculate_compliance_level,
-    is_level_bearing,
 )
 
 # Path to test fixtures
@@ -2334,13 +2333,6 @@ class TestDegradedScan:
         report.domains["supply_chain"] = DomainResult(domain="supply_chain", controls=controls)
         return report
 
-    def test_is_level_bearing(self) -> None:
-        """Controls required at some level are level-bearing; reserved ones are not."""
-        assert is_level_bearing("SC-01") is True
-        assert is_level_bearing("SC-02") is True
-        assert is_level_bearing("AI-02") is False  # reserved, required at no level
-        assert is_level_bearing("NOPE-99") is False
-
     def test_degraded_when_level_bearing_control_errors(self) -> None:
         """An errored L2 control means the level is unmeasured, not merely unmet."""
         report = self._report(
@@ -2547,3 +2539,35 @@ class TestToolCrashDoesNotSilentlyPass:
         result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
         assert result.status == ControlStatus.ERROR
         assert result.status != ControlStatus.PASS
+
+    def test_cq02_errors_when_analysis_engine_fails_in_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GuardDog reports engine failures inside a zero-exit JSON document.
+
+        Rules that never executed produce an empty `results` map. Reading that
+        as "clean" would certify the bundle free of malicious patterns on an
+        analysis that did not happen.
+        """
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "package": str(tmp_path),
+                "issues": 0,
+                "errors": {"rules-all": "failed to run rule: An error occurred when running Semgrep."},
+                "results": {},
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+        assert result.error is not None and "Semgrep" in result.error

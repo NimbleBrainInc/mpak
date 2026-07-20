@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from mpak_scanner.models import ControlStatus, is_level_bearing
+from mpak_scanner.models import ControlStatus
 from mpak_scanner.scanner import scan_bundle
 
 logger = logging.getLogger(__name__)
@@ -108,10 +108,13 @@ def run_job() -> None:
 
             degraded = False
             if report.degraded:
+                # `degraded` is derived by re-deriving the level with every
+                # errored control treated as passing, so the honest list is the
+                # errored controls themselves -- collectively they are what held
+                # the level down. Filtering further would name a subset the
+                # calculation never singled out.
                 unavailable = sorted(
-                    cid
-                    for cid, ctrl in report.all_controls.items()
-                    if ctrl.status == ControlStatus.ERROR and is_level_bearing(cid)
+                    cid for cid, ctrl in report.all_controls.items() if ctrl.status == ControlStatus.ERROR
                 )
                 reason = f"Scan degraded: {', '.join(unavailable)} did not run"
                 logger.error("%s. Certification left unchanged.", reason)
