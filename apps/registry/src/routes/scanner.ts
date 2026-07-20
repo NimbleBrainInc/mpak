@@ -73,6 +73,23 @@ interface CertificationData {
   findingsSummary: { critical: number; high: number; medium: number; low: number } | null;
 }
 
+/**
+ * Whether a scan's compliance level can be published as the bundle's certification.
+ *
+ * Requires the scan to have completed and its report not to declare itself
+ * degraded. The scanner marks a report degraded when a control feeding the
+ * compliance level errored -- typically an unavailable external tool -- which
+ * makes the computed level an artifact of the scanner rather than a property
+ * of the bundle.
+ */
+function isTrustworthyScan(status: string, report: Record<string, unknown> | null): boolean {
+  if (status !== 'completed') {
+    return false;
+  }
+  const compliance = report?.compliance as { degraded?: boolean } | undefined;
+  return compliance?.degraded !== true;
+}
+
 function extractCertificationData(report: Record<string, unknown> | null): CertificationData {
   if (!report) {
     return {
@@ -308,10 +325,16 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           return { success: true };
         }
 
-        // Extract certification data from mpak-scanner report
-        const certData = extractCertificationData(report ?? null);
+        // A certification level is only meaningful when the scan that produced
+        // it actually ran every control behind it. A scan that failed, or whose
+        // report declares itself degraded, records no certification -- the
+        // level it computed reflects controls the scanner could not apply, not
+        // controls the bundle failed. Certification lookups read only completed
+        // scans, so leaving these fields unset preserves the previous level.
+        const certData = isTrustworthyScan(status, report ?? null)
+          ? extractCertificationData(report ?? null)
+          : null;
 
-        // Update scan record with certification data
         await fastify.prisma.securityScan.update({
           where: { scanId: scan_id },
           data: {
@@ -322,12 +345,15 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
             pdfS3Uri: pdf_s3_uri ?? null,
             error: error ?? null,
             completedAt: new Date(),
-            // Certification fields
-            certificationLevel: certData.certificationLevel,
-            controlsPassed: certData.controlsPassed,
-            controlsFailed: certData.controlsFailed,
-            controlsTotal: certData.controlsTotal,
-            findingsSummary: certData.findingsSummary ?? undefined,
+            ...(certData
+              ? {
+                  certificationLevel: certData.certificationLevel,
+                  controlsPassed: certData.controlsPassed,
+                  controlsFailed: certData.controlsFailed,
+                  controlsTotal: certData.controlsTotal,
+                  findingsSummary: certData.findingsSummary ?? undefined,
+                }
+              : {}),
           },
         });
 
@@ -336,8 +362,9 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
             scanId: scan_id,
             status,
             riskScore: risk_score,
-            certificationLevel: certData.certificationLevel,
-            controlsPassed: certData.controlsPassed,
+            certificationLevel: certData?.certificationLevel ?? null,
+            controlsPassed: certData?.controlsPassed ?? null,
+            certificationPublished: certData !== null,
           },
           `Scan callback received: ${status}`,
         );

@@ -1,6 +1,7 @@
 """Tests for the mpak-scanner core functionality."""
 
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -12,10 +13,12 @@ from mpak_scanner.models import (
     ComplianceLevel,
     ControlResult,
     ControlStatus,
+    DomainResult,
     Finding,
     RiskScore,
     Severity,
     calculate_compliance_level,
+    is_level_bearing,
 )
 
 # Path to test fixtures
@@ -2201,3 +2204,149 @@ class TestUnsafeNodeBundle:
 
         # Should find at least 2 different patterns
         assert len(patterns_found) >= 2, f"Expected multiple patterns, found: {patterns_found}"
+
+
+class TestToolFailureIsNotControlFailure:
+    """External tool failures must not be reported as control failures.
+
+    A FAIL asserts the bundle failed a security control. When the underlying
+    tool never ran, nothing about the bundle was established, so the correct
+    status is ERROR. Reporting FAIL turns a scanner outage into a durable
+    trust-level downgrade that publishers cannot act on.
+    """
+
+    def test_sc01_errors_when_syft_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Syft exiting non-zero is a tool failure, not an SBOM control failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="syft: boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.error is not None and "boom" in result.error
+
+    def test_sc01_errors_on_unparseable_sbom(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unparseable syft output is a tool failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_sc02_errors_when_vulnerability_db_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unavailable grype database must not read as a failed CVE scan.
+
+        This is the regression that capped every bundle at L1: grype exits
+        non-zero with empty stdout when it cannot load its database, and SC-02
+        is required for L2.
+        """
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr="failed to load vulnerability db: database does not exist",
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.FAIL
+        assert result.error is not None and "vulnerability db" in result.error
+
+    def test_sc02_still_fails_on_real_blocking_vulnerability(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuine blocking CVE must still FAIL -- ERROR is only for tool failures."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        grype_output = json.dumps(
+            {
+                "matches": [
+                    {
+                        "vulnerability": {
+                            "id": "CVE-2024-0001",
+                            "severity": "Critical",
+                            "cvss": [{"metrics": {"baseScore": 9.8}}],
+                        },
+                        "artifact": {"name": "somepkg", "version": "1.0.0"},
+                    }
+                ]
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=grype_output, stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.FAIL
+
+
+class TestDegradedScan:
+    """A compliance level is only publishable when every level-bearing control ran."""
+
+    @staticmethod
+    def _report(controls: dict[str, ControlResult]) -> SecurityReport:
+        report = SecurityReport(
+            bundle_name="test",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["supply_chain"] = DomainResult(domain="supply_chain", controls=controls)
+        return report
+
+    def test_is_level_bearing(self) -> None:
+        """Controls required at some level are level-bearing; reserved ones are not."""
+        assert is_level_bearing("SC-01") is True
+        assert is_level_bearing("SC-02") is True
+        assert is_level_bearing("AI-02") is False  # reserved, required at no level
+        assert is_level_bearing("NOPE-99") is False
+
+    def test_degraded_when_level_bearing_control_errors(self) -> None:
+        """An errored L2 control means the level is unmeasured, not merely unmet."""
+        report = self._report(
+            {
+                "SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR, error="db unavailable"),
+            }
+        )
+        assert report.degraded is True
+        assert report.controls_errored == 1
+
+    def test_not_degraded_when_control_genuinely_fails(self) -> None:
+        """A real control failure is a measurement, so the level stands."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.FAIL)})
+        assert report.degraded is False
+
+    def test_not_degraded_when_non_level_bearing_control_errors(self) -> None:
+        """A control required at no level cannot suppress a level."""
+        report = self._report({"AI-02": ControlResult("AI-02", "Hashes", ControlStatus.ERROR)})
+        assert report.degraded is False
+
+    def test_degraded_surfaced_in_report_dict(self) -> None:
+        """Consumers read `degraded` off the report to decide whether to publish."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR)})
+        compliance = report.to_dict()["compliance"]
+        assert compliance["degraded"] is True
+        assert compliance["controls_errored"] == 1
+
+    def test_clean_report_is_not_degraded(self) -> None:
+        """A scan where everything ran is publishable."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS)})
+        assert report.to_dict()["compliance"]["degraded"] is False

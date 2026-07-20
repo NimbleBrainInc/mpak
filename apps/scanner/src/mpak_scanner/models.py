@@ -154,6 +154,11 @@ def calculate_compliance_level(control_results: dict[str, ControlResult]) -> Com
     return ComplianceLevel.NONE
 
 
+def is_level_bearing(control_id: str) -> bool:
+    """True if the control is required for at least one compliance level."""
+    return any(CONTROL_LEVELS.get(control_id, {}).values())
+
+
 @dataclass
 class SecurityReport:
     """Complete security report for an MCP bundle."""
@@ -280,6 +285,22 @@ class SecurityReport:
         return sum(1 for c in self.all_controls.values() if c.status == ControlStatus.FAIL)
 
     @property
+    def controls_errored(self) -> int:
+        """Count of controls that could not be evaluated."""
+        return sum(1 for c in self.all_controls.values() if c.status == ControlStatus.ERROR)
+
+    @property
+    def degraded(self) -> bool:
+        """True if a control that feeds the compliance level did not run.
+
+        A level is only a measurement when every control behind it actually
+        executed. When one errors, the computed level understates the bundle --
+        it reflects a control the scanner could not apply, not a control the
+        bundle failed. Consumers must not publish a level from a degraded scan.
+        """
+        return any(c.status == ControlStatus.ERROR and is_level_bearing(cid) for cid, c in self.all_controls.items())
+
+    @property
     def controls_total(self) -> int:
         """Total controls checked."""
         return sum(1 for c in self.all_controls.values() if c.status != ControlStatus.SKIP)
@@ -304,7 +325,9 @@ class SecurityReport:
                 "level_name": self.compliance_level.name_str,
                 "controls_passed": self.controls_passed,
                 "controls_failed": self.controls_failed,
+                "controls_errored": self.controls_errored,
                 "controls_total": self.controls_total,
+                "degraded": self.degraded,
             },
             "risk_score": self.risk_score.value,
             "domains": {

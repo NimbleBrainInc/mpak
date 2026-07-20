@@ -13,6 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from mpak_scanner.models import ControlStatus, is_level_bearing
 from mpak_scanner.scanner import scan_bundle
 
 logger = logging.getLogger(__name__)
@@ -89,15 +90,34 @@ def run_job() -> None:
             )
 
             # 6. POST callback
-            callback_body = json.dumps(
-                {
-                    "scan_id": scan_id,
-                    "status": "completed",
-                    "risk_score": report.risk_score.value,
-                    "report": report_dict,
-                    "report_s3_uri": report_s3_uri,
-                }
-            ).encode()
+            #
+            # A degraded scan is reported as failed, not completed. Its
+            # compliance level was computed without every level-bearing control
+            # running, so publishing it would record a scanner-side outage as a
+            # trust-level downgrade the bundle did not earn. Certification
+            # lookups read only completed scans, so reporting failure here
+            # preserves the bundle's previous level and leaves the scan
+            # retryable. The report still ships for diagnosis.
+            payload: dict[str, object] = {
+                "scan_id": scan_id,
+                "status": "completed",
+                "risk_score": report.risk_score.value,
+                "report": report_dict,
+                "report_s3_uri": report_s3_uri,
+            }
+
+            if report.degraded:
+                unavailable = sorted(
+                    cid
+                    for cid, ctrl in report.all_controls.items()
+                    if ctrl.status == ControlStatus.ERROR and is_level_bearing(cid)
+                )
+                reason = f"Scan degraded: {', '.join(unavailable)} did not run"
+                logger.error("%s. Certification left unchanged.", reason)
+                payload["status"] = "failed"
+                payload["error"] = reason
+
+            callback_body = json.dumps(payload).encode()
 
             logger.info("Sending callback to %s", callback_url)
             req = urllib.request.Request(  # noqa: S310

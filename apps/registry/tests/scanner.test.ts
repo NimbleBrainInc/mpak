@@ -253,6 +253,81 @@ describe('Scanner Routes', () => {
         }),
       );
     });
+
+    // A level computed from controls that never ran is not a measurement of the
+    // bundle. Leaving the certification fields unset keeps the previous level,
+    // rather than recording a scanner outage as a downgrade.
+    const degradedReport = {
+      compliance: {
+        level: 1,
+        controls_passed: 15,
+        controls_failed: 0,
+        controls_errored: 1,
+        controls_total: 16,
+        degraded: true,
+      },
+      findings: [],
+    };
+
+    const recordedUpdateData = (): Record<string, unknown> =>
+      (prisma.securityScan.update.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+
+    it('does not publish certification from a degraded scan', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-degraded',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-degraded',
+          status: 'completed',
+          report: degradedReport,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data).not.toHaveProperty('certificationLevel');
+      expect(data).not.toHaveProperty('controlsPassed');
+      expect(data).not.toHaveProperty('controlsFailed');
+      // The report itself is still recorded so the failure can be diagnosed.
+      expect(data.report).toBeDefined();
+    });
+
+    it('does not publish certification from a failed scan', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-failed',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-failed',
+          status: 'failed',
+          error: 'Scan degraded: SC-02 did not run',
+          report: {
+            ...degradedReport,
+            compliance: { ...degradedReport.compliance, degraded: false },
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data.status).toBe('failed');
+      expect(data).not.toHaveProperty('certificationLevel');
+    });
   });
 
   // =========================================================================

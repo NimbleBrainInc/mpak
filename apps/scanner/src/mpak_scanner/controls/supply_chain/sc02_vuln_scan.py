@@ -157,13 +157,11 @@ class SC02VulnerabilityScan(Control):
         logger.info("grype exit=%d stdout=%d bytes stderr=%s", result.returncode, len(result.stdout), stderr_preview)
         if result.returncode != 0 and "no packages discovered" not in result.stderr.lower():
             if not result.stdout.strip():
-                return ControlResult(
-                    control_id=self.id,
-                    control_name=self.name,
-                    status=ControlStatus.FAIL,
-                    error=result.stderr or "Vulnerability scan failed",
-                    duration_ms=int((time.time() - start) * 1000),
-                )
+                # Grype ran but produced nothing usable (commonly an unavailable
+                # vulnerability database). The bundle was never inspected, so this
+                # is an ERROR, not a FAIL -- a FAIL would assert the bundle failed
+                # a security control we never actually applied to it.
+                return self.error(result.stderr.strip() or "Vulnerability scan produced no output")
 
         try:
             if result.stdout.strip():
@@ -260,13 +258,7 @@ class SC02VulnerabilityScan(Control):
             )
 
         except json.JSONDecodeError as e:
-            return ControlResult(
-                control_id=self.id,
-                control_name=self.name,
-                status=ControlStatus.FAIL,
-                error=f"Failed to parse vulnerability results: {e}",
-                duration_ms=int((time.time() - start) * 1000),
-            )
+            return self.error(f"Failed to parse vulnerability results: {e}")
 
     def _calculate_severity(
         self,
