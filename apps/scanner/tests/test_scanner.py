@@ -2571,3 +2571,97 @@ class TestToolCrashDoesNotSilentlyPass:
         assert result.status == ControlStatus.ERROR
         assert result.status != ControlStatus.PASS
         assert result.error is not None and "Semgrep" in result.error
+
+    def test_cq01_errors_on_crash_after_partial_findings(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crash mid-scan must not pass on the findings it managed to emit."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        partial = json.dumps({"DetectorName": "AWS", "SourceMetadata": {}}) + "\n"
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout=partial, stderr="killed")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+
+class TestStaticAnalysisDoesNotCertifyUnrunTools:
+    """CQ-03 is L2-required, so a tool that did not run must not read as clean."""
+
+    def test_bandit_internal_error_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bandit runs with --exit-zero, so a non-zero exit is an internal failure."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="bandit: boom")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_internal_error_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ESLint exit 2 is an internal error -- a bad flag, an unresolvable plugin."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="Invalid option '--eslintrc'")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_missing_tool_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An absent tool did not analyse anything; an INFO note and a pass hid that."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: None)
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_eslint_findings_exit_code_still_reports_findings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Exit 1 means ESLint found problems -- a real result, not a failure."""
+        (tmp_path / "server.js").write_text("var x = eval(u);\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "server.js"),
+                    "messages": [
+                        {
+                            "ruleId": "security/detect-eval-with-expression",
+                            "message": "eval with expression",
+                            "severity": 2,
+                            "line": 1,
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status != ControlStatus.ERROR
+        assert any("detect-eval-with-expression" in f.title for f in result.findings)

@@ -55,11 +55,11 @@ class CQ01NoEmbeddedSecrets(Control):
 
         duration = int((time.time() - start) * 1000)
 
-        # Trufflehog exits non-zero on internal failure, and is not invoked with
-        # --fail, so a non-zero exit with nothing on stdout means no file was
-        # inspected. Passing here would certify the bundle as secret-free on the
-        # strength of a scan that never ran.
-        if result.returncode != 0 and not result.stdout.strip():
+        # Trufflehog is not invoked with --fail, so findings never set the exit
+        # code and any non-zero status is an internal failure. Keying off the
+        # exit code alone also catches a crash that emitted partial findings,
+        # which would otherwise pass on partial coverage.
+        if result.returncode != 0:
             return self.error(result.stderr.strip() or "Secret scanning failed", duration_ms=duration)
 
         findings: list[Finding] = []

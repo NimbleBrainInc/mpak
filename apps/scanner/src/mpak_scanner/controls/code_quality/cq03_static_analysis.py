@@ -1,6 +1,7 @@
 """CQ-03: Static Analysis Clean control."""
 
 import json
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -8,6 +9,15 @@ from typing import Any
 
 from mpak_scanner.controls.base import Control, ControlRegistry
 from mpak_scanner.models import ControlResult, ControlStatus, Finding, Severity
+
+
+class ToolFailureError(Exception):
+    """A static-analysis tool could not produce a result.
+
+    Raised instead of returning no findings, so the control reports ERROR
+    rather than certifying the bundle on an analysis that never ran.
+    """
+
 
 # Directories that contain dependencies (not server code)
 DEP_DIRS = ["deps", "node_modules", "vendor", "site-packages", ".venv", "venv"]
@@ -60,15 +70,16 @@ class CQ03StaticAnalysis(Control):
         # Track if any analysis was run
         analysis_run = False
 
-        if python_files:
-            bandit_findings = self._run_bandit(bundle_dir, python_files)
-            findings.extend(bandit_findings)
-            analysis_run = True
+        try:
+            if python_files:
+                findings.extend(self._run_bandit(bundle_dir, python_files))
+                analysis_run = True
 
-        if js_files:
-            eslint_findings = self._run_eslint(bundle_dir, js_files)
-            findings.extend(eslint_findings)
-            analysis_run = True
+            if js_files:
+                findings.extend(self._run_eslint(bundle_dir, js_files))
+                analysis_run = True
+        except ToolFailureError as e:
+            return self.error(str(e), duration_ms=int((time.time() - start) * 1000))
 
         if not analysis_run:
             # No server code files to analyze
@@ -151,25 +162,21 @@ class CQ03StaticAnalysis(Control):
         # Create a file list for Bandit
         file_list = [str(f) for f in python_files]
 
+        bandit = shutil.which("bandit")
+        if bandit is None:
+            raise ToolFailureError("bandit not found; Python static analysis did not run")
+
         try:
+            # Absolute paths are passed, so no cwd is needed. Running inside the
+            # bundle would let it influence tool resolution and configuration.
             result = subprocess.run(
-                ["bandit", "-f", "json", "-r", "--exit-zero"] + file_list,
+                [bandit, "-f", "json", "-r", "--exit-zero"] + file_list,
                 capture_output=True,
                 text=True,
                 timeout=120,
-                cwd=str(bundle_dir),
             )
-        except FileNotFoundError:
-            findings.append(
-                Finding(
-                    id="CQ-03-0001",
-                    control=self.id,
-                    severity=Severity.INFO,
-                    title="Bandit not available",
-                    description="Install bandit for Python static analysis: pip install bandit",
-                )
-            )
-            return findings
+        except FileNotFoundError as e:
+            raise ToolFailureError("bandit not found; Python static analysis did not run") from e
         except subprocess.TimeoutExpired:
             findings.append(
                 Finding(
@@ -181,6 +188,13 @@ class CQ03StaticAnalysis(Control):
                 )
             )
             return findings
+
+        # Bandit runs with --exit-zero, so findings never set the exit code.
+        # Any non-zero status is therefore an internal failure.
+        if result.returncode != 0:
+            raise ToolFailureError(result.stderr.strip() or "bandit exited with an error")
+        if not result.stdout.strip():
+            raise ToolFailureError("bandit produced no output")
 
         try:
             if result.stdout.strip():
@@ -224,9 +238,8 @@ class CQ03StaticAnalysis(Control):
                         )
                     )
 
-        except json.JSONDecodeError:
-            # Bandit might output non-JSON on errors
-            pass
+        except json.JSONDecodeError as e:
+            raise ToolFailureError(f"Could not parse bandit output: {e}") from e
 
         return findings
 
@@ -240,12 +253,19 @@ class CQ03StaticAnalysis(Control):
         # Create a file list for ESLint
         file_list = [str(f) for f in js_files]
 
+        # Resolve ESLint from PATH, never via npx. npx prefers
+        # ./node_modules/.bin, so a bundle shipping its own `eslint` would have
+        # its binary executed by the scan pod -- which holds the S3 credentials
+        # and the callback secret, and could forge a clean result.
+        eslint = shutil.which("eslint")
+        if eslint is None:
+            raise ToolFailureError("eslint not found; JavaScript static analysis did not run")
+
         try:
             result = subprocess.run(
                 [
-                    "npx",
-                    "eslint",
-                    "--no-eslintrc",
+                    eslint,
+                    "--no-config-lookup",
                     "--plugin",
                     "eslint-plugin-security",
                     "--rule",
@@ -267,19 +287,9 @@ class CQ03StaticAnalysis(Control):
                 capture_output=True,
                 text=True,
                 timeout=120,
-                cwd=str(bundle_dir),
             )
-        except FileNotFoundError:
-            findings.append(
-                Finding(
-                    id="CQ-03-JS-0001",
-                    control=self.id,
-                    severity=Severity.INFO,
-                    title="ESLint not available",
-                    description="Install ESLint for JavaScript static analysis: npm install -g eslint eslint-plugin-security",
-                )
-            )
-            return findings
+        except FileNotFoundError as e:
+            raise ToolFailureError("eslint not found; JavaScript static analysis did not run") from e
         except subprocess.TimeoutExpired:
             findings.append(
                 Finding(
@@ -291,6 +301,14 @@ class CQ03StaticAnalysis(Control):
                 )
             )
             return findings
+
+        # ESLint exits 0 with no findings, 1 with findings, and 2 on an internal
+        # error -- a broken config, an unresolvable plugin, an unusable flag.
+        # Only 2 means nothing was analysed.
+        if result.returncode >= 2:
+            raise ToolFailureError(result.stderr.strip() or "eslint exited with an internal error")
+        if not result.stdout.strip():
+            raise ToolFailureError("eslint produced no output")
 
         try:
             if result.stdout.strip():
@@ -334,8 +352,7 @@ class CQ03StaticAnalysis(Control):
                             )
                         )
 
-        except json.JSONDecodeError:
-            # ESLint might output non-JSON on errors
-            pass
+        except json.JSONDecodeError as e:
+            raise ToolFailureError(f"Could not parse eslint output: {e}") from e
 
         return findings

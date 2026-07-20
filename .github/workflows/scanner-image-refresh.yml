@@ -29,6 +29,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      issues: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -66,3 +67,16 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      # A silent failure here is invisible until scans start erroring five days
+      # later. GitHub also disables scheduled workflows after 60 days of repo
+      # inactivity, which this surfaces the same way.
+      - name: Report a failed refresh
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Scanner image refresh failed" \
+            --body "The daily scanner image rebuild failed. The baked grype database expires 5 days after the last successful build, after which scan pods without egress to grype.anchore.io stop certifying. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label bug
