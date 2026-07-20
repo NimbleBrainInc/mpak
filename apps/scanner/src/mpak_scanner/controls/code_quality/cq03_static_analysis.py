@@ -177,17 +177,11 @@ class CQ03StaticAnalysis(Control):
             )
         except FileNotFoundError as e:
             raise ToolFailureError("bandit not found; Python static analysis did not run") from e
-        except subprocess.TimeoutExpired:
-            findings.append(
-                Finding(
-                    id="CQ-03-0001",
-                    control=self.id,
-                    severity=Severity.MEDIUM,
-                    title="Static analysis timed out",
-                    description="Bandit analysis exceeded timeout",
-                )
-            )
-            return findings
+        except subprocess.TimeoutExpired as e:
+            # A timeout means the analysis did not finish, so its findings are
+            # unknown rather than absent -- the same reasoning as every other
+            # tool failure here.
+            raise ToolFailureError("bandit analysis timed out") from e
 
         # Bandit runs with --exit-zero, so findings never set the exit code.
         # Any non-zero status is therefore an internal failure.
@@ -290,17 +284,8 @@ class CQ03StaticAnalysis(Control):
             )
         except FileNotFoundError as e:
             raise ToolFailureError("eslint not found; JavaScript static analysis did not run") from e
-        except subprocess.TimeoutExpired:
-            findings.append(
-                Finding(
-                    id="CQ-03-JS-0001",
-                    control=self.id,
-                    severity=Severity.MEDIUM,
-                    title="ESLint analysis timed out",
-                    description="ESLint analysis exceeded timeout",
-                )
-            )
-            return findings
+        except subprocess.TimeoutExpired as e:
+            raise ToolFailureError("eslint analysis timed out") from e
 
         # ESLint exits 0 with no findings, 1 with findings, and 2 on an internal
         # error -- a broken config, an unresolvable plugin, an unusable flag.

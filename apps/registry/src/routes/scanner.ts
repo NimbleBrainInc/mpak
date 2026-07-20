@@ -74,20 +74,18 @@ interface CertificationData {
 }
 
 /**
- * Whether a scan's compliance level can be published as the bundle's certification.
+ * Whether a report declares itself degraded.
  *
- * Requires the scan to have completed and its report not to declare itself
- * degraded. The scanner marks a report degraded when a control feeding the
- * compliance level errored -- typically an unavailable external tool -- which
- * makes the computed level an artifact of the scanner rather than a property
- * of the bundle.
+ * The scanner marks a report degraded when a control feeding the compliance
+ * level errored -- typically an unavailable external tool -- which makes the
+ * computed level an artifact of the scanner rather than a property of the
+ * bundle. The scanner is expected to send such a scan as failed; this is the
+ * registry's own check, so a scanner that does not map it still cannot publish
+ * a level it did not measure.
  */
-function isTrustworthyScan(status: string, report: Record<string, unknown> | null): boolean {
-  if (status !== 'completed') {
-    return false;
-  }
+function isDegradedReport(report: Record<string, unknown> | null): boolean {
   const compliance = report?.compliance as { degraded?: boolean } | undefined;
-  return compliance?.degraded !== true;
+  return compliance?.degraded === true;
 }
 
 function extractCertificationData(report: Record<string, unknown> | null): CertificationData {
@@ -342,16 +340,23 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
         // it actually ran every control behind it. A scan that failed, or whose
         // report declares itself degraded, records no certification -- the
         // level it computed reflects controls the scanner could not apply, not
-        // controls the bundle failed. Certification lookups read only completed
-        // scans, so leaving these fields unset preserves the previous level.
-        const certData = isTrustworthyScan(status, report ?? null)
-          ? extractCertificationData(report ?? null)
-          : null;
+        // controls the bundle failed.
+        //
+        // A degraded report is also stored as failed, whatever status the
+        // scanner sent. Certification lookups take the newest *completed* scan,
+        // so storing it as completed with no certification would not preserve
+        // the previous level -- it would shadow the last good scan and blank
+        // the level registry-wide. Normalising here is what makes leaving the
+        // certification fields unset actually preserve it.
+        const degradedReport = isDegradedReport(report ?? null);
+        const storedStatus = degradedReport ? 'failed' : status;
+        const certData =
+          storedStatus === 'completed' ? extractCertificationData(report ?? null) : null;
 
         await fastify.prisma.securityScan.update({
           where: { scanId: scan_id },
           data: {
-            status,
+            status: storedStatus,
             riskScore: risk_score ?? null,
             report: report ? (report as object) : undefined,
             reportS3Uri: report_s3_uri ?? null,

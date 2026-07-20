@@ -2665,3 +2665,34 @@ class TestStaticAnalysisDoesNotCertifyUnrunTools:
         result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
         assert result.status != ControlStatus.ERROR
         assert any("detect-eval-with-expression" in f.title for f in result.findings)
+
+    def test_bandit_timeout_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An analysis that never finished has unknown findings, not none."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(cmd="bandit", timeout=120)
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_timeout_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A bundle that is slow to analyse must not certify as clean."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(cmd="eslint", timeout=120)
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR

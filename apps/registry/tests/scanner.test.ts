@@ -296,8 +296,37 @@ describe('Scanner Routes', () => {
       expect(data).not.toHaveProperty('certificationLevel');
       expect(data).not.toHaveProperty('controlsPassed');
       expect(data).not.toHaveProperty('controlsFailed');
+      // Storing it as completed is what would do the damage: certification
+      // lookups take the newest completed scan, so a completed row with no
+      // certification shadows the last good one and blanks the level.
+      expect(data.status).toBe('failed');
       // The report itself is still recorded so the failure can be diagnosed.
       expect(data.report).toBeDefined();
+    });
+
+    it('stores a degraded scan as failed even when the scanner calls it completed', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-degraded-completed',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-degraded-completed',
+          status: 'completed',
+          report: degradedReport,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data.status).toBe('failed');
+      expect(data).not.toHaveProperty('certificationLevel');
     });
 
     it('does not publish certification from a failed scan', async () => {
