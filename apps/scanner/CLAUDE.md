@@ -129,12 +129,20 @@ tool's output is missing or unparseable.
 ### Grype database freshness
 
 The Docker image bakes the vulnerability database in and owns it as uid 1000,
-matching `runAsUser` in the scan Job, so grype can refresh it at runtime. Grype
-rejects a database older than `max-allowed-built-age` (5 days). A pod that has
-both an image older than that *and* no egress to `grype.anchore.io` will error
-every scan — correctly, but no bundle will certify until the image is rebuilt.
-Image rebuild cadence is therefore load-bearing on scan availability in
-restricted-egress environments.
+matching `runAsUser` in the scan Job, so grype refreshes it at runtime whenever
+it can reach `grype.anchore.io`. The baked copy is the fallback, not the primary
+source, and it has a shelf life: grype rejects a database older than
+`max-allowed-built-age` (5 days) rather than scanning against stale data.
+
+So a pod that has *both* an image older than five days *and* no route to
+`grype.anchore.io` errors on every scan, and no bundle certifies until the image
+is rebuilt. That is the correct outcome — scanning against a stale database and
+reporting a pass would be worse — but it means image rebuild cadence bounds scan
+availability wherever egress is unavailable or rate-limited.
+
+Do not raise `GRYPE_DB_MAX_ALLOWED_BUILT_AGE` to paper over this. It buys
+availability by certifying bundles against a database that no longer reflects
+known CVEs, which is the false assurance these controls exist to prevent.
 
 ## Test Fixtures
 

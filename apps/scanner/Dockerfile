@@ -36,5 +36,13 @@ RUN npm install -g eslint eslint-plugin-security --no-fund --no-audit
 # mpak-scanner + Python security tools (bandit, guarddog)
 RUN pip install --no-cache-dir "mpak-scanner[job]==${SCANNER_VERSION}" bandit guarddog
 
+# GuardDog refreshes a typosquatting corpus by writing back into its own package
+# directory, which the scan job's non-root user cannot do -- it dies with
+# PermissionError before analysing anything. Same shape as the grype cache
+# above. Own the resource directory by the runtime uid so the refresh succeeds.
+RUN GUARDDOG_RESOURCES="$(python -c 'import guarddog, pathlib; print(pathlib.Path(guarddog.__file__).parent / "analyzer" / "metadata" / "resources")')" && \
+    test -d "$GUARDDOG_RESOURCES" && \
+    chown -R 1000:1000 "$GUARDDOG_RESOURCES"
+
 ENTRYPOINT ["mpak-scanner"]
 CMD ["job"]

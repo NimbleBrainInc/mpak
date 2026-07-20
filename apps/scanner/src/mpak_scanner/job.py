@@ -106,6 +106,7 @@ def run_job() -> None:
                 "report_s3_uri": report_s3_uri,
             }
 
+            degraded = False
             if report.degraded:
                 unavailable = sorted(
                     cid
@@ -116,6 +117,7 @@ def run_job() -> None:
                 logger.error("%s. Certification left unchanged.", reason)
                 payload["status"] = "failed"
                 payload["error"] = reason
+                degraded = True
 
             callback_body = json.dumps(payload).encode()
 
@@ -132,7 +134,14 @@ def run_job() -> None:
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 logger.info("Callback response: %s", resp.status)
 
-        logger.info("Scan job %s completed successfully", scan_id)
+        # The job itself succeeded either way: it scanned and reported the
+        # outcome. A degraded scan is a result the job delivered correctly, not
+        # a job malfunction, so it does not exit non-zero -- conflating the two
+        # is the same category error this change removes from the controls.
+        if degraded:
+            logger.error("Scan job %s reported a degraded scan; no certification published", scan_id)
+        else:
+            logger.info("Scan job %s completed successfully", scan_id)
 
     except Exception as e:
         logger.exception("Scan job %s failed: %s", scan_id, e)

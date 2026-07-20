@@ -106,11 +106,14 @@ class CQ02NoMaliciousPatterns(Control):
 
         duration = int((time.time() - start) * 1000)
 
-        # GuardDog exits non-zero on internal failure. With nothing on stdout no
-        # file was inspected, and passing here would certify the bundle free of
+        # GuardDog emits a JSON document on every successful run, including a
+        # clean one. Empty output therefore means it analysed nothing, whatever
+        # the exit code says, and passing here would certify the bundle free of
         # malicious patterns on the strength of a scan that never ran.
-        if result.returncode != 0 and not result.stdout.strip():
-            return self.error(result.stderr.strip() or "Malicious pattern scan failed", duration_ms=duration)
+        if not result.stdout.strip():
+            return self.error(
+                result.stderr.strip() or "Malicious pattern scan produced no output", duration_ms=duration
+            )
 
         findings: list[Finding] = []
 

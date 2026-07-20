@@ -2503,3 +2503,47 @@ class TestToolCrashDoesNotSilentlyPass:
 
         result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
         assert result.status == ControlStatus.PASS
+
+    def test_sc02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty output is not a clean bill of health, whatever the exit code."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_sc02_passes_when_there_are_no_packages_to_scan(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bundle with no components has no vulnerabilities -- a real result."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[], returncode=1, stdout="", stderr="no packages discovered in the given source"
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_cq02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GuardDog always emits JSON; empty output means it analysed nothing."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS

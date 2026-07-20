@@ -330,6 +330,47 @@ describe('Scanner Routes', () => {
     });
   });
 
+  // A domain rollup must not report `pass` for a control that never ran --
+  // the whole point of separating ERROR from FAIL is lost if both collapse
+  // into an affirmative result on the publisher-facing endpoint.
+  describe('domain rollup status', () => {
+    const scanWithControlStatus = (status: string) => ({
+      riskScore: 'LOW',
+      status: 'completed',
+      completedAt: new Date('2026-01-01'),
+      report: {
+        findings: [],
+        domains: { supply_chain: { controls: { 'SC-02': { status, findings: [] } } } },
+      },
+    });
+
+    const readDomainStatus = async (controlStatus: string) => {
+      packageRepo.findByName.mockResolvedValue({ ...mockPackage, latestVersion: '1.0.0' });
+      prisma.packageVersion.findFirst.mockResolvedValue({
+        securityScans: [scanWithControlStatus(controlStatus)],
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/@scope/pkg/security' });
+      return JSON.parse(res.payload).scans.supply_chain.status;
+    };
+
+    it('reports error for a domain whose control could not run', async () => {
+      expect(await readDomainStatus('error')).toBe('error');
+    });
+
+    it('reports fail for a domain whose control failed', async () => {
+      expect(await readDomainStatus('fail')).toBe('fail');
+    });
+
+    it('reports pass only when the control actually passed', async () => {
+      expect(await readDomainStatus('pass')).toBe('pass');
+    });
+
+    it('does not let a skipped control downgrade the domain', async () => {
+      expect(await readDomainStatus('skip')).toBe('pass');
+    });
+  });
+
   // =========================================================================
   // GET /@:scope/:package/security
   // =========================================================================

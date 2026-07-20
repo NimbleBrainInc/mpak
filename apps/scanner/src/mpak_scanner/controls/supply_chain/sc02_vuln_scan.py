@@ -155,16 +155,21 @@ class SC02VulnerabilityScan(Control):
         # Grype exits non-zero if it finds vulnerabilities, but also for errors
         stderr_preview = result.stderr[:200] if result.stderr else ""
         logger.info("grype exit=%d stdout=%d bytes stderr=%s", result.returncode, len(result.stdout), stderr_preview)
-        if result.returncode != 0 and "no packages discovered" not in result.stderr.lower():
-            if not result.stdout.strip():
-                # Grype ran but produced nothing usable (commonly an unavailable
-                # vulnerability database). The bundle was never inspected, so this
-                # is an ERROR, not a FAIL -- a FAIL would assert the bundle failed
-                # a security control we never actually applied to it.
-                return self.error(
-                    result.stderr.strip() or "Vulnerability scan produced no output",
-                    duration_ms=int((time.time() - start) * 1000),
-                )
+        # Grype reports "no packages discovered" for a bundle with nothing to
+        # scan. That is a real result -- no components, so no vulnerabilities --
+        # and is the one case where empty output means zero matches.
+        found_nothing_to_scan = "no packages discovered" in result.stderr.lower()
+
+        if not result.stdout.strip() and not found_nothing_to_scan:
+            # Grype produced nothing usable, commonly an unavailable vulnerability
+            # database. The bundle was never inspected, so this is an ERROR, not a
+            # FAIL -- and not a pass either. Exit code is not consulted: grype
+            # exits non-zero when it finds vulnerabilities too, so empty output is
+            # the reliable signal that nothing was examined.
+            return self.error(
+                result.stderr.strip() or "Vulnerability scan produced no output",
+                duration_ms=int((time.time() - start) * 1000),
+            )
 
         try:
             if result.stdout.strip():

@@ -192,15 +192,28 @@ function extractFindingCounts(report: Record<string, unknown> | null): {
       for (const [domainName, domain] of Object.entries(domains)) {
         if (domain.controls) {
           let domainFindings = 0;
-          let domainStatus = 'pass';
+          // A domain reads `pass` only when every control in it passed.
+          // Anything else is reported by precedence: a real failure outranks a
+          // control that could not run, which outranks a clean domain. Treating
+          // only `fail` as non-passing would report `pass` for a domain whose
+          // controls errored -- claiming a result the scanner never measured.
+          //
+          // `skip` deliberately does not downgrade: controls that are not yet
+          // implemented skip by default, so honouring it here would mark nearly
+          // every domain as skipped. Skips stay visible per control.
+          let sawFail = false;
+          let sawError = false;
           for (const control of Object.values(domain.controls)) {
             if (Array.isArray(control.findings)) {
               domainFindings += control.findings.length;
             }
             if (control.status === 'fail') {
-              domainStatus = 'fail';
+              sawFail = true;
+            } else if (control.status === 'error') {
+              sawError = true;
             }
           }
+          const domainStatus = sawFail ? 'fail' : sawError ? 'error' : 'pass';
           scans[domainName] = {
             status: domainStatus,
             finding_count: domainFindings,
