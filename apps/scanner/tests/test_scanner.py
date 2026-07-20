@@ -2299,6 +2299,28 @@ class TestToolFailureIsNotControlFailure:
 class TestDegradedScan:
     """A compliance level is only publishable when every level-bearing control ran."""
 
+    # A control set that certifies L2 outright. Errors are layered onto it so
+    # each fixture exercises a level that is genuinely within reach -- an error
+    # in isolation suppresses nothing, because no level was attainable anyway.
+    @staticmethod
+    def _l2_controls() -> dict[str, ControlResult]:
+        return {
+            "AI-01": ControlResult("AI-01", "Manifest", ControlStatus.PASS),
+            "SC-01": ControlResult("SC-01", "SBOM", ControlStatus.PASS),
+            "CQ-01": ControlResult("CQ-01", "Secrets", ControlStatus.PASS),
+            "CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.PASS),
+            "CD-01": ControlResult("CD-01", "Tools", ControlStatus.PASS),
+            "AI-05": ControlResult("AI-05", "Completeness", ControlStatus.PASS),
+            "SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS),
+            "SC-03": ControlResult("SC-03", "Pinning", ControlStatus.PASS),
+            "SC-04": ControlResult("SC-04", "Lockfile", ControlStatus.PASS),
+            "CQ-03": ControlResult("CQ-03", "Static", ControlStatus.PASS),
+            "CD-02": ControlResult("CD-02", "Perms", ControlStatus.PASS),
+            "CD-03": ControlResult("CD-03", "ToolDesc", ControlStatus.PASS),
+            "PR-01": ControlResult("PR-01", "Repo", ControlStatus.PASS),
+            "PR-02": ControlResult("PR-02", "Author", ControlStatus.PASS),
+        }
+
     @staticmethod
     def _report(controls: dict[str, ControlResult]) -> SecurityReport:
         report = SecurityReport(
@@ -2322,9 +2344,8 @@ class TestDegradedScan:
     def test_degraded_when_level_bearing_control_errors(self) -> None:
         """An errored L2 control means the level is unmeasured, not merely unmet."""
         report = self._report(
-            {
-                "SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR, error="db unavailable"),
-            }
+            self._l2_controls()
+            | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR, error="db unavailable")}
         )
         assert report.degraded is True
         assert report.controls_errored == 1
@@ -2341,7 +2362,7 @@ class TestDegradedScan:
 
     def test_degraded_surfaced_in_report_dict(self) -> None:
         """Consumers read `degraded` off the report to decide whether to publish."""
-        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR)})
+        report = self._report(self._l2_controls() | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR)})
         compliance = report.to_dict()["compliance"]
         assert compliance["degraded"] is True
         assert compliance["controls_errored"] == 1
@@ -2350,3 +2371,92 @@ class TestDegradedScan:
         """A scan where everything ran is publishable."""
         report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS)})
         assert report.to_dict()["compliance"]["degraded"] is False
+
+    def test_not_degraded_when_error_does_not_suppress_a_level(self) -> None:
+        """An error in a control the achieved level does not need is not degrading.
+
+        PR-05 is required only at L3+. A bundle that reaches L2 is not held back
+        by it, so the level it reports is still a real measurement.
+        """
+        report = self._report(
+            self._l2_controls() | {"PR-05": ControlResult("PR-05", "RepoHealth", ControlStatus.ERROR)}
+        )
+        assert report.compliance_level == ComplianceLevel.L2_STANDARD
+        assert report.degraded is False
+
+
+class TestControlsWithNothingToInspect:
+    """Having nothing to analyse is a property of the bundle, not a scanner failure."""
+
+    def test_cq02_skips_bundle_with_no_python_or_javascript(self, tmp_path: Path) -> None:
+        """`binary` is a supported server type; CQ-02 must not error on it.
+
+        ERROR would mark the scan degraded and suppress certification entirely,
+        claiming the scanner could not measure when in fact it measured
+        correctly and found nothing to analyse.
+        """
+        (tmp_path / "server").write_bytes(b"\x7fELF\x02\x01\x01\x00binary")
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {"server_type": "binary"})
+        assert result.status == ControlStatus.SKIP
+        assert result.status != ControlStatus.ERROR
+
+    def test_binary_bundle_scan_is_not_degraded(self) -> None:
+        """A binary bundle produces a publishable scan, not a degraded one."""
+        report = SecurityReport(
+            bundle_name="t",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["code_quality"] = DomainResult(
+            domain="code_quality",
+            controls={"CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.SKIP)},
+        )
+        assert report.degraded is False
+
+
+class TestToolCrashDoesNotSilentlyPass:
+    """A control must not certify on the strength of a scan that never ran."""
+
+    def test_cq01_errors_when_trufflehog_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crashed trufflehog must not read as 'no secrets found'."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="trufflehog: panic")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq01_passes_when_trufflehog_finds_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A clean exit with no findings is a genuine pass."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_error_result_records_duration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Errored controls still report how long they took."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.duration_ms >= 0

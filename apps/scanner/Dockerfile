@@ -14,12 +14,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin && \
     curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
-# Bake the grype vulnerability database into the image. Without it, every scan
-# job downloads the full database at runtime, and a restricted-egress or
-# rate-limited job leaves grype with no database at all. Auto-update stays on,
-# so a job with network access still refreshes to the latest.
+# Bake the grype vulnerability database into the image. grype's default cache
+# lives under $HOME, which is unwritable for the scan job's non-root user, so
+# without this it can never hold a database and every CVE scan fails.
+#
+# The directory is owned by uid 1000 to match runAsUser in the scan Job's pod
+# spec (see createScanJob in the registry). grype refuses a database older than
+# max-allowed-built-age (5 days) and updates in place, creating temp dirs inside
+# the cache -- so read-only ownership would strand every scan once the baked
+# database aged out. Owning it by the runtime user keeps auto-update working and
+# leaves the baked copy as the offline fallback.
 ENV GRYPE_DB_CACHE_DIR=/opt/grype-db
-RUN grype db update && grype db status && chmod -R a+rX /opt/grype-db
+RUN grype db update && grype db status && chown -R 1000:1000 /opt/grype-db
 
 # TruffleHog (secret detection)
 RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin

@@ -85,7 +85,11 @@ class CQ02NoMaliciousPatterns(Control):
         # Detect ecosystem
         ecosystem = self._detect_ecosystem(bundle_dir)
         if ecosystem is None:
-            return self.error("Could not detect bundle ecosystem (no Python or JavaScript files found)")
+            # A property of the bundle, not a scanner failure: `binary` is a
+            # supported server type with no Python or JavaScript to analyse.
+            # SKIP says the control had nothing to inspect, where ERROR would
+            # claim the scanner could not measure and suppress the whole scan.
+            return self.skip("No Python or JavaScript files found to analyse")
 
         try:
             # Use python -m guarddog to ensure we use the venv's guarddog

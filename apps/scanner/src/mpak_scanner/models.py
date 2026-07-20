@@ -291,14 +291,28 @@ class SecurityReport:
 
     @property
     def degraded(self) -> bool:
-        """True if a control that feeds the compliance level did not run.
+        """True if an unevaluated control is holding the compliance level down.
 
         A level is only a measurement when every control behind it actually
-        executed. When one errors, the computed level understates the bundle --
-        it reflects a control the scanner could not apply, not a control the
-        bundle failed. Consumers must not publish a level from a degraded scan.
+        executed. An error matters when passing that control would have unlocked
+        a higher level: the reported level then reflects a control the scanner
+        could not apply, not one the bundle failed, and must not be published.
+
+        Errors in controls the bundle does not need for the level it reached
+        cannot understate it, so they do not degrade the scan -- a failure in an
+        L4-only control says nothing about a bundle certifying at L2.
         """
-        return any(c.status == ControlStatus.ERROR and is_level_bearing(cid) for cid, c in self.all_controls.items())
+        controls = self.all_controls
+        errored = [cid for cid, c in controls.items() if c.status == ControlStatus.ERROR]
+        if not errored:
+            return False
+
+        # Re-derive the level treating each errored control as if it had passed.
+        # A higher result means the errors, not the bundle, capped the level.
+        optimistic = dict(controls)
+        for cid in errored:
+            optimistic[cid] = ControlResult(cid, controls[cid].control_name, ControlStatus.PASS)
+        return calculate_compliance_level(optimistic) > self.compliance_level
 
     @property
     def controls_total(self) -> int:

@@ -161,7 +161,10 @@ class SC02VulnerabilityScan(Control):
                 # vulnerability database). The bundle was never inspected, so this
                 # is an ERROR, not a FAIL -- a FAIL would assert the bundle failed
                 # a security control we never actually applied to it.
-                return self.error(result.stderr.strip() or "Vulnerability scan produced no output")
+                return self.error(
+                    result.stderr.strip() or "Vulnerability scan produced no output",
+                    duration_ms=int((time.time() - start) * 1000),
+                )
 
         try:
             if result.stdout.strip():
@@ -258,7 +261,9 @@ class SC02VulnerabilityScan(Control):
             )
 
         except json.JSONDecodeError as e:
-            return self.error(f"Failed to parse vulnerability results: {e}")
+            return self.error(
+                f"Failed to parse vulnerability results: {e}", duration_ms=int((time.time() - start) * 1000)
+            )
 
     def _calculate_severity(
         self,
