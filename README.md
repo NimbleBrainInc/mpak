@@ -354,8 +354,8 @@ pnpm --filter @nimblebrain/mpak test       # CLI
 # Python scanner tests
 cd apps/scanner && uv sync --dev && uv run pytest
 
-# Full verification (build + test + lint + typecheck)
-pnpm build && pnpm test && pnpm lint && pnpm typecheck
+# Full verification (typecheck, lint, format check, tests)
+pnpm verify
 ```
 
 ### Build
