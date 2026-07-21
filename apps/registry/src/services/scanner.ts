@@ -82,6 +82,11 @@ export async function triggerScan(params: TriggerScanParams): Promise<TriggerSca
         },
         spec: {
           restartPolicy: 'Never',
+          // ServiceAccount the scan pod runs as. Point SCANNER_SERVICE_ACCOUNT
+          // at one carrying cloud identity (e.g. IRSA / workload identity) scoped
+          // to reading the bundle under scan and writing its report; defaults to
+          // the namespace default SA.
+          serviceAccountName: config.scanner.serviceAccountName,
           securityContext: {
             runAsNonRoot: true,
             runAsUser: 1000,
