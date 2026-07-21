@@ -24,6 +24,15 @@ SKIP_DIRS = {"deps", "node_modules", "vendor", "site-packages", ".venv", "venv",
 # able to do is the capability-declaration domain's question, not malware's.
 CAPABILITY_RULE_PREFIX = "capability-"
 
+# Capabilities that are not, on their own, a verdict but have no ordinary reason
+# to appear in a server that wraps an API: reading browser credential stores, or
+# reaching for curl/wget/nc. Reported so they stay visible, not blocking --
+# actually misusing them trips a `threat-*` rule, which does block.
+NOTABLE_CAPABILITY_RULES = {
+    "capability-filesystem-browser",
+    "capability-network-lolbas",
+}
+
 # Threat rules that fire on ordinary MCP server behaviour, reported but not
 # blocking. Reading credentials from the environment is the mechanism the
 # manifest's user_config describes, and calling third-party APIs over TLS is
@@ -168,6 +177,8 @@ class CQ02NoMaliciousPatterns(Control):
                                 # Findings in dependencies are informational only
                                 if in_deps:
                                     severity = Severity.INFO
+                                elif rule_name in NOTABLE_CAPABILITY_RULES:
+                                    severity = Severity.MEDIUM
                                 elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
                                     # A capability the server has, not a threat.
                                     severity = Severity.INFO

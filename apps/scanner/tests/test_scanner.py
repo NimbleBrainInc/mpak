@@ -2665,3 +2665,64 @@ class TestCQ02GuardDogThreeTaxonomy:
         """Obfuscation is a threat verdict, not a capability."""
         result = self._run(tmp_path, monkeypatch, "threat-runtime-obfuscation-base64exec", "dist/a.js")
         assert result.status == ControlStatus.FAIL
+
+
+class TestCQ02AgainstRealGuardDog:
+    """Runs the real analyser, because mocks cannot see a taxonomy change.
+
+    Every other CQ-02 test hand-authors GuardDog's output, so they stay green
+    when GuardDog renames or re-scopes its rules -- which is exactly how this
+    control came to certify a legitimate bundle as containing critical malware.
+    These deliberately do not skip when the tool is missing: a silent skip
+    would restore the blind spot they exist to remove.
+    """
+
+    def test_ordinary_server_behaviour_does_not_fail(self, tmp_path: Path) -> None:
+        """Reading a key from the environment and calling an API is the job."""
+        (tmp_path / "server.js").write_text(
+            'const k = process.env.API_KEY;\nfetch("https://api.example.com?k=" + k);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a plain API client failed CQ-02: {[(f.severity.value, f.title) for f in result.findings]}"
+        )
+        assert not any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscated_execution_still_fails(self, tmp_path: Path) -> None:
+        """The control must still catch what it exists to catch."""
+        (tmp_path / "server.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_threat_inside_a_dependency_does_not_fail_the_bundle(self, tmp_path: Path) -> None:
+        """A bundle is not answerable for patterns in the code it vendors.
+
+        This is the path-matching half: GuardDog reports relative paths, so the
+        dependency check has to recognise them as such.
+        """
+        (tmp_path / "server.js").write_text('console.log("hello");\n')
+        vendored = tmp_path / "node_modules" / "some-dep"
+        vendored.mkdir(parents=True)
+        (vendored / "index.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
+        )
+        assert all(f.in_deps for f in result.findings if f.severity != Severity.INFO)

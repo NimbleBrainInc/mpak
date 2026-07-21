@@ -98,7 +98,12 @@ markers = [
 
 [dependency-groups]
 dev = [
-    "guarddog>=2.7.0",
+    # Pinned to match the Dockerfile. The classifier reads GuardDog's rule
+    # taxonomy, which changed shape between 2.x and 3.x, so a dev environment on
+    # a different major silently tests different behaviour than production runs.
+    "guarddog==3.1.0",
+    # Likewise for CQ-03's analyser.
+    "bandit==1.9.4",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.9.0",
