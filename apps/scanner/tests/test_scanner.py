@@ -1946,23 +1946,28 @@ class TestCQ03JavaScript:
         assert result.status != ControlStatus.PASS
 
     def test_js_file_discovery(self, bundle_dir: Path) -> None:
-        """Discovers JavaScript, and deliberately not TypeScript or JSX.
+        """Discovers the JavaScript ESLint can lint, including .jsx.
 
-        ESLint runs without a TypeScript parser and its flat config does not
-        match .jsx, so submitting either only produces "file ignored" notices --
-        the appearance of coverage without any.
+        `.jsx` needs --ext to be matched by flat config, which the invocation
+        passes. TypeScript is discovered separately, as source no installed
+        analyser can read.
         """
         src = bundle_dir / "src"
         src.mkdir()
         (src / "server.js").write_text("console.log('hello');")
-        (src / "utils.ts").write_text("export const foo = 1;")
         (src / "widget.jsx").write_text("const a = 1;")
         (src / "index.mjs").write_text("export default {};")
+        (src / "utils.ts").write_text("export const foo = 1;")
 
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
-        js_files = CQ03StaticAnalysis()._find_server_js_files(bundle_dir)
-        assert {f.name for f in js_files} == {"server.js", "index.mjs"}
+        control = CQ03StaticAnalysis()
+        assert {f.name for f in control._find_server_js_files(bundle_dir)} == {
+            "server.js",
+            "widget.jsx",
+            "index.mjs",
+        }
+        assert {f.name for f in control._find_unanalysed_sources(bundle_dir)} == {"utils.ts"}
 
     def test_node_modules_excluded(self, bundle_dir: Path) -> None:
         """node_modules should be excluded from JS file discovery."""
@@ -2815,6 +2820,12 @@ class TestCQ02CredentialAccess:
         assert result.status == ControlStatus.FAIL
 
 
+# ESLint emits one entry per file it was given, so `[]` is not a clean run --
+# it is "no files analysed", which the control treats as a tool failure. Using
+# it as a success stub let tests assert on argv while the control errored.
+CLEAN_ESLINT_OUTPUT = json.dumps([{"filePath": "server.js", "messages": []}])
+
+
 class TestStaticAnalysisDoesNotCertifyUnrunTools:
     """CQ-03 is L2-required, so a tool that did not run must not read as clean."""
 
@@ -3011,7 +3022,7 @@ class TestStaticAnalysisDoesNotCertifyUnrunTools:
 
         def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
             seen.update(kwargs)
-            return subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=CLEAN_ESLINT_OUTPUT, stderr="")
 
         monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
         monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
@@ -3111,7 +3122,7 @@ class TestStaticAnalysisDoesNotCertifyUnrunTools:
 
         def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             seen.extend(cmd)
-            return subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=CLEAN_ESLINT_OUTPUT, stderr="")
 
         monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
         monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
@@ -3195,19 +3206,29 @@ class TestCQ03Discovery:
         found = {f.name for f in CQ03StaticAnalysis()._find_server_js_files(d)}
         assert found == {"server.js"}
 
-    def test_jsx_is_not_submitted_to_eslint(self, tmp_path: Path) -> None:
-        """ESLint's flat config does not match .jsx, so submitting it is a no-op.
+    def test_jsx_is_submitted_to_eslint(self, tmp_path: Path) -> None:
+        """`.jsx` is lintable with --ext, so dropping it would just stop looking.
 
-        Left in, a .jsx-only bundle errors the control outright, and a mixed
-        bundle passes with the .jsx never inspected -- executable code certified
-        clean because the tool declined to look at it.
+        Left undiscovered, a bundle pairing a .jsx payload with any trivial .js
+        passed with the .jsx never inspected.
         """
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
         d = self._bundle(tmp_path, "src/server.js", "src/widget.jsx")
         found = {f.name for f in CQ03StaticAnalysis()._find_server_js_files(d)}
-        assert found == {"server.js"}
-        assert not any(f.suffix == ".jsx" for f in CQ03StaticAnalysis()._find_server_js_files(d))
+        assert found == {"server.js", "widget.jsx"}
+
+    def test_typescript_is_reported_as_uncovered_not_dropped(self, tmp_path: Path) -> None:
+        """Source no analyser can read must not vanish.
+
+        Dropping it silently let a bundle pairing a .ts payload with a trivial
+        .js come back clean on an analysis that never read the .ts.
+        """
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(tmp_path, "src/app.ts", "src/types.d.ts")
+        found = {f.name for f in CQ03StaticAnalysis()._find_unanalysed_sources(d)}
+        assert found == {"app.ts"}, "declaration files carry no executable code"
 
     def test_python_discovery_uses_the_same_rules(self, tmp_path: Path) -> None:
         """Both languages share the filtering, so both share the fix."""
@@ -3216,54 +3237,3 @@ class TestCQ03Discovery:
         d = self._bundle(tmp_path, "src/latest.py", "tests/conftest.py", "test_thing.py", "deps/lib/mod.py")
         found = {f.name for f in CQ03StaticAnalysis()._find_server_python_files(d)}
         assert found == {"latest.py"}
-
-    def test_eslint_resolves_plugins_without_a_preset_node_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The documented local install has to be enough on its own.
-
-        ESLint runs with --no-config-lookup and absolute paths, so it finds
-        plugins through NODE_PATH. Setting that only in the image would leave a
-        developer who followed the install instructions unable to run CQ-03.
-        """
-        (tmp_path / "server.js").write_text("var x = 1;\n")
-
-        from mpak_scanner.controls.code_quality import cq03_static_analysis
-
-        cq03_static_analysis._global_node_modules.cache_clear()
-        monkeypatch.delenv("NODE_PATH", raising=False)
-        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda n: f"/usr/bin/{n}")
-
-        seen: dict[str, object] = {}
-
-        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-            if cmd[1:3] == ["root", "-g"]:
-                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="/global/node_modules\n", stderr="")
-            seen.update(kwargs)
-            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="[]", stderr="")
-
-        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
-        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
-
-        assert seen["env"]["NODE_PATH"] == "/global/node_modules"  # type: ignore[index]
-
-    def test_a_preset_node_path_is_left_alone(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The image sets it deliberately; do not second-guess that."""
-        (tmp_path / "server.js").write_text("var x = 1;\n")
-
-        from mpak_scanner.controls.code_quality import cq03_static_analysis
-
-        cq03_static_analysis._global_node_modules.cache_clear()
-        monkeypatch.setenv("NODE_PATH", "/image/node_modules")
-        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda n: f"/usr/bin/{n}")
-
-        seen: dict[str, object] = {}
-
-        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-            seen.update(kwargs)
-            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="[]", stderr="")
-
-        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
-        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
-
-        assert seen["env"]["NODE_PATH"] == "/image/node_modules"  # type: ignore[index]

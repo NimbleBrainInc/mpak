@@ -1,8 +1,6 @@
 """CQ-03: Static Analysis Clean control."""
 
-import functools
 import json
-import os
 import shutil
 import subprocess
 import time
@@ -44,36 +42,6 @@ def _is_test_path(relative: Path) -> bool:
     )
 
 
-@functools.cache
-def _global_node_modules() -> str | None:
-    """Where npm installs global packages, asked of npm rather than assumed.
-
-    ESLint runs with --no-config-lookup and absolute paths, so it resolves
-    plugins from NODE_PATH rather than from the file's own tree. Baking that
-    into the image alone would mean the documented local install still could
-    not find the plugin, which is the dev/production split these controls keep
-    getting caught by.
-    """
-    npm = shutil.which("npm")
-    if npm is None:
-        return None
-    try:
-        result = subprocess.run([npm, "root", "-g"], capture_output=True, text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return result.stdout.strip() or None if result.returncode == 0 else None
-
-
-def _eslint_env() -> dict[str, str]:
-    """Process environment for ESLint, with NODE_PATH resolved if unset."""
-    env = dict(os.environ)
-    if not env.get("NODE_PATH"):
-        global_modules = _global_node_modules()
-        if global_modules:
-            env["NODE_PATH"] = global_modules
-    return env
-
-
 def _is_dependency_path(relative: Path) -> bool:
     """Whether a bundle-relative path points into vendored dependency code."""
     return any(part in DEP_DIRS for part in relative.parts)
@@ -83,11 +51,15 @@ def _is_dependency_path(relative: Path) -> bool:
 # ESLint runs without a TypeScript parser, so it cannot lint TS sources -- it
 # reports them as ignored rather than analysing them. Bundles ship compiled
 # JavaScript, which is what actually executes and what these rules can read;
-# submitting .ts would only manufacture ignore notices, and .d.ts declaration
-# files carry no executable code at all. `.jsx` is out for the same reason: it
-# is absent from flat config's default glob (**/*.js, **/*.mjs, **/*.cjs), so
-# ESLint reports it ignored rather than analysing it.
-JS_EXTENSIONS = {".js", ".mjs", ".cjs"}
+# `.jsx` is absent from flat config's default glob (**/*.js, **/*.mjs,
+# **/*.cjs), so it needs --ext below to be linted rather than reported ignored.
+JS_EXTENSIONS = {".js", ".mjs", ".cjs", ".jsx"}
+
+# TypeScript needs a parser ESLint is not installed with, so these are found but
+# not analysed. Reported rather than dropped: executable code no tool inspected
+# is the thing this control exists to refuse to certify, and dropping them
+# silently made a .ts bundle pass on an analysis that never looked at it.
+UNANALYSED_SOURCE_EXTENSIONS = {".ts", ".tsx", ".mts", ".cts"}
 
 # Bandit severity/confidence mapping
 BANDIT_SEVERITY_MAP = {
@@ -134,6 +106,26 @@ class CQ03StaticAnalysis(Control):
         # Track if any analysis was run
         analysis_run = False
 
+        # Source the installed analysers cannot read is recorded before anything
+        # else, so a bundle carrying it cannot come back clean without the gap
+        # appearing alongside whatever else was found.
+        unanalysed = self._find_unanalysed_sources(bundle_dir)
+        if unanalysed:
+            listed = ", ".join(sorted(str(f.relative_to(bundle_dir)) for f in unanalysed)[:5])
+            findings.append(
+                Finding(
+                    id="CQ-03-COV-0000",
+                    control=self.id,
+                    severity=Severity.MEDIUM,
+                    title=f"Source not covered by any analyser ({len(unanalysed)} file(s))",
+                    description=(
+                        "TypeScript sources were found but no installed analyser can read "
+                        f"them, so they were not inspected: {listed}" + (" ..." if len(unanalysed) > 5 else "")
+                    ),
+                    remediation="Ship compiled JavaScript, which this control analyses",
+                )
+            )
+
         try:
             if python_files:
                 findings.extend(self._run_bandit(bundle_dir, python_files))
@@ -146,14 +138,18 @@ class CQ03StaticAnalysis(Control):
             return self.error(str(e), duration_ms=int((time.time() - start) * 1000))
 
         if not analysis_run:
-            # Nothing this control can read is not the same as nothing to find.
-            # A bundle shipping only TypeScript sources reaches here, and passing
-            # it would certify code no tool inspected. SKIP says the control did
-            # not apply, which caps the level honestly rather than vouching for
-            # the bundle -- the same choice CQ-02 makes for bundles with no
-            # ecosystem it can analyse.
-            return self.skip(
-                "No analysable Python or JavaScript found (excluding dependencies)",
+            # Nothing this control can read is not the same as nothing to find,
+            # so passing here would vouch for code no tool inspected. SKIP caps
+            # the level instead. Note this is a coverage gap, not a statement
+            # that the control does not apply: a bundle of TypeScript has plenty
+            # to analyse and no analyser installed to do it.
+            return ControlResult(
+                control_id=self.id,
+                control_name=self.name,
+                status=ControlStatus.SKIP,
+                findings=findings,
+                error="No analysable Python or JavaScript found (excluding dependencies)",
+                duration_ms=int((time.time() - start) * 1000),
             )
 
         duration = int((time.time() - start) * 1000)
@@ -181,6 +177,19 @@ class CQ03StaticAnalysis(Control):
             python_files.append(py_file)
 
         return python_files
+
+    def _find_unanalysed_sources(self, bundle_dir: Path) -> list[Path]:
+        """Server source files no installed analyser can read."""
+        found: list[Path] = []
+        for ext in UNANALYSED_SOURCE_EXTENSIONS:
+            for src in bundle_dir.rglob(f"*{ext}"):
+                relative = src.relative_to(bundle_dir)
+                if _is_dependency_path(relative) or _is_test_path(relative):
+                    continue
+                if relative.name.endswith(".d.ts"):
+                    continue  # declarations carry no executable code
+                found.append(src)
+        return found
 
     def _find_server_js_files(self, bundle_dir: Path) -> list[Path]:
         """Find JavaScript/TypeScript files that are server code (not dependencies)."""
@@ -332,6 +341,10 @@ class CQ03StaticAnalysis(Control):
                 [
                     eslint,
                     "--no-config-lookup",
+                    # Without this, flat config matches only .js/.mjs/.cjs and
+                    # reports .jsx ignored -- analysing nothing, silently.
+                    "--ext",
+                    ".jsx",
                     # Emitted with no ruleId against files ESLint analysed
                     # perfectly well, and unrelated to security. Off, so a
                     # rule-less message reliably means the file was skipped.
@@ -358,7 +371,6 @@ class CQ03StaticAnalysis(Control):
                 capture_output=True,
                 text=True,
                 timeout=120,
-                env=_eslint_env(),
                 # With --no-config-lookup, ESLint treats the working directory as
                 # the flat-config base path and silently ignores any file outside
                 # it. Anchor at the filesystem root so every absolute path is in
