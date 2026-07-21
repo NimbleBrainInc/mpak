@@ -44,6 +44,14 @@ function shortId(uuid: string): string {
 }
 
 /**
+ * Deterministic Job name for a scan. Single source so buildScanJob (which sets
+ * metadata.name) and triggerScan (which logs and returns it) cannot drift.
+ */
+function scanJobName(scanId: string): string {
+  return `scan-${shortId(scanId)}`;
+}
+
+/**
  * Build the K8s Job manifest for a bundle scan.
  *
  * Pure (no cluster calls) so the pod's security posture — the scoped
@@ -52,7 +60,7 @@ function shortId(uuid: string): string {
  */
 export function buildScanJob(params: TriggerScanParams): k8s.V1Job {
   const { scanId, bundleS3Key, packageName } = params;
-  const jobName = `scan-${shortId(scanId)}`;
+  const jobName = scanJobName(scanId);
 
   return {
     apiVersion: 'batch/v1',
@@ -159,7 +167,7 @@ export async function triggerScan(params: TriggerScanParams): Promise<TriggerSca
     return { jobName: 'disabled' };
   }
 
-  const jobName = `scan-${shortId(scanId)}`;
+  const jobName = scanJobName(scanId);
   const job = buildScanJob(params);
 
   const client = getK8sClient();
