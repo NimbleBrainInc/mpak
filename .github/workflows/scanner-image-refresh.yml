@@ -78,5 +78,4 @@ jobs:
         run: |
           gh issue create \
             --title "Scanner image refresh failed" \
-            --body "The daily scanner image rebuild failed. The baked grype database expires 5 days after the last successful build, after which scan pods without egress to grype.anchore.io stop certifying. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label bug
+            --body "The daily scanner image rebuild failed. The baked grype database expires 5 days after the last successful build, after which scan pods without egress to grype.anchore.io stop certifying. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

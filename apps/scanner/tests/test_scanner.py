@@ -2696,3 +2696,101 @@ class TestStaticAnalysisDoesNotCertifyUnrunTools:
 
         result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
         assert result.status == ControlStatus.ERROR
+
+    def test_eslint_ignored_file_notice_becomes_control_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ESLint ignoring every file must not read as a clean bundle.
+
+        With --no-config-lookup the working directory is the flat-config base
+        path, and a file outside it comes back as a rule-less warning with exit
+        0 and non-empty JSON -- so neither the exit-code nor the empty-output
+        guard sees it, and the parse loop would file it as a MEDIUM finding
+        while nothing was analysed.
+        """
+        (tmp_path / "server.js").write_text("var x = eval(u);\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "server.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "severity": 1,
+                            "message": "File ignored because outside of base path.",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_parse_error_stays_a_finding(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A file ESLint cannot parse is a property of the bundle, not a tool failure."""
+        (tmp_path / "bad.js").write_text("var x = ;;;broken(\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "bad.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": True,
+                            "severity": 2,
+                            "message": "Parsing error: Unexpected token ;",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status != ControlStatus.ERROR
+        assert any("Parsing error" in f.title for f in result.findings)
+
+    def test_eslint_runs_from_a_root_anchored_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The working directory must contain the bundle, and must not be it.
+
+        Anything below the root risks ESLint ignoring files outside its base
+        path; the bundle itself would let it supply its own configuration.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        seen: dict[str, object] = {}
+
+        def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen.update(kwargs)
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+
+        cwd = str(seen["cwd"])
+        assert cwd == tmp_path.anchor
+        assert cwd != str(tmp_path)
+        assert str(tmp_path).startswith(cwd)

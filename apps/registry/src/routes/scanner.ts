@@ -379,6 +379,7 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           {
             scanId: scan_id,
             status,
+            storedStatus,
             riskScore: risk_score,
             certificationLevel: certData?.certificationLevel ?? null,
             controlsPassed: certData?.controlsPassed ?? null,

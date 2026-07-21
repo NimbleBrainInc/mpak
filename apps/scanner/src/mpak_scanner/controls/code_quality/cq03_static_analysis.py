@@ -281,6 +281,12 @@ class CQ03StaticAnalysis(Control):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                # With --no-config-lookup, ESLint treats the working directory as
+                # the flat-config base path and silently ignores any file outside
+                # it. Anchor at the filesystem root so every absolute path is in
+                # scope. It must not be the bundle directory: that is what let a
+                # bundle supply its own tooling and configuration.
+                cwd=bundle_dir.anchor or "/",
             )
         except FileNotFoundError as e:
             raise ToolFailureError("eslint not found; JavaScript static analysis did not run") from e
@@ -312,6 +318,15 @@ class CQ03StaticAnalysis(Control):
                     in_deps = any(dep_dir in rel_path for dep_dir in DEP_DIRS)
 
                     for msg in file_result.get("messages", []):
+                        # A message with no rule is ESLint talking about itself
+                        # rather than about the code -- an ignored file, an
+                        # unresolvable config. Nothing was analysed, so it cannot
+                        # be reported as a finding. The exception is `fatal`,
+                        # which marks a file ESLint could not parse: that is a
+                        # property of the bundle and stays a finding.
+                        if msg.get("ruleId") is None and not msg.get("fatal"):
+                            raise ToolFailureError(f"eslint analysed nothing: {msg.get('message', 'no rule reported')}")
+
                         finding_counter += 1
                         severity_int = msg.get("severity", 1)
                         mtf_severity = ESLINT_SEVERITY_MAP.get(severity_int, Severity.LOW)
