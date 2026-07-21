@@ -46,11 +46,7 @@ RUN grype db update && grype db status && chown -R 1000:1000 /opt/grype-db
 # TruffleHog (secret detection)
 RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin "${TRUFFLEHOG_VERSION}"
 
-# ESLint with security plugin (JS/TS static analysis).
-# NODE_PATH lets ESLint resolve the globally installed plugin while analysing
-# files outside any node_modules tree -- it is run with --no-config-lookup and
-# absolute paths, never from inside the bundle.
-ENV NODE_PATH=/usr/local/lib/node_modules
+# ESLint with security plugin (JS/TS static analysis)
 RUN npm install -g "eslint@${ESLINT_VERSION}" "eslint-plugin-security@${ESLINT_PLUGIN_SECURITY_VERSION}" --no-fund --no-audit
 
 # mpak-scanner + Python security tools (bandit, guarddog)
