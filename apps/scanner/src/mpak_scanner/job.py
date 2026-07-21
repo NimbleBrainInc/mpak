@@ -57,7 +57,7 @@ def run_job() -> None:
     logger.info("Starting scan job %s for %s", scan_id, env["BUNDLE_S3_KEY"])
 
     try:
-        import boto3  # type: ignore[unresolved-import]
+        import boto3
 
         s3 = boto3.client("s3", region_name=region)
 

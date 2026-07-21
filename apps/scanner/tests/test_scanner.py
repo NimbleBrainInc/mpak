@@ -2623,20 +2623,31 @@ class TestCQ02GuardDogThreeTaxonomy:
         monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
         return cq02_malicious.CQ02NoMaliciousPatterns().run(self._bundle(tmp_path), {})
 
-    def test_dependency_finding_does_not_fail_the_bundle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """GuardDog reports relative paths, so `/node_modules/` never matched.
-
-        A bundle was being charged for patterns in the SDK it depends on.
-        """
+    def test_capability_in_a_dependency_does_not_fail_the_bundle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The original false positive: capability rules inside the MCP SDK."""
         result = self._run(
             tmp_path,
             monkeypatch,
-            "threat-process-cryptomining",
+            "capability-process-spawn",
             "node_modules/@modelcontextprotocol/sdk/dist/index.js",
         )
         assert result.status == ControlStatus.PASS
         assert all(f.severity == Severity.INFO for f in result.findings)
         assert all(f.in_deps for f in result.findings)
+
+    def test_real_threat_in_a_dependency_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A bundle ships and runs what it vendors, so it answers for it."""
+        result = self._run(tmp_path, monkeypatch, "threat-process-cryptomining", "node_modules/some-dep/index.js")
+        assert result.status == ControlStatus.FAIL
+
+    def test_threat_in_an_author_named_directory_still_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The bypass this closes: `vendor/` is a convention, not a boundary."""
+        result = self._run(tmp_path, monkeypatch, "threat-network-exfiltration", "vendor/index.js")
+        assert result.status == ControlStatus.FAIL
 
     def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`capability-*` states what the code can do, which is not a verdict.
@@ -2705,11 +2716,11 @@ class TestCQ02AgainstRealGuardDog:
         assert result.status == ControlStatus.FAIL
         assert any(f.severity == Severity.CRITICAL for f in result.findings)
 
-    def test_threat_inside_a_dependency_does_not_fail_the_bundle(self, tmp_path: Path) -> None:
-        """A bundle is not answerable for patterns in the code it vendors.
+    def test_threat_inside_a_dependency_fails_the_bundle(self, tmp_path: Path) -> None:
+        """A bundle ships and executes what it vendors, so it answers for it.
 
-        This is the path-matching half: GuardDog reports relative paths, so the
-        dependency check has to recognise them as such.
+        Attributing by directory let a payload exempt itself by sitting in one
+        named `vendor`; the rule decides the verdict, not the location.
         """
         (tmp_path / "server.js").write_text('console.log("hello");\n')
         vendored = tmp_path / "node_modules" / "some-dep"
@@ -2722,7 +2733,6 @@ class TestCQ02AgainstRealGuardDog:
 
         result = CQ02NoMaliciousPatterns().run(tmp_path, {})
 
-        assert result.status == ControlStatus.PASS, (
-            f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
-        )
-        assert all(f.in_deps for f in result.findings if f.severity != Severity.INFO)
+        assert result.status == ControlStatus.FAIL
+        # Still reported as vendored, so a publisher can see whose code it is.
+        assert any(f.in_deps and f.severity == Severity.CRITICAL for f in result.findings)

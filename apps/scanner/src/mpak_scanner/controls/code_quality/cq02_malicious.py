@@ -24,22 +24,13 @@ SKIP_DIRS = {"deps", "node_modules", "vendor", "site-packages", ".venv", "venv",
 # able to do is the capability-declaration domain's question, not malware's.
 CAPABILITY_RULE_PREFIX = "capability-"
 
-# Capabilities that are not, on their own, a verdict but have no ordinary reason
-# to appear in a server that wraps an API: reading browser credential stores, or
-# reaching for curl/wget/nc. Reported so they stay visible, not blocking --
-# actually misusing them trips a `threat-*` rule, which does block.
-NOTABLE_CAPABILITY_RULES = {
-    "capability-filesystem-browser",
-    "capability-network-lolbas",
-}
-
 # Threat rules that fire on ordinary MCP server behaviour, reported but not
 # blocking. Reading credentials from the environment is the mechanism the
 # manifest's user_config describes, and calling third-party APIs over TLS is
 # what a server wrapping an API does. Malicious use of either shows up in the
 # rules that describe the malicious part -- exfiltration, obfuscation, spawning
 # a shell -- which stay blocking.
-HIGH_FP_RULES = {
+NON_BLOCKING_THREAT_RULES = {
     "threat-runtime-environment-read",
     "threat-network-outbound-shady-links",
     "threat-runtime-obfuscation-unicode",
@@ -49,10 +40,9 @@ HIGH_FP_RULES = {
 def _is_dependency_path(path: str) -> bool:
     """Whether a tool-reported path points into vendored dependency code.
 
-    Matched on path components rather than substrings: GuardDog reports paths
-    relative to the scanned directory, so a leading-slash pattern like
-    "/node_modules/" silently misses every one of them and the bundle gets
-    charged for findings in code it merely depends on.
+    Reported so a publisher can tell their own code from what they vendor. It
+    deliberately does not affect the verdict: the layout is author-controlled,
+    so a payload dropped into a directory named `vendor` would exempt itself.
     """
     return any(part in SKIP_DIRS for part in PurePosixPath(path).parts)
 
@@ -175,14 +165,16 @@ class CQ02NoMaliciousPatterns(Control):
 
                                 # Per MTF spec, CQ-02 only evaluates server code
                                 # Findings in dependencies are informational only
-                                if in_deps:
-                                    severity = Severity.INFO
-                                elif rule_name in NOTABLE_CAPABILITY_RULES:
-                                    severity = Severity.MEDIUM
-                                elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
+                                # Severity comes from the rule, never from where
+                                # the file sits. A bundle ships and executes the
+                                # code it vendors, so an obfuscated exec or an
+                                # exfiltration pattern is its problem wherever it
+                                # lives -- and a directory whose name the author
+                                # chose is not a boundary anything can rest on.
+                                if rule_name.startswith(CAPABILITY_RULE_PREFIX):
                                     # A capability the server has, not a threat.
                                     severity = Severity.INFO
-                                elif rule_name in HIGH_FP_RULES:
+                                elif rule_name in NON_BLOCKING_THREAT_RULES:
                                     severity = Severity.MEDIUM
                                 else:
                                     severity = Severity.CRITICAL
