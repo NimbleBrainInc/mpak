@@ -24,6 +24,13 @@ SKIP_DIRS = {"deps", "node_modules", "vendor", "site-packages", ".venv", "venv",
 # able to do is the capability-declaration domain's question, not malware's.
 CAPABILITY_RULE_PREFIX = "capability-"
 
+# GuardDog's credential-access rule, and it is not "reads a .env": the same rule
+# matches /etc/shadow, .ssh/id_rsa, .aws/credentials, .git-credentials, .npmrc,
+# .pypirc and the browser credential stores. Exempting the rule to allow the
+# .env case would let reading an SSH key pass, so the exemption is gated on
+# which string actually matched.
+CREDENTIAL_READ_RULE = "threat-filesystem-read"
+
 # Threat rules that fire on ordinary MCP server behaviour, reported but not
 # blocking. Reading credentials from the environment is the mechanism the
 # manifest's user_config describes, and calling third-party APIs over TLS is
@@ -32,10 +39,21 @@ CAPABILITY_RULE_PREFIX = "capability-"
 # a shell -- which stay blocking.
 NON_BLOCKING_THREAT_RULES = {
     "threat-runtime-environment-read",
-    "threat-filesystem-read",
     "threat-network-outbound-shady-links",
     "threat-runtime-obfuscation-unicode",
 }
+
+
+def _reads_own_config(match: str | None) -> bool:
+    """Whether a credential-access hit is the server loading its own .env.
+
+    Covers `.env`, `.env.local`, `.env.production` and the like -- how a server
+    reads its own configuration, one layer below reading the environment
+    itself. Every other string this rule matches is someone else's secret.
+    """
+    if not match:
+        return False
+    return PurePosixPath(match.strip().strip("\"'")).name.startswith(".env")
 
 
 def _is_dependency_path(path: str) -> bool:
@@ -180,6 +198,8 @@ class CQ02NoMaliciousPatterns(Control):
                                 elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
                                     # A capability the server has, not a threat.
                                     severity = Severity.INFO
+                                elif rule_name == CREDENTIAL_READ_RULE and _reads_own_config(finding.get("match")):
+                                    severity = Severity.MEDIUM
                                 elif rule_name in NON_BLOCKING_THREAT_RULES:
                                     severity = Severity.MEDIUM
                                 else:

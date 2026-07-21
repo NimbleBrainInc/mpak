@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from mpak_scanner import scan_bundle
+from mpak_scanner import SecurityReport, scan_bundle
 from mpak_scanner.models import ControlStatus, Severity
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -44,12 +44,31 @@ NODE_BUNDLES = [
 ]
 
 
+# SC-02 reports real CVEs in these bundles' real dependencies. Those are true
+# positives and they move as advisories land, so they are not what this suite
+# guards -- which is the analysis controls inventing findings on ordinary code.
+CONTROLS_WITH_MOVING_TRUE_POSITIVES = {"SC-02"}
+
+
+def critical_findings_excluding_true_positives(report: SecurityReport) -> list[str]:
+    """Critical findings that would indicate a false positive, not a real CVE."""
+    return [
+        f"{control_id}: {f.title}"
+        for control_id, result in report.all_controls.items()
+        if control_id not in CONTROLS_WITH_MOVING_TRUE_POSITIVES
+        for f in result.findings
+        if f.severity == Severity.CRITICAL
+    ]
+
+
 def skip_if_missing(bundle_path: Path) -> None:
-    """Skip locally when the corpus is absent, but never in CI.
+    """Skip when the corpus is absent, unless MPAK_E2E_REQUIRED is set.
 
     These are the only tests that run the real tools against real bundles, and
-    a silent skip is how a regression reaches production with CI green. CI sets
-    MPAK_E2E_REQUIRED so a missing corpus fails loudly instead.
+    a silent skip is how a regression reaches production with CI green. Setting
+    MPAK_E2E_REQUIRED turns a missing corpus into a failure. Nothing sets it
+    yet: running this suite in CI also needs the external toolchain, which the
+    runner does not have. See #137.
     """
     if bundle_path.exists():
         return
@@ -125,17 +144,7 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
-        # SC-02 is excluded: it reports real CVEs in these bundles' real
-        # dependencies, which are true positives and change as advisories land.
-        # What this guards is the analysis controls inventing findings on
-        # ordinary code, which is the failure mode that has actually bitten.
-        critical = []
-        for control_id, result in report.all_controls.items():
-            if control_id == "SC-02":
-                continue
-            for f in result.findings:
-                if f.severity == Severity.CRITICAL:
-                    critical.append(f"{control_id}: {f.title}")
+        critical = critical_findings_excluding_true_positives(report)
         assert critical == [], f"Critical findings on {bundle.name}: {critical}"
 
     @pytest.mark.parametrize("bundle", NODE_BUNDLES)
@@ -144,17 +153,7 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
-        # SC-02 is excluded: it reports real CVEs in these bundles' real
-        # dependencies, which are true positives and change as advisories land.
-        # What this guards is the analysis controls inventing findings on
-        # ordinary code, which is the failure mode that has actually bitten.
-        critical = []
-        for control_id, result in report.all_controls.items():
-            if control_id == "SC-02":
-                continue
-            for f in result.findings:
-                if f.severity == Severity.CRITICAL:
-                    critical.append(f"{control_id}: {f.title}")
+        critical = critical_findings_excluding_true_positives(report)
         assert critical == [], f"Critical findings on {bundle.name}: {critical}"
 
     @pytest.mark.parametrize("bundle", ALL_BUNDLES)

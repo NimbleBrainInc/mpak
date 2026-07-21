@@ -2653,13 +2653,6 @@ class TestCQ02GuardDogThreeTaxonomy:
         assert result.status == ControlStatus.PASS
         assert all(f.severity == Severity.INFO for f in result.findings)
 
-    def test_env_file_read_is_reported_not_blocking(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Loading a .env is how a server reads credentials, one layer below
-        reading the environment itself, which is already non-blocking."""
-        result = self._run(tmp_path, monkeypatch, "threat-filesystem-read", "build/config.js")
-        assert result.status == ControlStatus.PASS
-        assert any(f.severity == Severity.MEDIUM for f in result.findings)
-
     def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`capability-*` states what the code can do, which is not a verdict.
 
@@ -2748,3 +2741,54 @@ class TestCQ02AgainstRealGuardDog:
             f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
         )
         assert any(f.in_deps for f in result.findings)
+
+
+class TestCQ02CredentialAccess:
+    """`threat-filesystem-read` is GuardDog's credential-access rule.
+
+    It matches /etc/shadow, .ssh/id_rsa, .aws/credentials, .npmrc and the
+    browser credential stores as well as .env. Exempting the rule so a server
+    can load its own config would exempt reading someone else's secret, so the
+    exemption is gated on which string matched.
+    """
+
+    @staticmethod
+    def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str):
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "issues": 1,
+                "errors": {},
+                "results": {"threat-filesystem-read": [{"location": "server.js:1", "message": "m", "match": match}]},
+            }
+        )
+
+        def fake_run(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+    @pytest.mark.parametrize("match", ['".env"', '".env.local"', '"../.env"'])
+    def test_reading_own_config_is_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """How a server loads its own configuration."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    @pytest.mark.parametrize(
+        "match",
+        [".ssh/id_rsa", ".aws/credentials", ".npmrc", "/etc/shadow", "Google/Chrome/User Data"],
+    )
+    def test_reading_someone_elses_secret_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """The hole this closes: the rule-wide exemption passed all of these."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
