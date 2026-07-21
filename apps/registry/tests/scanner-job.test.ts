@@ -13,11 +13,11 @@ vi.mock('../src/config.js', () => ({
   config: {
     scanner: {
       enabled: true,
-      image: '533267450054.dkr.ecr.us-east-1.amazonaws.com/mpak-scanner',
+      image: 'registry.example.com/mpak-scanner',
       imageTag: 'latest',
       namespace: 'security-scanning',
       serviceAccountName: 'mpak-scanner',
-      callbackUrl: 'http://mpak-api.apps.svc.cluster.local:3200/app/scan-results',
+      callbackUrl: 'http://mpak-api.internal/app/scan-results',
       secretName: 'mpak-scanner-secrets',
       s3ResultPrefix: 'scan-results/',
       ttlSeconds: 3600,
@@ -63,9 +63,7 @@ describe('buildScanJob', () => {
     const job = buildScanJob(params);
     expect(job.metadata?.name).toMatch(/^scan-/);
     const container = job.spec?.template?.spec?.containers?.[0];
-    expect(container?.image).toBe(
-      '533267450054.dkr.ecr.us-east-1.amazonaws.com/mpak-scanner:latest',
-    );
+    expect(container?.image).toBe('registry.example.com/mpak-scanner:latest');
     expect(container?.env).toContainEqual({ name: 'BUNDLE_S3_KEY', value: params.bundleS3Key });
   });
 });
