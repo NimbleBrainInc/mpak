@@ -29,13 +29,10 @@ These steps apply to any of the three packages. Repeat for each package that has
 From the monorepo root (`apps/mpak/`):
 
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
+pnpm verify
 ```
 
-All four must pass with zero errors.
+It must pass with zero errors.
 
 ### 2. Bump the version
 
@@ -94,7 +91,7 @@ When a schema change cascades through all packages:
 
 ```bash
 # 1. Verify from monorepo root
-pnpm typecheck && pnpm lint && pnpm test && pnpm build
+pnpm verify
 
 # 2. Bump and publish schemas
 cd packages/schemas

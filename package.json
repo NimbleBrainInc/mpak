@@ -36,6 +36,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "typecheck": "turbo run typecheck",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
