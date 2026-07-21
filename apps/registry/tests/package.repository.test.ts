@@ -110,3 +110,78 @@ describe('PackageRepository.upsertPackage', () => {
     expect(created).toBe(false);
   });
 });
+
+/**
+ * Scan status and certification answer different questions, so they are read
+ * from different rows: the newest attempt says whether a scan is running or
+ * failed, the newest completed scan is the only honest source for a level.
+ * Reading both from one row means either a running scan is invisible or a
+ * failed one blanks a level the bundle earned.
+ */
+describe('PackageRepository.getVersionsWithArtifactsAndScans', () => {
+  const version = { id: 'ver-1', packageId: 'pkg-1', version: '1.0.0' };
+
+  const makeClient = (attempt: unknown, completed: unknown[]) =>
+    ({
+      packageVersion: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ ...version, artifacts: [], securityScans: [attempt] }]),
+      },
+      securityScan: { findMany: vi.fn().mockResolvedValue(completed) },
+    }) as unknown as TransactionClient;
+
+  it('reports the running attempt while preserving the last certified level', async () => {
+    const client = makeClient({ status: 'scanning', certificationLevel: null }, [
+      { versionId: 'ver-1', status: 'completed', certificationLevel: 2 },
+    ]);
+
+    const [result] = await new PackageRepository().getVersionsWithArtifactsAndScans(
+      'pkg-1',
+      client,
+    );
+
+    expect(result.securityScans[0]).toMatchObject({ status: 'scanning' });
+    expect(result.latestCompletedScan).toMatchObject({ certificationLevel: 2 });
+  });
+
+  it('reports a failed attempt without blanking the level', async () => {
+    const client = makeClient({ status: 'failed', certificationLevel: null }, [
+      { versionId: 'ver-1', status: 'completed', certificationLevel: 2 },
+    ]);
+
+    const [result] = await new PackageRepository().getVersionsWithArtifactsAndScans(
+      'pkg-1',
+      client,
+    );
+
+    expect(result.securityScans[0]).toMatchObject({ status: 'failed' });
+    expect(result.latestCompletedScan).toMatchObject({ certificationLevel: 2 });
+  });
+
+  it('takes the newest completed scan when several exist', async () => {
+    const client = makeClient({ status: 'completed', certificationLevel: 1 }, [
+      { versionId: 'ver-1', status: 'completed', certificationLevel: 1 },
+      { versionId: 'ver-1', status: 'completed', certificationLevel: 2 },
+    ]);
+
+    const [result] = await new PackageRepository().getVersionsWithArtifactsAndScans(
+      'pkg-1',
+      client,
+    );
+
+    // The query orders newest first, so the first row seen per version wins.
+    expect(result.latestCompletedScan).toMatchObject({ certificationLevel: 1 });
+  });
+
+  it('leaves certification null when no scan has ever completed', async () => {
+    const client = makeClient({ status: 'failed', certificationLevel: null }, []);
+
+    const [result] = await new PackageRepository().getVersionsWithArtifactsAndScans(
+      'pkg-1',
+      client,
+    );
+
+    expect(result.latestCompletedScan).toBeNull();
+  });
+});
