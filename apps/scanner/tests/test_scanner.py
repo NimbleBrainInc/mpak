@@ -2585,3 +2585,222 @@ class TestToolCrashDoesNotSilentlyPass:
 
         result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
         assert result.status == ControlStatus.ERROR
+
+
+class TestCQ02GuardDogThreeTaxonomy:
+    """GuardDog 3.x renamed and re-scoped its rules; CQ-02 reads that taxonomy.
+
+    The real failure this guards: every finding in the ipgeolocation bundle came
+    back CRITICAL, including ones inside the official MCP SDK, because
+    dependency paths were not recognised and capability rules were read as
+    threats. A legitimate server cannot be certified as containing malware.
+    """
+
+    @staticmethod
+    def _bundle(tmp_path: Path) -> Path:
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+        return tmp_path
+
+    @staticmethod
+    def _guarddog_output(rule: str, location: str) -> str:
+        return json.dumps(
+            {
+                "package": "x",
+                "issues": 1,
+                "errors": {},
+                "results": {rule: [{"location": location, "message": f"{rule} matched"}]},
+            }
+        )
+
+    def _run(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rule: str, location: str):
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = self._guarddog_output(rule, location)
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(self._bundle(tmp_path), {})
+
+    def test_capability_in_a_dependency_does_not_fail_the_bundle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The original false positive: capability rules inside the MCP SDK."""
+        result = self._run(
+            tmp_path,
+            monkeypatch,
+            "capability-process-spawn",
+            "node_modules/@modelcontextprotocol/sdk/dist/index.js",
+        )
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+        assert all(f.in_deps for f in result.findings)
+
+    def test_threat_in_a_dependency_is_reported_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Vendored code is reported, not charged to the bundle.
+
+        GuardDog's threat rules fire on ordinary libraries -- PyYAML's loader,
+        pyperclip shelling out, dotenv reading a file -- so blocking on them
+        fails most of the fleet. That is a concession to detector precision and
+        it leaves a real gap: the path is author-controlled, so a payload in a
+        directory named `vendor` exempts itself. Closing it needs attribution
+        against the SBOM rather than a path convention.
+        """
+        result = self._run(tmp_path, monkeypatch, "threat-process-cryptomining", "node_modules/some-dep/index.js")
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+
+    def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`capability-*` states what the code can do, which is not a verdict.
+
+        A server that calls the API it wraps trips this by existing.
+        """
+        result = self._run(tmp_path, monkeypatch, "capability-network-outbound", "dist/client.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.INFO for f in result.findings)
+
+    def test_reading_environment_is_reported_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credentials arrive through the environment by design in MCP."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-environment-read", "dist/config.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    def test_real_threat_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The control must still catch what it exists to catch."""
+        result = self._run(tmp_path, monkeypatch, "threat-network-exfiltration", "dist/evil.js")
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscation_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Obfuscation is a threat verdict, not a capability."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-obfuscation-base64exec", "dist/a.js")
+        assert result.status == ControlStatus.FAIL
+
+
+class TestCQ02AgainstRealGuardDog:
+    """Runs the real analyser, because mocks cannot see a taxonomy change.
+
+    Every other CQ-02 test hand-authors GuardDog's output, so they stay green
+    when GuardDog renames or re-scopes its rules -- which is exactly how this
+    control came to certify a legitimate bundle as containing critical malware.
+    These deliberately do not skip when the tool is missing: a silent skip
+    would restore the blind spot they exist to remove.
+    """
+
+    def test_ordinary_server_behaviour_does_not_fail(self, tmp_path: Path) -> None:
+        """Reading a key from the environment and calling an API is the job."""
+        (tmp_path / "server.js").write_text(
+            'const k = process.env.API_KEY;\nfetch("https://api.example.com?k=" + k);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a plain API client failed CQ-02: {[(f.severity.value, f.title) for f in result.findings]}"
+        )
+        assert not any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscated_execution_still_fails(self, tmp_path: Path) -> None:
+        """The control must still catch what it exists to catch."""
+        (tmp_path / "server.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_threat_inside_a_dependency_is_reported_not_blocking(self, tmp_path: Path) -> None:
+        """Real GuardDog output through the dependency path, end to end.
+
+        The matcher has to recognise the relative paths GuardDog reports, or a
+        bundle gets charged for the code it merely depends on.
+        """
+        (tmp_path / "server.js").write_text('console.log("hello");\n')
+        vendored = tmp_path / "node_modules" / "some-dep"
+        vendored.mkdir(parents=True)
+        (vendored / "index.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
+        )
+        assert any(f.in_deps for f in result.findings)
+
+
+class TestCQ02CredentialAccess:
+    """`threat-filesystem-read` is GuardDog's credential-access rule.
+
+    It matches /etc/shadow, .ssh/id_rsa, .aws/credentials, .npmrc and the
+    browser credential stores as well as .env. Exempting the rule so a server
+    can load its own config would exempt reading someone else's secret, so the
+    exemption is gated on which string matched.
+    """
+
+    @staticmethod
+    def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str):
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "issues": 1,
+                "errors": {},
+                "results": {"threat-filesystem-read": [{"location": "server.js:1", "message": "m", "match": match}]},
+            }
+        )
+
+        def fake_run(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+    @pytest.mark.parametrize("match", ['".env"', '".env.local"', '"../.env"'])
+    def test_reading_own_config_is_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """How a server loads its own configuration."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    @pytest.mark.parametrize(
+        "match",
+        [".ssh/id_rsa", ".aws/credentials", ".npmrc", "/etc/shadow", "Google/Chrome/User Data"],
+    )
+    def test_reading_someone_elses_secret_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """The hole this closes: the rule-wide exemption passed all of these."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    @pytest.mark.parametrize("match", [".envrc", "/home/victim/.env", '"~/.env"'])
+    def test_env_named_file_outside_the_bundle_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """A `.env` somewhere else is still someone else's secret.
+
+        `.envrc` is direnv's and routinely holds exported credentials; an
+        absolute or home-relative path names a file the bundle does not own.
+        """
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL

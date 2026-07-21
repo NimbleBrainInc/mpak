@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from mpak_scanner.controls.base import Control, ControlRegistry
@@ -17,13 +17,65 @@ JS_EXTENSIONS = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts"}
 # Directories to skip when detecting language
 SKIP_DIRS = {"deps", "node_modules", "vendor", "site-packages", ".venv", "venv", "__pycache__"}
 
-# Rules with high false-positive rate for MCP servers
-# These are treated as warnings (MEDIUM) instead of blocking (CRITICAL)
-# MCP servers legitimately call external APIs, which triggers these rules
-HIGH_FP_RULES = {
-    "shady-links",  # Flags .io, .dev, .xyz domains - common for APIs
-    "unicode",  # Flags unicode in code - common for i18n
+# GuardDog names rules by intent. `capability-*` states what code is able to do
+# -- open a socket, read a file, spawn a process -- which is a description, not
+# an accusation. Every MCP server trips several by existing. Only `threat-*`
+# rules are a verdict, and only those can fail this control. What a server is
+# able to do is the capability-declaration domain's question, not malware's.
+CAPABILITY_RULE_PREFIX = "capability-"
+
+# GuardDog's credential-access rule, and it is not "reads a .env": the same rule
+# matches /etc/shadow, .ssh/id_rsa, .aws/credentials, .git-credentials, .npmrc,
+# .pypirc and the browser credential stores. Exempting the rule to allow the
+# .env case would let reading an SSH key pass, so the exemption is gated on
+# which string actually matched.
+CREDENTIAL_READ_RULE = "threat-filesystem-read"
+
+# Threat rules that fire on ordinary MCP server behaviour, reported but not
+# blocking. Reading credentials from the environment is the mechanism the
+# manifest's user_config describes, and calling third-party APIs over TLS is
+# what a server wrapping an API does. Malicious use of either shows up in the
+# rules that describe the malicious part -- exfiltration, obfuscation, spawning
+# a shell -- which stay blocking.
+NON_BLOCKING_THREAT_RULES = {
+    "threat-runtime-environment-read",
+    "threat-network-outbound-shady-links",
+    "threat-runtime-obfuscation-unicode",
 }
+
+
+def _reads_own_config(match: str | None) -> bool:
+    """Whether a credential-access hit is the server loading its own .env.
+
+    Covers `.env`, `.env.local` and `.env.production` reached relatively -- how
+    a server reads its own configuration, one layer below reading the
+    environment itself. Every other string this rule matches is someone else's
+    secret, including a `.env` outside the bundle.
+    """
+    if not match:
+        return False
+    cleaned = match.strip().strip("\"'")
+
+    # A server reaches its own config by a relative path. An absolute or
+    # home-relative one names a file outside the bundle -- /home/someone/.env
+    # is another user's secret however it is spelled.
+    if cleaned.startswith(("/", "~")):
+        return False
+
+    # `.env`, `.env.local`, `.env.production`. Not `.envrc`, which is direnv's
+    # and routinely holds exported credentials.
+    name = PurePosixPath(cleaned).name
+    return name == ".env" or name.startswith(".env.")
+
+
+def _is_dependency_path(path: str) -> bool:
+    """Whether a tool-reported path points into vendored dependency code.
+
+    Matched on path components rather than substrings, because GuardDog reports
+    paths relative to the directory it scanned and a pattern like
+    "/node_modules/" never matches one.
+    """
+    return any(part in SKIP_DIRS for part in PurePosixPath(path).parts)
 
 
 @ControlRegistry.register
@@ -117,69 +169,76 @@ class CQ02NoMaliciousPatterns(Control):
 
         findings: list[Finding] = []
 
-        # Determine dependency directory pattern based on ecosystem
-        dep_patterns = ["/deps/", "/node_modules/", "/site-packages/", "/vendor/", "deps/"]
-
-        server_code_findings = 0
+        blocking_findings = 0
 
         try:
-            if result.stdout.strip():
-                data = json.loads(result.stdout)
+            data = json.loads(result.stdout)
 
-                # GuardDog reports engine failures in-band: it exits zero and
-                # emits a full document whose `errors` map explains that rules
-                # did not run, while `results` sits empty. Non-empty output is
-                # therefore not evidence that anything was analysed, and an
-                # empty `results` under those conditions means "unknown", not
-                # "clean" -- the one answer this control must never guess at.
-                if isinstance(data, dict) and data.get("errors"):
-                    return self.error(
-                        f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
-                        duration_ms=duration,
-                    )
+            # GuardDog reports engine failures in-band: it exits zero and
+            # emits a full document whose `errors` map explains that rules
+            # did not run, while `results` sits empty. Non-empty output is
+            # therefore not evidence that anything was analysed, and an
+            # empty `results` under those conditions means "unknown", not
+            # "clean" -- the one answer this control must never guess at.
+            if isinstance(data, dict) and data.get("errors"):
+                return self.error(
+                    f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
+                    duration_ms=duration,
+                )
 
-                if isinstance(data, dict):
-                    for rule_name, rule_findings in data.get("results", {}).items():
-                        if rule_findings:
-                            for finding in rule_findings:
-                                file_path = finding.get("location", "unknown")
-                                in_deps = any(pattern in file_path for pattern in dep_patterns)
+            if isinstance(data, dict):
+                for rule_name, rule_findings in data.get("results", {}).items():
+                    if rule_findings:
+                        for finding in rule_findings:
+                            file_path = finding.get("location", "unknown")
+                            in_deps = _is_dependency_path(file_path)
 
-                                # Per MTF spec, CQ-02 only evaluates server code
-                                # Findings in dependencies are informational only
-                                if in_deps:
-                                    severity = Severity.INFO
-                                elif rule_name in HIGH_FP_RULES:
-                                    # High false-positive rules are warnings, not blocking
-                                    severity = Severity.MEDIUM
-                                else:
-                                    severity = Severity.CRITICAL
-                                    server_code_findings += 1
+                            # Vendored code is reported but does not block.
+                            # GuardDog's threat rules fire readily on ordinary
+                            # libraries -- PyYAML's loader, pyperclip shelling
+                            # out, dotenv reading a file -- so treating every
+                            # hit in a dependency as malware fails most of the
+                            # fleet. This is a concession to detector
+                            # precision, not a rule about what counts: a
+                            # bundle does ship what it vendors, and a payload
+                            # placed in a directory named `vendor` exempts
+                            # itself. Attributing against the SBOM instead of
+                            # the path is what would close that.
+                            if in_deps:
+                                severity = Severity.INFO
+                            elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
+                                # A capability the server has, not a threat.
+                                severity = Severity.INFO
+                            elif rule_name == CREDENTIAL_READ_RULE and _reads_own_config(finding.get("match")):
+                                severity = Severity.MEDIUM
+                            elif rule_name in NON_BLOCKING_THREAT_RULES:
+                                severity = Severity.MEDIUM
+                            else:
+                                severity = Severity.CRITICAL
+                                blocking_findings += 1
 
-                                findings.append(
-                                    Finding(
-                                        id=f"CQ-02-{len(findings):04d}",
-                                        control=self.id,
-                                        severity=severity,
-                                        title=f"Malicious pattern: {rule_name}",
-                                        description=finding.get("message", "Suspicious code pattern detected"),
-                                        file=file_path,
-                                        in_deps=in_deps,
-                                        remediation="Review the code and remove malicious patterns",
-                                        metadata={
-                                            "rule": rule_name,
-                                            "ecosystem": ecosystem,
-                                        },
-                                    )
+                            findings.append(
+                                Finding(
+                                    id=f"CQ-02-{len(findings):04d}",
+                                    control=self.id,
+                                    severity=severity,
+                                    title=f"Malicious pattern: {rule_name}",
+                                    description=finding.get("message", "Suspicious code pattern detected"),
+                                    file=file_path,
+                                    in_deps=in_deps,
+                                    remediation="Review the code and remove malicious patterns",
+                                    metadata={
+                                        "rule": rule_name,
+                                        "ecosystem": ecosystem,
+                                    },
                                 )
+                            )
 
         except json.JSONDecodeError as e:
             # Unparseable output means the results are unknown, not empty.
             return self.error(f"Failed to parse malicious pattern results: {e}", duration_ms=duration)
 
-        # Only fail on findings in server code, not dependencies
-        # Dependency findings are informational (INFO severity)
-        if server_code_findings > 0:
+        if blocking_findings > 0:
             status = ControlStatus.FAIL
         else:
             status = ControlStatus.PASS
