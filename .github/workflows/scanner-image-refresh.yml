@@ -44,6 +44,13 @@ jobs:
             exit 1
           fi
           echo "version=${TAG#scanner-v}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # Build the released tag's Dockerfile, not the default branch's. Otherwise
+      # an unreleased change to the image would ship on the next nightly refresh,
+      # and only the vulnerability database is meant to move here.
+      - name: Check out the released tag
+        run: git checkout --detach "${{ steps.version.outputs.tag }}"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -76,6 +83,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TITLE="Scanner image refresh failed"
+          # Consecutive nightly failures are one problem, not one per night.
+          if gh issue list --state open --search "$TITLE in:title" --json title \
+              --jq '.[].title' | grep -qxF "$TITLE"; then
+            echo "An open issue already tracks this; not filing another."
+            exit 0
+          fi
           gh issue create \
-            --title "Scanner image refresh failed" \
+            --title "$TITLE" \
             --body "The daily scanner image rebuild failed. The baked grype database expires 5 days after the last successful build, after which scan pods without egress to grype.anchore.io stop certifying. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

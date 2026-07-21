@@ -5,6 +5,10 @@ ARG SCANNER_VERSION=0.2.7
 # baked vulnerability database, so anything unpinned would silently re-resolve
 # every night -- and a tool's behaviour changing under an unattended rebuild is
 # how a working scanner becomes a quietly broken one. Bump these deliberately.
+#
+# These are top-level pins only: transitive dependencies (semgrep under
+# guarddog, for one) still re-resolve on a no-cache rebuild. If that drift ever
+# bites, a constraints file is the next step.
 ARG SYFT_VERSION=v1.48.0
 ARG GRYPE_VERSION=v0.116.0
 ARG TRUFFLEHOG_VERSION=v3.95.9
