@@ -2637,17 +2637,28 @@ class TestCQ02GuardDogThreeTaxonomy:
         assert all(f.severity == Severity.INFO for f in result.findings)
         assert all(f.in_deps for f in result.findings)
 
-    def test_real_threat_in_a_dependency_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A bundle ships and runs what it vendors, so it answers for it."""
-        result = self._run(tmp_path, monkeypatch, "threat-process-cryptomining", "node_modules/some-dep/index.js")
-        assert result.status == ControlStatus.FAIL
-
-    def test_threat_in_an_author_named_directory_still_fails(
+    def test_threat_in_a_dependency_is_reported_not_blocking(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The bypass this closes: `vendor/` is a convention, not a boundary."""
-        result = self._run(tmp_path, monkeypatch, "threat-network-exfiltration", "vendor/index.js")
-        assert result.status == ControlStatus.FAIL
+        """Vendored code is reported, not charged to the bundle.
+
+        GuardDog's threat rules fire on ordinary libraries -- PyYAML's loader,
+        pyperclip shelling out, dotenv reading a file -- so blocking on them
+        fails most of the fleet. That is a concession to detector precision and
+        it leaves a real gap: the path is author-controlled, so a payload in a
+        directory named `vendor` exempts itself. Closing it needs attribution
+        against the SBOM rather than a path convention.
+        """
+        result = self._run(tmp_path, monkeypatch, "threat-process-cryptomining", "node_modules/some-dep/index.js")
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+
+    def test_env_file_read_is_reported_not_blocking(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Loading a .env is how a server reads credentials, one layer below
+        reading the environment itself, which is already non-blocking."""
+        result = self._run(tmp_path, monkeypatch, "threat-filesystem-read", "build/config.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
 
     def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`capability-*` states what the code can do, which is not a verdict.
@@ -2716,11 +2727,11 @@ class TestCQ02AgainstRealGuardDog:
         assert result.status == ControlStatus.FAIL
         assert any(f.severity == Severity.CRITICAL for f in result.findings)
 
-    def test_threat_inside_a_dependency_fails_the_bundle(self, tmp_path: Path) -> None:
-        """A bundle ships and executes what it vendors, so it answers for it.
+    def test_threat_inside_a_dependency_is_reported_not_blocking(self, tmp_path: Path) -> None:
+        """Real GuardDog output through the dependency path, end to end.
 
-        Attributing by directory let a payload exempt itself by sitting in one
-        named `vendor`; the rule decides the verdict, not the location.
+        The matcher has to recognise the relative paths GuardDog reports, or a
+        bundle gets charged for the code it merely depends on.
         """
         (tmp_path / "server.js").write_text('console.log("hello");\n')
         vendored = tmp_path / "node_modules" / "some-dep"
@@ -2733,6 +2744,7 @@ class TestCQ02AgainstRealGuardDog:
 
         result = CQ02NoMaliciousPatterns().run(tmp_path, {})
 
-        assert result.status == ControlStatus.FAIL
-        # Still reported as vendored, so a publisher can see whose code it is.
-        assert any(f.in_deps and f.severity == Severity.CRITICAL for f in result.findings)
+        assert result.status == ControlStatus.PASS, (
+            f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
+        )
+        assert any(f.in_deps for f in result.findings)

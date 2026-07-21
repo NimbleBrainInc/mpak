@@ -13,6 +13,7 @@ Run:
     uv run pytest -m e2e -v
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -44,8 +45,18 @@ NODE_BUNDLES = [
 
 
 def skip_if_missing(bundle_path: Path) -> None:
-    if not bundle_path.exists():
-        pytest.skip(f"Bundle not found: {bundle_path.name} (run: mpak bundle pull ... -o {bundle_path})")
+    """Skip locally when the corpus is absent, but never in CI.
+
+    These are the only tests that run the real tools against real bundles, and
+    a silent skip is how a regression reaches production with CI green. CI sets
+    MPAK_E2E_REQUIRED so a missing corpus fails loudly instead.
+    """
+    if bundle_path.exists():
+        return
+    message = f"Bundle not found: {bundle_path.name} (run: mpak bundle pull ... -o {bundle_path})"
+    if os.environ.get("MPAK_E2E_REQUIRED"):
+        pytest.fail(message)
+    pytest.skip(message)
 
 
 @pytest.mark.e2e
@@ -114,8 +125,14 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
+        # SC-02 is excluded: it reports real CVEs in these bundles' real
+        # dependencies, which are true positives and change as advisories land.
+        # What this guards is the analysis controls inventing findings on
+        # ordinary code, which is the failure mode that has actually bitten.
         critical = []
         for control_id, result in report.all_controls.items():
+            if control_id == "SC-02":
+                continue
             for f in result.findings:
                 if f.severity == Severity.CRITICAL:
                     critical.append(f"{control_id}: {f.title}")
@@ -127,8 +144,14 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
+        # SC-02 is excluded: it reports real CVEs in these bundles' real
+        # dependencies, which are true positives and change as advisories land.
+        # What this guards is the analysis controls inventing findings on
+        # ordinary code, which is the failure mode that has actually bitten.
         critical = []
         for control_id, result in report.all_controls.items():
+            if control_id == "SC-02":
+                continue
             for f in result.findings:
                 if f.severity == Severity.CRITICAL:
                     critical.append(f"{control_id}: {f.title}")

@@ -32,6 +32,7 @@ CAPABILITY_RULE_PREFIX = "capability-"
 # a shell -- which stay blocking.
 NON_BLOCKING_THREAT_RULES = {
     "threat-runtime-environment-read",
+    "threat-filesystem-read",
     "threat-network-outbound-shady-links",
     "threat-runtime-obfuscation-unicode",
 }
@@ -40,9 +41,9 @@ NON_BLOCKING_THREAT_RULES = {
 def _is_dependency_path(path: str) -> bool:
     """Whether a tool-reported path points into vendored dependency code.
 
-    Reported so a publisher can tell their own code from what they vendor. It
-    deliberately does not affect the verdict: the layout is author-controlled,
-    so a payload dropped into a directory named `vendor` would exempt itself.
+    Matched on path components rather than substrings, because GuardDog reports
+    paths relative to the directory it scanned and a pattern like
+    "/node_modules/" never matches one.
     """
     return any(part in SKIP_DIRS for part in PurePosixPath(path).parts)
 
@@ -138,7 +139,7 @@ class CQ02NoMaliciousPatterns(Control):
 
         findings: list[Finding] = []
 
-        server_code_findings = 0
+        blocking_findings = 0
 
         try:
             if result.stdout.strip():
@@ -163,22 +164,27 @@ class CQ02NoMaliciousPatterns(Control):
                                 file_path = finding.get("location", "unknown")
                                 in_deps = _is_dependency_path(file_path)
 
-                                # Per MTF spec, CQ-02 only evaluates server code
-                                # Findings in dependencies are informational only
-                                # Severity comes from the rule, never from where
-                                # the file sits. A bundle ships and executes the
-                                # code it vendors, so an obfuscated exec or an
-                                # exfiltration pattern is its problem wherever it
-                                # lives -- and a directory whose name the author
-                                # chose is not a boundary anything can rest on.
-                                if rule_name.startswith(CAPABILITY_RULE_PREFIX):
+                                # Vendored code is reported but does not block.
+                                # GuardDog's threat rules fire readily on ordinary
+                                # libraries -- PyYAML's loader, pyperclip shelling
+                                # out, dotenv reading a file -- so treating every
+                                # hit in a dependency as malware fails most of the
+                                # fleet. This is a concession to detector
+                                # precision, not a rule about what counts: a
+                                # bundle does ship what it vendors, and a payload
+                                # placed in a directory named `vendor` exempts
+                                # itself. Attributing against the SBOM instead of
+                                # the path is what would close that.
+                                if in_deps:
+                                    severity = Severity.INFO
+                                elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
                                     # A capability the server has, not a threat.
                                     severity = Severity.INFO
                                 elif rule_name in NON_BLOCKING_THREAT_RULES:
                                     severity = Severity.MEDIUM
                                 else:
                                     severity = Severity.CRITICAL
-                                    server_code_findings += 1
+                                    blocking_findings += 1
 
                                 findings.append(
                                     Finding(
@@ -201,9 +207,7 @@ class CQ02NoMaliciousPatterns(Control):
             # Unparseable output means the results are unknown, not empty.
             return self.error(f"Failed to parse malicious pattern results: {e}", duration_ms=duration)
 
-        # Only fail on findings in server code, not dependencies
-        # Dependency findings are informational (INFO severity)
-        if server_code_findings > 0:
+        if blocking_findings > 0:
             status = ControlStatus.FAIL
         else:
             status = ControlStatus.PASS

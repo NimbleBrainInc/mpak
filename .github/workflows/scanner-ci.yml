@@ -44,5 +44,22 @@ jobs:
       - name: Type check
         run: uv run ty check src/
 
+      # The only tests that run the real tools against real bundles. Without
+      # the corpus they skip, and a skip in CI is indistinguishable from a
+      # pass -- which is how a regression in these controls reaches production
+      # green. Fetched here so they actually run, and MPAK_E2E_REQUIRED turns a
+      # missing corpus into a failure rather than a silent skip.
+      - name: Fetch e2e bundle corpus
+        working-directory: apps/scanner
+        run: |
+          mkdir -p tests/data
+          for name in finnhub folk nationalparks; do
+            npx -y @nimblebrain/mpak@latest bundle pull \
+              "@nimblebraininc/${name}" -o "tests/data/${name}.mcpb"
+          done
+          ls -la tests/data
+
       - name: Run tests
+        env:
+          MPAK_E2E_REQUIRED: "1"
         run: uv run pytest
