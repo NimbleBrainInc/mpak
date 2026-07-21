@@ -85,7 +85,11 @@ class CQ02NoMaliciousPatterns(Control):
         # Detect ecosystem
         ecosystem = self._detect_ecosystem(bundle_dir)
         if ecosystem is None:
-            return self.error("Could not detect bundle ecosystem (no Python or JavaScript files found)")
+            # A property of the bundle, not a scanner failure: `binary` is a
+            # supported server type with no Python or JavaScript to analyse.
+            # SKIP says the control had nothing to inspect, where ERROR would
+            # claim the scanner could not measure and suppress the whole scan.
+            return self.skip("No Python or JavaScript files found to analyse")
 
         try:
             # Use python -m guarddog to ensure we use the venv's guarddog
@@ -102,6 +106,15 @@ class CQ02NoMaliciousPatterns(Control):
 
         duration = int((time.time() - start) * 1000)
 
+        # GuardDog emits a JSON document on every successful run, including a
+        # clean one. Empty output therefore means it analysed nothing, whatever
+        # the exit code says, and passing here would certify the bundle free of
+        # malicious patterns on the strength of a scan that never ran.
+        if not result.stdout.strip():
+            return self.error(
+                result.stderr.strip() or "Malicious pattern scan produced no output", duration_ms=duration
+            )
+
         findings: list[Finding] = []
 
         # Determine dependency directory pattern based on ecosystem
@@ -112,6 +125,18 @@ class CQ02NoMaliciousPatterns(Control):
         try:
             if result.stdout.strip():
                 data = json.loads(result.stdout)
+
+                # GuardDog reports engine failures in-band: it exits zero and
+                # emits a full document whose `errors` map explains that rules
+                # did not run, while `results` sits empty. Non-empty output is
+                # therefore not evidence that anything was analysed, and an
+                # empty `results` under those conditions means "unknown", not
+                # "clean" -- the one answer this control must never guess at.
+                if isinstance(data, dict) and data.get("errors"):
+                    return self.error(
+                        f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
+                        duration_ms=duration,
+                    )
 
                 if isinstance(data, dict):
                     for rule_name, rule_findings in data.get("results", {}).items():
@@ -148,9 +173,9 @@ class CQ02NoMaliciousPatterns(Control):
                                     )
                                 )
 
-        except json.JSONDecodeError:
-            # GuardDog might output non-JSON for some errors
-            pass
+        except json.JSONDecodeError as e:
+            # Unparseable output means the results are unknown, not empty.
+            return self.error(f"Failed to parse malicious pattern results: {e}", duration_ms=duration)
 
         # Only fail on findings in server code, not dependencies
         # Dependency findings are informational (INFO severity)

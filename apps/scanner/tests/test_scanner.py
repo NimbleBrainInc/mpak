@@ -1,6 +1,7 @@
 """Tests for the mpak-scanner core functionality."""
 
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from mpak_scanner.models import (
     ComplianceLevel,
     ControlResult,
     ControlStatus,
+    DomainResult,
     Finding,
     RiskScore,
     Severity,
@@ -2201,3 +2203,385 @@ class TestUnsafeNodeBundle:
 
         # Should find at least 2 different patterns
         assert len(patterns_found) >= 2, f"Expected multiple patterns, found: {patterns_found}"
+
+
+class TestToolFailureIsNotControlFailure:
+    """External tool failures must not be reported as control failures.
+
+    A FAIL asserts the bundle failed a security control. When the underlying
+    tool never ran, nothing about the bundle was established, so the correct
+    status is ERROR. Reporting FAIL turns a scanner outage into a durable
+    trust-level downgrade that publishers cannot act on.
+    """
+
+    def test_sc01_errors_when_syft_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Syft exiting non-zero is a tool failure, not an SBOM control failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="syft: boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.error is not None and "boom" in result.error
+
+    def test_sc01_errors_on_unparseable_sbom(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unparseable syft output is a tool failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_sc02_errors_when_vulnerability_db_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unavailable grype database must not read as a failed CVE scan.
+
+        This is the regression that capped every bundle at L1: grype exits
+        non-zero with empty stdout when it cannot load its database, and SC-02
+        is required for L2.
+        """
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr="failed to load vulnerability db: database does not exist",
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.FAIL
+        assert result.error is not None and "vulnerability db" in result.error
+
+    def test_sc02_still_fails_on_real_blocking_vulnerability(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuine blocking CVE must still FAIL -- ERROR is only for tool failures."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        grype_output = json.dumps(
+            {
+                "matches": [
+                    {
+                        "vulnerability": {
+                            "id": "CVE-2024-0001",
+                            "severity": "Critical",
+                            "cvss": [{"metrics": {"baseScore": 9.8}}],
+                        },
+                        "artifact": {"name": "somepkg", "version": "1.0.0"},
+                    }
+                ]
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=grype_output, stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.FAIL
+
+
+class TestDegradedScan:
+    """A compliance level is only publishable when every level-bearing control ran."""
+
+    # A control set that certifies L2 outright. Errors are layered onto it so
+    # each fixture exercises a level that is genuinely within reach -- an error
+    # in isolation suppresses nothing, because no level was attainable anyway.
+    @staticmethod
+    def _l2_controls() -> dict[str, ControlResult]:
+        return {
+            "AI-01": ControlResult("AI-01", "Manifest", ControlStatus.PASS),
+            "SC-01": ControlResult("SC-01", "SBOM", ControlStatus.PASS),
+            "CQ-01": ControlResult("CQ-01", "Secrets", ControlStatus.PASS),
+            "CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.PASS),
+            "CD-01": ControlResult("CD-01", "Tools", ControlStatus.PASS),
+            "AI-05": ControlResult("AI-05", "Completeness", ControlStatus.PASS),
+            "SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS),
+            "SC-03": ControlResult("SC-03", "Pinning", ControlStatus.PASS),
+            "SC-04": ControlResult("SC-04", "Lockfile", ControlStatus.PASS),
+            "CQ-03": ControlResult("CQ-03", "Static", ControlStatus.PASS),
+            "CD-02": ControlResult("CD-02", "Perms", ControlStatus.PASS),
+            "CD-03": ControlResult("CD-03", "ToolDesc", ControlStatus.PASS),
+            "PR-01": ControlResult("PR-01", "Repo", ControlStatus.PASS),
+            "PR-02": ControlResult("PR-02", "Author", ControlStatus.PASS),
+        }
+
+    @staticmethod
+    def _report(controls: dict[str, ControlResult]) -> SecurityReport:
+        report = SecurityReport(
+            bundle_name="test",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["supply_chain"] = DomainResult(domain="supply_chain", controls=controls)
+        return report
+
+    def test_degraded_when_level_bearing_control_errors(self) -> None:
+        """An errored L2 control means the level is unmeasured, not merely unmet."""
+        report = self._report(
+            self._l2_controls()
+            | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR, error="db unavailable")}
+        )
+        assert report.degraded is True
+        assert report.controls_errored == 1
+
+    def test_not_degraded_when_control_genuinely_fails(self) -> None:
+        """A real control failure is a measurement, so the level stands."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.FAIL)})
+        assert report.degraded is False
+
+    def test_not_degraded_when_non_level_bearing_control_errors(self) -> None:
+        """A control required at no level cannot suppress a level."""
+        report = self._report({"AI-02": ControlResult("AI-02", "Hashes", ControlStatus.ERROR)})
+        assert report.degraded is False
+
+    def test_degraded_surfaced_in_report_dict(self) -> None:
+        """Consumers read `degraded` off the report to decide whether to publish."""
+        report = self._report(self._l2_controls() | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR)})
+        compliance = report.to_dict()["compliance"]
+        assert compliance["degraded"] is True
+        assert compliance["controls_errored"] == 1
+
+    def test_clean_report_is_not_degraded(self) -> None:
+        """A scan where everything ran is publishable."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS)})
+        assert report.to_dict()["compliance"]["degraded"] is False
+
+    def test_not_degraded_when_error_does_not_suppress_a_level(self) -> None:
+        """An error in a control the achieved level does not need is not degrading.
+
+        PR-05 is required only at L3+. A bundle that reaches L2 is not held back
+        by it, so the level it reports is still a real measurement.
+        """
+        report = self._report(
+            self._l2_controls() | {"PR-05": ControlResult("PR-05", "RepoHealth", ControlStatus.ERROR)}
+        )
+        assert report.compliance_level == ComplianceLevel.L2_STANDARD
+        assert report.degraded is False
+
+
+class TestControlsWithNothingToInspect:
+    """Having nothing to analyse is a property of the bundle, not a scanner failure."""
+
+    def test_cq02_skips_bundle_with_no_python_or_javascript(self, tmp_path: Path) -> None:
+        """`binary` is a supported server type; CQ-02 must not error on it.
+
+        ERROR would mark the scan degraded and suppress certification entirely,
+        claiming the scanner could not measure when in fact it measured
+        correctly and found nothing to analyse.
+        """
+        (tmp_path / "server").write_bytes(b"\x7fELF\x02\x01\x01\x00binary")
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {"server_type": "binary"})
+        assert result.status == ControlStatus.SKIP
+        assert result.status != ControlStatus.ERROR
+
+    def test_binary_bundle_scan_is_not_degraded(self) -> None:
+        """A binary bundle produces a publishable scan, not a degraded one."""
+        report = SecurityReport(
+            bundle_name="t",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["code_quality"] = DomainResult(
+            domain="code_quality",
+            controls={"CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.SKIP)},
+        )
+        assert report.degraded is False
+
+
+class TestToolCrashDoesNotSilentlyPass:
+    """A control must not certify on the strength of a scan that never ran."""
+
+    def test_cq01_errors_when_trufflehog_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crashed trufflehog must not read as 'no secrets found'."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="trufflehog: panic")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq01_passes_when_trufflehog_finds_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A clean exit with no findings is a genuine pass."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_error_result_records_duration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Errored controls still report how long they took."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.duration_ms >= 0
+
+    def test_cq02_errors_when_guarddog_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crashed guarddog must not certify the bundle free of malicious patterns."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="guarddog: OOM")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq02_errors_on_unparseable_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unparseable results are unknown, not empty."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="Traceback...", stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_cq02_passes_on_clean_scan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A clean guarddog run is a genuine pass."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"results": {}}', stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_sc02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty output is not a clean bill of health, whatever the exit code."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_sc02_passes_when_there_are_no_packages_to_scan(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bundle with no components has no vulnerabilities -- a real result."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[], returncode=1, stdout="", stderr="no packages discovered in the given source"
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_cq02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GuardDog always emits JSON; empty output means it analysed nothing."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq02_errors_when_analysis_engine_fails_in_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GuardDog reports engine failures inside a zero-exit JSON document.
+
+        Rules that never executed produce an empty `results` map. Reading that
+        as "clean" would certify the bundle free of malicious patterns on an
+        analysis that did not happen.
+        """
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "package": str(tmp_path),
+                "issues": 0,
+                "errors": {"rules-all": "failed to run rule: An error occurred when running Semgrep."},
+                "results": {},
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+        assert result.error is not None and "Semgrep" in result.error
+
+    def test_cq01_errors_on_crash_after_partial_findings(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crash mid-scan must not pass on the findings it managed to emit."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        partial = json.dumps({"DetectorName": "AWS", "SourceMetadata": {}}) + "\n"
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout=partial, stderr="killed")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR

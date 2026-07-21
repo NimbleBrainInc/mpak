@@ -596,7 +596,14 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
       };
 
       // Helper to transform security scan for API response
-      const transformSecurityScan = (scan: Record<string, unknown>) => {
+      // `scan` is the latest attempt and carries the live status; `certScan` is
+      // the latest scan that completed and is the only honest source for a
+      // certification. Reading both from one row means either a running scan is
+      // invisible or a failed one blanks the level.
+      const transformSecurityScan = (
+        scan: Record<string, unknown>,
+        certScan: Record<string, unknown> | null,
+      ) => {
         if (!scan) return null;
 
         const report = scan.report as Record<string, unknown> | undefined;
@@ -687,13 +694,15 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
           scanned_at: scan.completedAt,
           scanner_version: scannerVersion,
           certification:
-            scan.certificationLevel !== null
+            certScan && certScan.certificationLevel !== null
               ? {
-                  level: scan.certificationLevel,
-                  level_name: getCertificationLevelName(scan.certificationLevel as number | null),
-                  controls_passed: scan.controlsPassed,
-                  controls_failed: scan.controlsFailed,
-                  controls_total: scan.controlsTotal,
+                  level: certScan.certificationLevel,
+                  level_name: getCertificationLevelName(
+                    certScan.certificationLevel as number | null,
+                  ),
+                  controls_passed: certScan.controlsPassed,
+                  controls_failed: certScan.controlsFailed,
+                  controls_total: certScan.controlsTotal,
                 }
               : null,
           summary: {
@@ -763,7 +772,10 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
             downloads: Number(a.downloadCount),
           })),
           security_scan: v.securityScans[0]
-            ? transformSecurityScan(v.securityScans[0] as unknown as Record<string, unknown>)
+            ? transformSecurityScan(
+                v.securityScans[0] as unknown as Record<string, unknown>,
+                (v.latestCompletedScan as unknown as Record<string, unknown> | null) ?? null,
+              )
             : null,
         })),
       };

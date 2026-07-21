@@ -73,6 +73,21 @@ interface CertificationData {
   findingsSummary: { critical: number; high: number; medium: number; low: number } | null;
 }
 
+/**
+ * Whether a report declares itself degraded.
+ *
+ * The scanner marks a report degraded when a control feeding the compliance
+ * level errored -- typically an unavailable external tool -- which makes the
+ * computed level an artifact of the scanner rather than a property of the
+ * bundle. The scanner is expected to send such a scan as failed; this is the
+ * registry's own check, so a scanner that does not map it still cannot publish
+ * a level it did not measure.
+ */
+function isDegradedReport(report: Record<string, unknown> | null): boolean {
+  const compliance = report?.compliance as { degraded?: boolean } | undefined;
+  return compliance?.degraded === true;
+}
+
 function extractCertificationData(report: Record<string, unknown> | null): CertificationData {
   if (!report) {
     return {
@@ -175,15 +190,28 @@ function extractFindingCounts(report: Record<string, unknown> | null): {
       for (const [domainName, domain] of Object.entries(domains)) {
         if (domain.controls) {
           let domainFindings = 0;
-          let domainStatus = 'pass';
+          // A domain reads `pass` only when every control in it passed.
+          // Anything else is reported by precedence: a real failure outranks a
+          // control that could not run, which outranks a clean domain. Treating
+          // only `fail` as non-passing would report `pass` for a domain whose
+          // controls errored -- claiming a result the scanner never measured.
+          //
+          // `skip` deliberately does not downgrade: controls that are not yet
+          // implemented skip by default, so honouring it here would mark nearly
+          // every domain as skipped. Skips stay visible per control.
+          let sawFail = false;
+          let sawError = false;
           for (const control of Object.values(domain.controls)) {
             if (Array.isArray(control.findings)) {
               domainFindings += control.findings.length;
             }
             if (control.status === 'fail') {
-              domainStatus = 'fail';
+              sawFail = true;
+            } else if (control.status === 'error') {
+              sawError = true;
             }
           }
+          const domainStatus = sawFail ? 'fail' : sawError ? 'error' : 'pass';
           scans[domainName] = {
             status: domainStatus,
             finding_count: domainFindings,
@@ -308,26 +336,42 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           return { success: true };
         }
 
-        // Extract certification data from mpak-scanner report
-        const certData = extractCertificationData(report ?? null);
+        // A certification level is only meaningful when the scan that produced
+        // it actually ran every control behind it. A scan that failed, or whose
+        // report declares itself degraded, records no certification -- the
+        // level it computed reflects controls the scanner could not apply, not
+        // controls the bundle failed.
+        //
+        // A degraded report is also stored as failed, whatever status the
+        // scanner sent. Certification lookups take the newest *completed* scan,
+        // so storing it as completed with no certification would not preserve
+        // the previous level -- it would shadow the last good scan and blank
+        // the level registry-wide. Normalising here is what makes leaving the
+        // certification fields unset actually preserve it.
+        const degradedReport = isDegradedReport(report ?? null);
+        const storedStatus = degradedReport ? 'failed' : status;
+        const certData =
+          storedStatus === 'completed' ? extractCertificationData(report ?? null) : null;
 
-        // Update scan record with certification data
         await fastify.prisma.securityScan.update({
           where: { scanId: scan_id },
           data: {
-            status,
+            status: storedStatus,
             riskScore: risk_score ?? null,
             report: report ? (report as object) : undefined,
             reportS3Uri: report_s3_uri ?? null,
             pdfS3Uri: pdf_s3_uri ?? null,
             error: error ?? null,
             completedAt: new Date(),
-            // Certification fields
-            certificationLevel: certData.certificationLevel,
-            controlsPassed: certData.controlsPassed,
-            controlsFailed: certData.controlsFailed,
-            controlsTotal: certData.controlsTotal,
-            findingsSummary: certData.findingsSummary ?? undefined,
+            ...(certData
+              ? {
+                  certificationLevel: certData.certificationLevel,
+                  controlsPassed: certData.controlsPassed,
+                  controlsFailed: certData.controlsFailed,
+                  controlsTotal: certData.controlsTotal,
+                  findingsSummary: certData.findingsSummary ?? undefined,
+                }
+              : {}),
           },
         });
 
@@ -335,9 +379,11 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           {
             scanId: scan_id,
             status,
+            storedStatus,
             riskScore: risk_score,
-            certificationLevel: certData.certificationLevel,
-            controlsPassed: certData.controlsPassed,
+            certificationLevel: certData?.certificationLevel ?? null,
+            controlsPassed: certData?.controlsPassed ?? null,
+            certificationPublished: certData !== null,
           },
           `Scan callback received: ${status}`,
         );
@@ -525,6 +571,13 @@ export const securityRoutes: FastifyPluginAsync = async (fastify) => {
           throw new NotFoundError(`Version ${pkg.latestVersion} not found`);
         }
 
+        // Deliberately the latest scan attempt, not the latest completed one.
+        // This endpoint reports how the last scan went; it returns no
+        // certification, so it cannot blank a level the way a certification
+        // lookup would. Filtering to completed scans here would hide a failed
+        // or degraded attempt behind a stale success, leaving a publisher with
+        // no way to see that their scan did not run -- the visibility gap this
+        // whole change exists to close.
         const scan = latestVersion.securityScans[0];
 
         if (!scan) {

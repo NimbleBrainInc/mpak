@@ -1,6 +1,7 @@
 """CQ-03: Static Analysis Clean control."""
 
 import json
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -157,7 +158,6 @@ class CQ03StaticAnalysis(Control):
                 capture_output=True,
                 text=True,
                 timeout=120,
-                cwd=str(bundle_dir),
             )
         except FileNotFoundError:
             findings.append(
@@ -240,11 +240,27 @@ class CQ03StaticAnalysis(Control):
         # Create a file list for ESLint
         file_list = [str(f) for f in js_files]
 
+        # Resolve ESLint from PATH, never via npx. npx prefers
+        # ./node_modules/.bin, so a bundle shipping its own `eslint` would have
+        # its binary executed by the scan pod -- which holds the S3 credentials
+        # and the callback secret, and could forge a clean result.
+        eslint = shutil.which("eslint")
+        if eslint is None:
+            findings.append(
+                Finding(
+                    id="CQ-03-JS-0001",
+                    control=self.id,
+                    severity=Severity.INFO,
+                    title="ESLint not available",
+                    description="Install ESLint for JavaScript static analysis: npm install -g eslint eslint-plugin-security",
+                )
+            )
+            return findings
+
         try:
             result = subprocess.run(
                 [
-                    "npx",
-                    "eslint",
+                    eslint,
                     "--no-eslintrc",
                     "--plugin",
                     "eslint-plugin-security",
@@ -267,7 +283,6 @@ class CQ03StaticAnalysis(Control):
                 capture_output=True,
                 text=True,
                 timeout=120,
-                cwd=str(bundle_dir),
             )
         except FileNotFoundError:
             findings.append(

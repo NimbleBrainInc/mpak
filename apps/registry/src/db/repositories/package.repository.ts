@@ -37,10 +37,23 @@ const SCAN_CERT_SELECT = {
   controlsTotal: true,
 } as const satisfies Prisma.SecurityScanSelect;
 
-// Version with artifacts and the latest completed scan's certification summary
-export type PackageVersionWithArtifactsAndScans = PackageVersion & {
+// Version with artifacts and the certification summary of its latest completed
+// scan. Carries no scan status: these paths answer "what is this bundle
+// certified at", not "how did the last scan go".
+export type PackageVersionWithCertification = PackageVersion & {
   artifacts: Artifact[];
   securityScans: ScanCertFields[];
+};
+
+// Version with artifacts, the latest scan attempt, and the latest completed one
+export type PackageVersionWithArtifactsAndScans = PackageVersion & {
+  artifacts: Artifact[];
+  // The most recent scan attempt, whatever its outcome -- this is what says
+  // whether a scan is running or failed.
+  securityScans: ScanCertFields[];
+  // The most recent scan that actually completed. Certification is read from
+  // here so a running or failed attempt cannot blank a level the bundle earned.
+  latestCompletedScan: ScanCertFields | null;
 };
 
 /**
@@ -453,7 +466,7 @@ export class PackageRepository {
     packageId: string,
     version: string,
     tx?: TransactionClient,
-  ): Promise<PackageVersionWithArtifactsAndScans | null> {
+  ): Promise<PackageVersionWithCertification | null> {
     const client = tx ?? getPrismaClient();
     return client.packageVersion.findUnique({
       where: {
@@ -661,7 +674,13 @@ export class PackageRepository {
     tx?: TransactionClient,
   ): Promise<PackageVersionWithArtifactsAndScans[]> {
     const client = tx ?? getPrismaClient();
-    return client.packageVersion.findMany({
+
+    // Scan status and certification answer different questions and cannot come
+    // from the same row. Status must reflect the newest attempt, or a running
+    // or failed scan is invisible; certification must come from a scan that
+    // completed, or an attempt with no certification blanks a level the bundle
+    // earned. Fetch both rather than picking one and breaking the other.
+    const versions = await client.packageVersion.findMany({
       where: { packageId },
       include: {
         artifacts: true,
@@ -672,6 +691,24 @@ export class PackageRepository {
       },
       orderBy: { publishedAt: 'desc' },
     });
+
+    const completedScans = await client.securityScan.findMany({
+      where: { versionId: { in: versions.map((v) => v.id) }, status: 'completed' },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    const latestCompletedByVersion = new Map<string, ScanCertFields>();
+    for (const scan of completedScans) {
+      // Ordered newest first, so the first one seen per version is the latest.
+      if (!latestCompletedByVersion.has(scan.versionId)) {
+        latestCompletedByVersion.set(scan.versionId, scan as unknown as ScanCertFields);
+      }
+    }
+
+    return versions.map((v) => ({
+      ...v,
+      latestCompletedScan: latestCompletedByVersion.get(v.id) ?? null,
+    })) as PackageVersionWithArtifactsAndScans[];
   }
 
   // ==================== Artifact Methods ====================

@@ -42,13 +42,10 @@ class SC01SbomGeneration(Control):
         duration = int((time.time() - start) * 1000)
 
         if result.returncode != 0:
-            return ControlResult(
-                control_id=self.id,
-                control_name=self.name,
-                status=ControlStatus.FAIL,
-                error=result.stderr or "SBOM generation failed",
-                duration_ms=duration,
-            )
+            # Syft failed to run. No SBOM was produced, so nothing about the
+            # bundle was established -- report ERROR rather than asserting the
+            # bundle failed the control.
+            return self.error(result.stderr.strip() or "SBOM generation failed", duration_ms=duration)
 
         try:
             sbom = json.loads(result.stdout)
@@ -84,10 +81,4 @@ class SC01SbomGeneration(Control):
             )
 
         except json.JSONDecodeError as e:
-            return ControlResult(
-                control_id=self.id,
-                control_name=self.name,
-                status=ControlStatus.FAIL,
-                error=f"Failed to parse SBOM: {e}",
-                duration_ms=duration,
-            )
+            return self.error(f"Failed to parse SBOM: {e}", duration_ms=duration)
