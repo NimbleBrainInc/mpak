@@ -1,5 +1,5 @@
 FROM python:3.13-slim
-ARG SCANNER_VERSION=0.2.8
+ARG SCANNER_VERSION=0.2.9
 
 # Analysis tools are pinned. This image is rebuilt on a schedule to refresh the
 # baked vulnerability database, so anything unpinned would silently re-resolve
