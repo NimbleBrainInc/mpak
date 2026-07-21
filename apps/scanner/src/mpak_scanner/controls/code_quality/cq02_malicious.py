@@ -47,13 +47,25 @@ NON_BLOCKING_THREAT_RULES = {
 def _reads_own_config(match: str | None) -> bool:
     """Whether a credential-access hit is the server loading its own .env.
 
-    Covers `.env`, `.env.local`, `.env.production` and the like -- how a server
-    reads its own configuration, one layer below reading the environment
-    itself. Every other string this rule matches is someone else's secret.
+    Covers `.env`, `.env.local` and `.env.production` reached relatively -- how
+    a server reads its own configuration, one layer below reading the
+    environment itself. Every other string this rule matches is someone else's
+    secret, including a `.env` outside the bundle.
     """
     if not match:
         return False
-    return PurePosixPath(match.strip().strip("\"'")).name.startswith(".env")
+    cleaned = match.strip().strip("\"'")
+
+    # A server reaches its own config by a relative path. An absolute or
+    # home-relative one names a file outside the bundle -- /home/someone/.env
+    # is another user's secret however it is spelled.
+    if cleaned.startswith(("/", "~")):
+        return False
+
+    # `.env`, `.env.local`, `.env.production`. Not `.envrc`, which is direnv's
+    # and routinely holds exported credentials.
+    name = PurePosixPath(cleaned).name
+    return name == ".env" or name.startswith(".env.")
 
 
 def _is_dependency_path(path: str) -> bool:
@@ -160,68 +172,67 @@ class CQ02NoMaliciousPatterns(Control):
         blocking_findings = 0
 
         try:
-            if result.stdout.strip():
-                data = json.loads(result.stdout)
+            data = json.loads(result.stdout)
 
-                # GuardDog reports engine failures in-band: it exits zero and
-                # emits a full document whose `errors` map explains that rules
-                # did not run, while `results` sits empty. Non-empty output is
-                # therefore not evidence that anything was analysed, and an
-                # empty `results` under those conditions means "unknown", not
-                # "clean" -- the one answer this control must never guess at.
-                if isinstance(data, dict) and data.get("errors"):
-                    return self.error(
-                        f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
-                        duration_ms=duration,
-                    )
+            # GuardDog reports engine failures in-band: it exits zero and
+            # emits a full document whose `errors` map explains that rules
+            # did not run, while `results` sits empty. Non-empty output is
+            # therefore not evidence that anything was analysed, and an
+            # empty `results` under those conditions means "unknown", not
+            # "clean" -- the one answer this control must never guess at.
+            if isinstance(data, dict) and data.get("errors"):
+                return self.error(
+                    f"GuardDog analysis failed: {json.dumps(data['errors'])[:500]}",
+                    duration_ms=duration,
+                )
 
-                if isinstance(data, dict):
-                    for rule_name, rule_findings in data.get("results", {}).items():
-                        if rule_findings:
-                            for finding in rule_findings:
-                                file_path = finding.get("location", "unknown")
-                                in_deps = _is_dependency_path(file_path)
+            if isinstance(data, dict):
+                for rule_name, rule_findings in data.get("results", {}).items():
+                    if rule_findings:
+                        for finding in rule_findings:
+                            file_path = finding.get("location", "unknown")
+                            in_deps = _is_dependency_path(file_path)
 
-                                # Vendored code is reported but does not block.
-                                # GuardDog's threat rules fire readily on ordinary
-                                # libraries -- PyYAML's loader, pyperclip shelling
-                                # out, dotenv reading a file -- so treating every
-                                # hit in a dependency as malware fails most of the
-                                # fleet. This is a concession to detector
-                                # precision, not a rule about what counts: a
-                                # bundle does ship what it vendors, and a payload
-                                # placed in a directory named `vendor` exempts
-                                # itself. Attributing against the SBOM instead of
-                                # the path is what would close that.
-                                if in_deps:
-                                    severity = Severity.INFO
-                                elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
-                                    # A capability the server has, not a threat.
-                                    severity = Severity.INFO
-                                elif rule_name == CREDENTIAL_READ_RULE and _reads_own_config(finding.get("match")):
-                                    severity = Severity.MEDIUM
-                                elif rule_name in NON_BLOCKING_THREAT_RULES:
-                                    severity = Severity.MEDIUM
-                                else:
-                                    severity = Severity.CRITICAL
-                                    blocking_findings += 1
+                            # Vendored code is reported but does not block.
+                            # GuardDog's threat rules fire readily on ordinary
+                            # libraries -- PyYAML's loader, pyperclip shelling
+                            # out, dotenv reading a file -- so treating every
+                            # hit in a dependency as malware fails most of the
+                            # fleet. This is a concession to detector
+                            # precision, not a rule about what counts: a
+                            # bundle does ship what it vendors, and a payload
+                            # placed in a directory named `vendor` exempts
+                            # itself. Attributing against the SBOM instead of
+                            # the path is what would close that.
+                            if in_deps:
+                                severity = Severity.INFO
+                            elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
+                                # A capability the server has, not a threat.
+                                severity = Severity.INFO
+                            elif rule_name == CREDENTIAL_READ_RULE and _reads_own_config(finding.get("match")):
+                                severity = Severity.MEDIUM
+                            elif rule_name in NON_BLOCKING_THREAT_RULES:
+                                severity = Severity.MEDIUM
+                            else:
+                                severity = Severity.CRITICAL
+                                blocking_findings += 1
 
-                                findings.append(
-                                    Finding(
-                                        id=f"CQ-02-{len(findings):04d}",
-                                        control=self.id,
-                                        severity=severity,
-                                        title=f"Malicious pattern: {rule_name}",
-                                        description=finding.get("message", "Suspicious code pattern detected"),
-                                        file=file_path,
-                                        in_deps=in_deps,
-                                        remediation="Review the code and remove malicious patterns",
-                                        metadata={
-                                            "rule": rule_name,
-                                            "ecosystem": ecosystem,
-                                        },
-                                    )
+                            findings.append(
+                                Finding(
+                                    id=f"CQ-02-{len(findings):04d}",
+                                    control=self.id,
+                                    severity=severity,
+                                    title=f"Malicious pattern: {rule_name}",
+                                    description=finding.get("message", "Suspicious code pattern detected"),
+                                    file=file_path,
+                                    in_deps=in_deps,
+                                    remediation="Review the code and remove malicious patterns",
+                                    metadata={
+                                        "rule": rule_name,
+                                        "ecosystem": ecosystem,
+                                    },
                                 )
+                            )
 
         except json.JSONDecodeError as e:
             # Unparseable output means the results are unknown, not empty.

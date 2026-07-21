@@ -2792,3 +2792,15 @@ class TestCQ02CredentialAccess:
         result = self._run(tmp_path, monkeypatch, match)
         assert result.status == ControlStatus.FAIL
         assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    @pytest.mark.parametrize("match", [".envrc", "/home/victim/.env", '"~/.env"'])
+    def test_env_named_file_outside_the_bundle_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """A `.env` somewhere else is still someone else's secret.
+
+        `.envrc` is direnv's and routinely holds exported credentials; an
+        absolute or home-relative path names a file the bundle does not own.
+        """
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL
