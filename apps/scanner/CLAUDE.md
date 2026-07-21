@@ -108,9 +108,7 @@ class SC99NewControl(Control):
 ## External Tools
 
 Controls use these external tools. A missing tool is an ERROR, not a skip —
-a control that never ran cannot vouch for the bundle. CQ-03 is the exception
-for now: its tool handling is being reworked separately, and it still treats a
-missing tool as an informational pass.
+a control that never ran cannot vouch for the bundle:
 
 | Tool | Control | Language | Install |
 |------|---------|----------|---------|
@@ -119,7 +117,7 @@ missing tool as an informational pass.
 | TruffleHog | CQ-01 | All | `brew install trufflehog` |
 | GuardDog | CQ-02 | Python | `uv pip install guarddog` |
 | Bandit | CQ-03 | Python | `uv pip install bandit` |
-| ESLint | CQ-03 | JavaScript | `npm install -g eslint eslint-plugin-security` |
+| ESLint | CQ-03 | JavaScript | `npm install -g eslint eslint-plugin-security` (then `export NODE_PATH=$(npm root -g)`) |
 
 Tool versions are **pinned in the Dockerfile**. The image is rebuilt nightly to
 refresh the baked vulnerability database, so an unpinned tool would silently
@@ -130,7 +128,12 @@ Tools are invoked **by absolute path, never through `npx`, and never with the
 bundle as the working directory**. `npx` prefers `./node_modules/.bin`, so a
 bundle shipping its own `eslint` would have that binary executed by the scan
 pod — which holds S3 credentials and the callback secret. Running inside the
-bundle would also let it supply its own tool configuration.
+bundle would also let it supply its own tool configuration. ESLint additionally
+runs with `--no-config-lookup` and a working directory anchored at the
+filesystem root: with that flag the working directory is its config base path,
+and any file outside it is silently skipped. That also means it resolves plugins
+through `NODE_PATH` rather than from the file's own tree, which the image sets
+and a local install needs to export.
 
 When a tool runs but cannot produce a result — grype without a usable
 vulnerability database, a scanner that crashes — the control reports `ERROR`,
