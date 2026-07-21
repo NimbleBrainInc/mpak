@@ -22,13 +22,10 @@ packages/
 **Always run before considering a task done:**
 
 ```bash
-pnpm typecheck    # Type-check all packages
-pnpm lint         # Lint all packages
-pnpm test         # Run all tests
-pnpm build        # Full build (includes prerender)
+pnpm verify    # CI-equivalent gate: typecheck, lint, format check, and tests
 ```
 
-All four must pass with zero errors. Warnings are acceptable.
+It must pass with zero errors. Warnings are acceptable.
 
 For a single package, use turbo filters:
 ```bash

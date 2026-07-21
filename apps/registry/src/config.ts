@@ -51,6 +51,7 @@ export const config = {
     image: process.env.SCANNER_IMAGE || '',
     imageTag: process.env.SCANNER_IMAGE_TAG || 'latest',
     namespace: process.env.SCANNER_NAMESPACE || 'security-scanning',
+    serviceAccountName: process.env.SCANNER_SERVICE_ACCOUNT || 'default',
     callbackSecret: process.env.SCANNER_CALLBACK_SECRET || '',
     callbackUrl:
       process.env.SCANNER_CALLBACK_URL ||

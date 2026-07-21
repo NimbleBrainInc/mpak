@@ -118,4 +118,5 @@ pnpm typecheck
 | `SCANNER_IMAGE` | No | Scanner container image |
 | `SCANNER_IMAGE_TAG` | No | Scanner image tag |
 | `SCANNER_NAMESPACE` | No | K8s namespace for scans |
+| `SCANNER_SERVICE_ACCOUNT` | No | ServiceAccount for scan Job pods (default: `default`). Point at one carrying cloud identity (e.g. IRSA) scoped to bundle reads + report writes; it must exist in `SCANNER_NAMESPACE` |
 | `SCANNER_CALLBACK_SECRET` | No | Scanner callback auth secret |
