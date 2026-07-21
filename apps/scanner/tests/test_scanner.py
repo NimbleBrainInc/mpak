@@ -2585,3 +2585,83 @@ class TestToolCrashDoesNotSilentlyPass:
 
         result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
         assert result.status == ControlStatus.ERROR
+
+
+class TestCQ02GuardDogThreeTaxonomy:
+    """GuardDog 3.x renamed and re-scoped its rules; CQ-02 reads that taxonomy.
+
+    The real failure this guards: every finding in the ipgeolocation bundle came
+    back CRITICAL, including ones inside the official MCP SDK, because
+    dependency paths were not recognised and capability rules were read as
+    threats. A legitimate server cannot be certified as containing malware.
+    """
+
+    @staticmethod
+    def _bundle(tmp_path: Path) -> Path:
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+        return tmp_path
+
+    @staticmethod
+    def _guarddog_output(rule: str, location: str) -> str:
+        return json.dumps(
+            {
+                "package": "x",
+                "issues": 1,
+                "errors": {},
+                "results": {rule: [{"location": location, "message": f"{rule} matched"}]},
+            }
+        )
+
+    def _run(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rule: str, location: str):
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = self._guarddog_output(rule, location)
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(self._bundle(tmp_path), {})
+
+    def test_dependency_finding_does_not_fail_the_bundle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GuardDog reports relative paths, so `/node_modules/` never matched.
+
+        A bundle was being charged for patterns in the SDK it depends on.
+        """
+        result = self._run(
+            tmp_path,
+            monkeypatch,
+            "threat-process-cryptomining",
+            "node_modules/@modelcontextprotocol/sdk/dist/index.js",
+        )
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+        assert all(f.in_deps for f in result.findings)
+
+    def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`capability-*` states what the code can do, which is not a verdict.
+
+        A server that calls the API it wraps trips this by existing.
+        """
+        result = self._run(tmp_path, monkeypatch, "capability-network-outbound", "dist/client.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.INFO for f in result.findings)
+
+    def test_reading_environment_is_reported_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credentials arrive through the environment by design in MCP."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-environment-read", "dist/config.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    def test_real_threat_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The control must still catch what it exists to catch."""
+        result = self._run(tmp_path, monkeypatch, "threat-network-exfiltration", "dist/evil.js")
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscation_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Obfuscation is a threat verdict, not a capability."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-obfuscation-base64exec", "dist/a.js")
+        assert result.status == ControlStatus.FAIL

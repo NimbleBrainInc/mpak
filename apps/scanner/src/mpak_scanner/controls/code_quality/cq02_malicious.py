@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from mpak_scanner.controls.base import Control, ControlRegistry
@@ -17,13 +17,35 @@ JS_EXTENSIONS = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts"}
 # Directories to skip when detecting language
 SKIP_DIRS = {"deps", "node_modules", "vendor", "site-packages", ".venv", "venv", "__pycache__"}
 
-# Rules with high false-positive rate for MCP servers
-# These are treated as warnings (MEDIUM) instead of blocking (CRITICAL)
-# MCP servers legitimately call external APIs, which triggers these rules
+# GuardDog names rules by intent. `capability-*` states what code is able to do
+# -- open a socket, read a file, spawn a process -- which is a description, not
+# an accusation. Every MCP server trips several by existing. Only `threat-*`
+# rules are a verdict, and only those can fail this control. What a server is
+# able to do is the capability-declaration domain's question, not malware's.
+CAPABILITY_RULE_PREFIX = "capability-"
+
+# Threat rules that fire on ordinary MCP server behaviour, reported but not
+# blocking. Reading credentials from the environment is the mechanism the
+# manifest's user_config describes, and calling third-party APIs over TLS is
+# what a server wrapping an API does. Malicious use of either shows up in the
+# rules that describe the malicious part -- exfiltration, obfuscation, spawning
+# a shell -- which stay blocking.
 HIGH_FP_RULES = {
-    "shady-links",  # Flags .io, .dev, .xyz domains - common for APIs
-    "unicode",  # Flags unicode in code - common for i18n
+    "threat-runtime-environment-read",
+    "threat-network-outbound-shady-links",
+    "threat-runtime-obfuscation-unicode",
 }
+
+
+def _is_dependency_path(path: str) -> bool:
+    """Whether a tool-reported path points into vendored dependency code.
+
+    Matched on path components rather than substrings: GuardDog reports paths
+    relative to the scanned directory, so a leading-slash pattern like
+    "/node_modules/" silently misses every one of them and the bundle gets
+    charged for findings in code it merely depends on.
+    """
+    return any(part in SKIP_DIRS for part in PurePosixPath(path).parts)
 
 
 @ControlRegistry.register
@@ -117,9 +139,6 @@ class CQ02NoMaliciousPatterns(Control):
 
         findings: list[Finding] = []
 
-        # Determine dependency directory pattern based on ecosystem
-        dep_patterns = ["/deps/", "/node_modules/", "/site-packages/", "/vendor/", "deps/"]
-
         server_code_findings = 0
 
         try:
@@ -143,14 +162,16 @@ class CQ02NoMaliciousPatterns(Control):
                         if rule_findings:
                             for finding in rule_findings:
                                 file_path = finding.get("location", "unknown")
-                                in_deps = any(pattern in file_path for pattern in dep_patterns)
+                                in_deps = _is_dependency_path(file_path)
 
                                 # Per MTF spec, CQ-02 only evaluates server code
                                 # Findings in dependencies are informational only
                                 if in_deps:
                                     severity = Severity.INFO
+                                elif rule_name.startswith(CAPABILITY_RULE_PREFIX):
+                                    # A capability the server has, not a threat.
+                                    severity = Severity.INFO
                                 elif rule_name in HIGH_FP_RULES:
-                                    # High false-positive rules are warnings, not blocking
                                     severity = Severity.MEDIUM
                                 else:
                                     severity = Severity.CRITICAL
