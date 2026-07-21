@@ -1932,14 +1932,55 @@ class TestCQ03JavaScript:
         bundle.mkdir()
         return bundle
 
-    def test_no_js_files_passes(self, bundle_dir: Path) -> None:
-        """Bundle without JavaScript should pass CQ-03."""
+    def test_bundle_with_nothing_analysable_skips(self, bundle_dir: Path) -> None:
+        """No analysable code is not evidence of clean code.
+
+        Passing here would certify a bundle nothing inspected -- a TypeScript-
+        source bundle reaches this branch. SKIP caps the level honestly instead.
+        """
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
         control = CQ03StaticAnalysis()
         result = control.run(bundle_dir, {})
-        assert result.status == ControlStatus.PASS
-        assert any("No server code found" in f.title for f in result.findings)
+        assert result.status == ControlStatus.SKIP
+        assert result.status != ControlStatus.PASS
+
+    def test_typescript_only_bundle_does_not_certify(self, bundle_dir: Path) -> None:
+        """The regression this guards: TS sources are not analysable here.
+
+        Narrowing discovery to compiled JavaScript is right, but it must not
+        route TypeScript bundles into a pass.
+        """
+        (bundle_dir / "server.ts").write_text("eval(process.env.X);\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(bundle_dir, {})
+        assert result.status != ControlStatus.PASS
+
+    def test_bandit_error_paths_are_bundle_relative(self, bundle_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Findings are published; a scan-host path is a leak and is unusable."""
+        (bundle_dir / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            {
+                "results": [],
+                "errors": [{"filename": str(bundle_dir / "nested" / "bad.py"), "reason": "syntax error"}],
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(bundle_dir, {})
+        paths = [f.file for f in result.findings if f.file]
+        assert "nested/bad.py" in paths
+        assert not any(str(bundle_dir) in (p or "") for p in paths)
 
     def test_js_file_discovery(self, bundle_dir: Path) -> None:
         """Discovers JavaScript, and deliberately not TypeScript.

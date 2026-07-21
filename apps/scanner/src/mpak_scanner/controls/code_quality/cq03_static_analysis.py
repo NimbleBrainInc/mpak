@@ -87,21 +87,14 @@ class CQ03StaticAnalysis(Control):
             return self.error(str(e), duration_ms=int((time.time() - start) * 1000))
 
         if not analysis_run:
-            # No server code files to analyze
-            return ControlResult(
-                control_id=self.id,
-                control_name=self.name,
-                status=ControlStatus.PASS,
-                findings=[
-                    Finding(
-                        id="CQ-03-0000",
-                        control=self.id,
-                        severity=Severity.INFO,
-                        title="No server code found",
-                        description="No Python or JavaScript files to analyze (excluding dependencies)",
-                    )
-                ],
-                duration_ms=int((time.time() - start) * 1000),
+            # Nothing this control can read is not the same as nothing to find.
+            # A bundle shipping only TypeScript sources reaches here, and passing
+            # it would certify code no tool inspected. SKIP says the control did
+            # not apply, which caps the level honestly rather than vouching for
+            # the bundle -- the same choice CQ-02 makes for bundles with no
+            # ecosystem it can analyse.
+            return self.skip(
+                "No analysable Python or JavaScript found (excluding dependencies)",
             )
 
         duration = int((time.time() - start) * 1000)
@@ -160,6 +153,20 @@ class CQ03StaticAnalysis(Control):
 
         return js_files
 
+    @staticmethod
+    def _relative_to_bundle(path: str | None, bundle_dir: Path) -> str | None:
+        """Express a tool-reported path relative to the bundle.
+
+        Findings are published, and an absolute path inside the scan job means
+        nothing to a publisher looking at their own tree.
+        """
+        if not path:
+            return path
+        try:
+            return str(Path(path).relative_to(bundle_dir))
+        except ValueError:
+            return path
+
     def _run_bandit(self, bundle_dir: Path, python_files: list[Path]) -> list[Finding]:
         """Run Bandit static analysis on Python files."""
         findings: list[Finding] = []
@@ -216,7 +223,7 @@ class CQ03StaticAnalysis(Control):
                                 "Bandit could not analyse this file, so it carries no "
                                 "static-analysis coverage and its contents are unverified."
                             ),
-                            file=err.get("filename"),
+                            file=self._relative_to_bundle(err.get("filename"), bundle_dir),
                             remediation="Ensure the file is valid, readable Python for the declared runtime",
                         )
                     )
