@@ -14,6 +14,7 @@ Run:
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -164,3 +165,65 @@ class TestFullScan:
 
         errors = [f"{cid}: {r.findings}" for cid, r in report.all_controls.items() if r.status == ControlStatus.ERROR]
         assert errors == [], f"Controls errored on {bundle.name}: {errors}"
+
+
+@pytest.mark.e2e
+class TestCQ03AgainstRealESLint:
+    """Drives the real ESLint binary, because the mocked suite cannot see argv.
+
+    Every other CQ-03 test monkeypatches subprocess.run and asserts on the
+    arguments, which is how `--no-eslintrc` survived against an ESLint 10 image
+    and how `--ext .jsx` without a parser option reached review: both suites
+    were green while the invocation was wrong. Only running the tool catches
+    that class.
+    """
+
+    @staticmethod
+    def _require_eslint() -> None:
+        if shutil.which("eslint") is None:
+            message = "eslint not installed (npm install -g eslint eslint-plugin-security)"
+            if os.environ.get("MPAK_E2E_REQUIRED"):
+                pytest.fail(message)
+            pytest.skip(message)
+
+    def test_real_jsx_component_does_not_false_fail(self, tmp_path: Path) -> None:
+        """JSX syntax must parse. Without the parser option it is a fatal error.
+
+        espree cannot read JSX by default, so `--ext .jsx` alone turns every
+        genuine component into `fatal: Parsing error`, which this control
+        reports as a HIGH finding and fails the bundle on.
+        """
+        self._require_eslint()
+        (tmp_path / "server.js").write_text("const a = 1;\n")
+        (tmp_path / "App.jsx").write_text("const App = () => <div>hi</div>;\nexport default App;\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a benign JSX component failed CQ-03: {[(f.severity.value, f.title) for f in result.findings]}"
+        )
+
+    def test_real_jsx_payload_is_still_detected(self, tmp_path: Path) -> None:
+        """Parsing JSX must not come at the cost of analysing it."""
+        self._require_eslint()
+        (tmp_path / "Evil.jsx").write_text("const P = () => <b>{eval(process.env.P)}</b>;\nexport default P;\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL
+        assert any("detect-eval-with-expression" in f.title for f in result.findings)
+
+    def test_real_js_payload_is_detected(self, tmp_path: Path) -> None:
+        """The baseline the flag fix exists to preserve."""
+        self._require_eslint()
+        (tmp_path / "server.js").write_text("const x = eval(process.argv[2]);\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL

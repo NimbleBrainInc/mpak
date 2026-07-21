@@ -186,7 +186,7 @@ class CQ03StaticAnalysis(Control):
                 relative = src.relative_to(bundle_dir)
                 if _is_dependency_path(relative) or _is_test_path(relative):
                     continue
-                if relative.name.endswith(".d.ts"):
+                if relative.name.endswith((".d.ts", ".d.mts", ".d.cts")):
                     continue  # declarations carry no executable code
                 found.append(src)
         return found
@@ -255,63 +255,62 @@ class CQ03StaticAnalysis(Control):
             raise ToolFailureError("bandit produced no output")
 
         try:
-            if result.stdout.strip():
-                data = json.loads(result.stdout)
-                results = data.get("results", [])
+            data = json.loads(result.stdout)
+            results = data.get("results", [])
 
-                # Bandit lists files it could not read or parse in `errors`,
-                # separately from `results`, while still exiting zero. Dropping
-                # them lets a file that was never analysed pass as clean. Like
-                # ESLint's fatal parse errors these describe the bundle, so they
-                # are findings rather than a tool failure.
-                for i, err in enumerate(data.get("errors") or []):
-                    findings.append(
-                        Finding(
-                            id=f"CQ-03-ERR-{i:04d}",
-                            control=self.id,
-                            severity=Severity.HIGH,
-                            title=f"File could not be analysed: {err.get('reason', 'unknown error')}",
-                            description=(
-                                "Bandit could not analyse this file, so it carries no "
-                                "static-analysis coverage and its contents are unverified."
-                            ),
-                            file=self._relative_to_bundle(err.get("filename"), bundle_dir),
-                            remediation="Ensure the file is valid, readable Python for the declared runtime",
-                        )
+            # Bandit lists files it could not read or parse in `errors`,
+            # separately from `results`, while still exiting zero. Dropping
+            # them lets a file that was never analysed pass as clean. Like
+            # ESLint's fatal parse errors these describe the bundle, so they
+            # are findings rather than a tool failure.
+            for i, err in enumerate(data.get("errors") or []):
+                findings.append(
+                    Finding(
+                        id=f"CQ-03-ERR-{i:04d}",
+                        control=self.id,
+                        severity=Severity.HIGH,
+                        title=f"File could not be analysed: {err.get('reason', 'unknown error')}",
+                        description=(
+                            "Bandit could not analyse this file, so it carries no "
+                            "static-analysis coverage and its contents are unverified."
+                        ),
+                        file=self._relative_to_bundle(err.get("filename"), bundle_dir),
+                        remediation="Ensure the file is valid, readable Python for the declared runtime",
                     )
+                )
 
-                for i, issue in enumerate(results):
-                    severity_str = issue.get("issue_severity", "LOW")
-                    confidence_str = issue.get("issue_confidence", "LOW")
+            for i, issue in enumerate(results):
+                severity_str = issue.get("issue_severity", "LOW")
+                confidence_str = issue.get("issue_confidence", "LOW")
 
-                    # Map Bandit severity/confidence to MTF severity
-                    mbss_severity = BANDIT_SEVERITY_MAP.get((severity_str, confidence_str), Severity.INFO)
+                # Map Bandit severity/confidence to MTF severity
+                mbss_severity = BANDIT_SEVERITY_MAP.get((severity_str, confidence_str), Severity.INFO)
 
-                    file_path = issue.get("filename", "unknown")
-                    rel_path = self._relative_to_bundle(file_path, bundle_dir) or file_path
+                file_path = issue.get("filename", "unknown")
+                rel_path = self._relative_to_bundle(file_path, bundle_dir) or file_path
 
-                    # Check if in deps
-                    in_deps = _is_dependency_path(Path(rel_path))
+                # Check if in deps
+                in_deps = _is_dependency_path(Path(rel_path))
 
-                    findings.append(
-                        Finding(
-                            id=f"CQ-03-{i + 1:04d}",
-                            control=self.id,
-                            severity=mbss_severity,
-                            title=f"{issue.get('test_id', 'B000')}: {issue.get('issue_text', 'Unknown issue')}",
-                            description=issue.get("issue_text", ""),
-                            file=rel_path,
-                            line=issue.get("line_number"),
-                            in_deps=in_deps,
-                            remediation=f"See: https://bandit.readthedocs.io/en/latest/plugins/{issue.get('test_id', '').lower()}.html",
-                            metadata={
-                                "test_id": issue.get("test_id"),
-                                "test_name": issue.get("test_name"),
-                                "severity": severity_str,
-                                "confidence": confidence_str,
-                            },
-                        )
+                findings.append(
+                    Finding(
+                        id=f"CQ-03-{i + 1:04d}",
+                        control=self.id,
+                        severity=mbss_severity,
+                        title=f"{issue.get('test_id', 'B000')}: {issue.get('issue_text', 'Unknown issue')}",
+                        description=issue.get("issue_text", ""),
+                        file=rel_path,
+                        line=issue.get("line_number"),
+                        in_deps=in_deps,
+                        remediation=f"See: https://bandit.readthedocs.io/en/latest/plugins/{issue.get('test_id', '').lower()}.html",
+                        metadata={
+                            "test_id": issue.get("test_id"),
+                            "test_name": issue.get("test_name"),
+                            "severity": severity_str,
+                            "confidence": confidence_str,
+                        },
                     )
+                )
 
         except json.JSONDecodeError as e:
             raise ToolFailureError(f"Could not parse bandit output: {e}") from e
@@ -342,9 +341,14 @@ class CQ03StaticAnalysis(Control):
                     eslint,
                     "--no-config-lookup",
                     # Without this, flat config matches only .js/.mjs/.cjs and
-                    # reports .jsx ignored -- analysing nothing, silently.
+                    # reports .jsx ignored -- analysing nothing, silently. The
+                    # parser option is required with it: espree cannot parse JSX
+                    # syntax by default, so --ext alone turns every real .jsx
+                    # into a fatal parse error, which this control reports as a
+                    # finding against the bundle.
                     "--ext",
                     ".jsx",
+                    "--parser-options=ecmaFeatures:{jsx:true}",
                     # Emitted with no ruleId against files ESLint analysed
                     # perfectly well, and unrelated to security. Off, so a
                     # rule-less message reliably means the file was skipped.
@@ -392,72 +396,71 @@ class CQ03StaticAnalysis(Control):
             raise ToolFailureError("eslint produced no output")
 
         try:
-            if result.stdout.strip():
-                data = json.loads(result.stdout)
+            data = json.loads(result.stdout)
 
-                finding_counter = 0
-                files_analysed = 0
-                files_ignored: list[str] = []
-                for file_result in data:
-                    file_path = file_result.get("filePath", "unknown")
-                    rel_path = self._relative_to_bundle(file_path, bundle_dir) or file_path
+            finding_counter = 0
+            files_analysed = 0
+            files_ignored: list[str] = []
+            for file_result in data:
+                file_path = file_result.get("filePath", "unknown")
+                rel_path = self._relative_to_bundle(file_path, bundle_dir) or file_path
 
-                    # Check if in deps
-                    in_deps = _is_dependency_path(Path(rel_path))
+                # Check if in deps
+                in_deps = _is_dependency_path(Path(rel_path))
 
-                    messages = file_result.get("messages", [])
+                messages = file_result.get("messages", [])
 
-                    # A rule-less, non-fatal message is ESLint talking about
-                    # itself rather than about the code -- most often that it
-                    # skipped the file. That is not a finding, and on its own it
-                    # is not a failure either: one skipped file among many says
-                    # nothing about the rest. Only a run in which no file was
-                    # analysed means the tool told us nothing about the bundle.
-                    #
-                    # `fatal` is excluded -- it marks a file ESLint could not
-                    # parse, which is a property of the bundle and stays a
-                    # finding.
-                    notices = [m for m in messages if m.get("ruleId") is None and not m.get("fatal")]
-                    if notices and len(notices) == len(messages):
-                        files_ignored.append(f"{rel_path}: {notices[0].get('message', 'skipped')}")
+                # A rule-less, non-fatal message is ESLint talking about
+                # itself rather than about the code -- most often that it
+                # skipped the file. That is not a finding, and on its own it
+                # is not a failure either: one skipped file among many says
+                # nothing about the rest. Only a run in which no file was
+                # analysed means the tool told us nothing about the bundle.
+                #
+                # `fatal` is excluded -- it marks a file ESLint could not
+                # parse, which is a property of the bundle and stays a
+                # finding.
+                notices = [m for m in messages if m.get("ruleId") is None and not m.get("fatal")]
+                if notices and len(notices) == len(messages):
+                    files_ignored.append(f"{rel_path}: {notices[0].get('message', 'skipped')}")
+                    continue
+
+                files_analysed += 1
+
+                for msg in messages:
+                    if msg.get("ruleId") is None and not msg.get("fatal"):
                         continue
 
-                    files_analysed += 1
+                    finding_counter += 1
+                    severity_int = msg.get("severity", 1)
+                    mtf_severity = ESLINT_SEVERITY_MAP.get(severity_int, Severity.LOW)
 
-                    for msg in messages:
-                        if msg.get("ruleId") is None and not msg.get("fatal"):
-                            continue
+                    rule_id = msg.get("ruleId") or "unknown"
+                    message = msg.get("message", "Unknown issue")
 
-                        finding_counter += 1
-                        severity_int = msg.get("severity", 1)
-                        mtf_severity = ESLINT_SEVERITY_MAP.get(severity_int, Severity.LOW)
-
-                        rule_id = msg.get("ruleId") or "unknown"
-                        message = msg.get("message", "Unknown issue")
-
-                        findings.append(
-                            Finding(
-                                id=f"CQ-03-JS-{finding_counter:04d}",
-                                control=self.id,
-                                severity=mtf_severity,
-                                title=f"{rule_id}: {message}",
-                                description=message,
-                                file=rel_path,
-                                line=msg.get("line"),
-                                in_deps=in_deps,
-                                remediation="See: https://github.com/eslint-community/eslint-plugin-security#rules",
-                                metadata={
-                                    "ruleId": rule_id,
-                                    "severity": severity_int,
-                                },
-                            )
+                    findings.append(
+                        Finding(
+                            id=f"CQ-03-JS-{finding_counter:04d}",
+                            control=self.id,
+                            severity=mtf_severity,
+                            title=f"{rule_id}: {message}",
+                            description=message,
+                            file=rel_path,
+                            line=msg.get("line"),
+                            in_deps=in_deps,
+                            remediation="See: https://github.com/eslint-community/eslint-plugin-security#rules",
+                            metadata={
+                                "ruleId": rule_id,
+                                "severity": severity_int,
+                            },
                         )
+                    )
 
-                if files_analysed == 0:
-                    detail = "; ".join(files_ignored[:3])
-                    if len(files_ignored) > 3:
-                        detail += f" (+{len(files_ignored) - 3} more)"
-                    raise ToolFailureError(f"eslint analysed no files: {detail}")
+            if files_analysed == 0:
+                detail = "; ".join(files_ignored[:3])
+                if len(files_ignored) > 3:
+                    detail += f" (+{len(files_ignored) - 3} more)"
+                raise ToolFailureError(f"eslint analysed no files: {detail}")
 
         except json.JSONDecodeError as e:
             raise ToolFailureError(f"Could not parse eslint output: {e}") from e
