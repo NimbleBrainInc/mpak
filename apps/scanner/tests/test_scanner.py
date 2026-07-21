@@ -1942,18 +1942,25 @@ class TestCQ03JavaScript:
         assert any("No server code found" in f.title for f in result.findings)
 
     def test_js_file_discovery(self, bundle_dir: Path) -> None:
-        """Should discover JavaScript and TypeScript files."""
+        """Discovers JavaScript, and deliberately not TypeScript.
+
+        ESLint runs here without a TypeScript parser, so submitting .ts only
+        produces "file ignored" notices -- the appearance of coverage without
+        any. Bundles ship compiled JavaScript, which is what executes and what
+        these rules can actually read.
+        """
         src = bundle_dir / "src"
         src.mkdir()
         (src / "server.js").write_text("console.log('hello');")
         (src / "utils.ts").write_text("export const foo = 1;")
+        (src / "types.d.ts").write_text("export declare const foo: number;")
         (src / "index.mjs").write_text("export default {};")
 
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
         control = CQ03StaticAnalysis()
         js_files = control._find_server_js_files(bundle_dir)
-        assert len(js_files) == 3
+        assert {f.name for f in js_files} == {"server.js", "index.mjs"}
 
     def test_node_modules_excluded(self, bundle_dir: Path) -> None:
         """node_modules should be excluded from JS file discovery."""
@@ -2794,3 +2801,131 @@ class TestStaticAnalysisDoesNotCertifyUnrunTools:
         assert cwd == tmp_path.anchor
         assert cwd != str(tmp_path)
         assert str(tmp_path).startswith(cwd)
+
+    def test_eslint_skipped_file_alongside_analysed_files_is_not_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One skipped file says nothing about the rest of the bundle.
+
+        ESLint emits rule-less notices for files it declines to lint. Treating
+        any of them as a tool failure would stop every bundle carrying one from
+        ever certifying, which is the opposite of the intent.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "types.d.ts"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": False,
+                            "severity": 1,
+                            "message": "File ignored because no matching configuration was supplied.",
+                        }
+                    ],
+                },
+                {"filePath": str(tmp_path / "server.js"), "messages": []},
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+        # The notice is not a finding either -- it describes ESLint, not the code.
+        assert not any("File ignored" in f.title for f in result.findings)
+
+    def test_eslint_errors_only_when_no_file_was_analysed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every file skipped means the tool reported nothing about the bundle."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / f"{name}.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": False,
+                            "severity": 1,
+                            "message": "File ignored because outside of base path.",
+                        }
+                    ],
+                }
+                for name in ("a", "b")
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_eslint_disables_unused_directive_reporting(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unused eslint-disable comments are rule-less but not a skipped file.
+
+        Left on, they would be indistinguishable from a genuine skip notice.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        seen: list[str] = []
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen.extend(cmd)
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="[]", stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert "--report-unused-disable-directives-severity" in seen
+        assert seen[seen.index("--report-unused-disable-directives-severity") + 1] == "off"
+
+    def test_bandit_unreadable_file_is_reported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bandit lists unparseable files in `errors`, apart from `results`.
+
+        Reading only `results` let a file that was never analysed pass as clean.
+        """
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "filename": str(tmp_path / "bad.py"),
+                        "reason": "syntax error while parsing AST from file",
+                    }
+                ],
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert any("could not be analysed" in f.title for f in result.findings)
+        assert result.status != ControlStatus.PASS
