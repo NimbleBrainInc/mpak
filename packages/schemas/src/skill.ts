@@ -95,6 +95,13 @@ export const ScopedSkillNameSchema = z
   .string()
   .regex(/^@[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/, 'Scoped name format: @scope/name');
 
+const ScopedSkillNameInputSchema = z
+  .string()
+  .regex(
+    /^@[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9][A-Za-z0-9-]*$/,
+    'Scoped name format: @scope/name',
+  );
+
 /** Skill artifact info for announce endpoint */
 export const SkillArtifactSchema = z.object({
   filename: z.string().regex(/\.skill$/, 'Must have .skill extension'),
@@ -104,7 +111,7 @@ export const SkillArtifactSchema = z.object({
 
 /** Announce request for POST /v1/skills/announce */
 export const SkillAnnounceRequestSchema = z.object({
-  name: ScopedSkillNameSchema,
+  name: ScopedSkillNameInputSchema,
   version: z.string(),
   skill: SkillFrontmatterSchema,
   release_tag: z.string(),
