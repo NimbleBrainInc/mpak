@@ -83,6 +83,31 @@ tests/
 4. Add tests in `test_scanner.py`
 5. Update `CONTROL_LEVELS` in `models.py` if needed
 
+### The failure mode to hunt: fail-open
+
+Every control wraps an external tool, and the recurring, dangerous bug is one
+shape — a tool that did not run reads as a clean pass. When authoring or
+reviewing a control, walk each way its tool can fail to produce a result and
+confirm each one `ERROR`s rather than passes:
+
+- non-zero exit, timeout, missing binary — the tool never ran
+- empty or unparseable output — nothing was inspected
+- an in-band error (GuardDog reports engine failures in a zero-exit JSON whose
+  `errors` map is set while `results` is empty; a rule-less ESLint notice is the
+  file being skipped)
+
+Emptiness and in-band errors, **not the exit code alone**, are the reliable
+signal: grype and guarddog both exit non-zero on legitimate findings. A control
+must never certify on a scan that did not happen.
+
+### Attribute findings by path component, never substring
+
+To tell the bundle's own code from a vendored dependency, match path
+*components* — `any(part in DEP_DIRS for part in relative.parts)` — not a
+substring. Tools report paths relative to the scan directory, so `"/deps/" in
+path` or `dep in path_str` silently matches nothing (and also false-matches
+`depsolver.js`). This bug recurred across CQ-01, CQ-02 and CQ-03.
+
 Example:
 ```python
 from mpak_scanner.controls.base import Control, ControlRegistry
@@ -187,6 +212,14 @@ mpak bundle pull @nimblebraininc/nationalparks -o tests/data/nationalparks.mcpb
 
 Bundles are stored in `tests/data/` (gitignored). Tests skip gracefully if bundles are missing.
 
+These are the only tests that run the real analysers. The mocked unit tests
+assert on argv and hand-written output, so they cannot see a tool renaming a
+rule, changing a flag, or requiring a new parser option — every scanner defect
+in this suite's history passed the mocked tests and failed only against the
+real binary. Drive the real tool for anything that depends on its output shape.
+`MPAK_E2E_REQUIRED=1` turns a missing corpus into a failure rather than a silent
+skip; wiring this into CI is tracked in the issues.
+
 ### Running
 
 ```bash
@@ -223,6 +256,13 @@ Releases are automated via GitHub Actions and PyPI trusted publishing. Pushing a
    ```
 
 CI handles PyPI publish and Docker build/push to `ghcr.io/nimblebraininc/mpak-scanner`. See `.github/workflows/scanner-publish.yml`.
+
+**PyPI propagation race:** the Docker build installs the just-published version
+from PyPI, and it can start before PyPI has indexed it — failing with "No
+matching distribution found for mpak-scanner==X.Y.Z" while `publish-pypi`
+reports success. It is a propagation lag, not a real failure. Confirm the
+version is live (`pip index versions mpak-scanner`, or the PyPI JSON API) and
+re-run the failed job; the publish is idempotent.
 
 ### Schemas and Rules
 
