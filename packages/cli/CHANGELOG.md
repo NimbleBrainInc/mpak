@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-23
+
+### Removed
+
+- **The `mpak skill` command namespace.** mpak now does one thing: package MCP
+  servers as portable, security-scanned MCPB bundles. `mpak skill search`,
+  `show`, `install`, `validate`, and `pack` are gone, and `mpak search` is now
+  bundle-only (`mpak bundle search --type` still filters by server type). Skill
+  packaging and distribution have moved to the `skills.sh` / `npx skills`
+  ecosystem. ([#126])
+
 ## [0.4.2] - 2026-05-06
 
 ### Changed
@@ -97,7 +108,8 @@ Initial public release.
 - Platform-aware bundle resolution (os/arch matching)
 - Python auto-detection (`python3` → `python` fallback) for Python-based bundles
 
-[Unreleased]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.2...HEAD
+[Unreleased]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.5.0...HEAD
+[0.5.0]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.2...cli-v0.5.0
 [0.4.2]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.1...cli-v0.4.2
 [0.4.1]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.4.0...cli-v0.4.1
 [0.4.0]: https://github.com/NimbleBrainInc/mpak/compare/cli-v0.3.4...cli-v0.4.0
@@ -115,3 +127,4 @@ Initial public release.
 [#77]: https://github.com/NimbleBrainInc/mpak/issues/77
 [#91]: https://github.com/NimbleBrainInc/mpak/issues/91
 [#94]: https://github.com/NimbleBrainInc/mpak/issues/94
+[#126]: https://github.com/NimbleBrainInc/mpak/pull/126
