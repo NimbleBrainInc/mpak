@@ -63,24 +63,6 @@ export function createMockPackageRepo() {
 }
 
 /**
- * Create a mock SkillRepository with all methods stubbed.
- */
-export function createMockSkillRepo() {
-  return {
-    findById: vi.fn(),
-    findByName: vi.fn(),
-    findByNameWithVersions: vi.fn(),
-    search: vi.fn(),
-    findVersion: vi.fn(),
-    incrementDownloads: vi.fn(),
-    incrementVersionDownloads: vi.fn(),
-    upsertSkill: vi.fn(),
-    upsertVersion: vi.fn(),
-    updateLatestVersion: vi.fn(),
-  };
-}
-
-/**
  * Create a mock UserRepository.
  */
 export function createMockUserRepo() {

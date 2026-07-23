@@ -39,14 +39,6 @@ Backend API server for the mpak package registry. Handles bundle publishing, sea
 - `GET /v1/bundles/@:scope/:package/security-badge.svg` - Security badge
 - `GET /v1/bundles/@:scope/:package/certified-badge.svg` - Certification badge
 
-### Public Skills API (`/v1/skills`)
-- `GET /v1/skills/search` - Search skills
-- `GET /v1/skills/@:scope/:name` - Skill details
-- `GET /v1/skills/@:scope/:name/badge.svg` - Badge SVG
-- `GET /v1/skills/@:scope/:name/download` - Download latest
-- `GET /v1/skills/@:scope/:name/versions/:version/download` - Download version
-- `POST /v1/skills/announce` - Announce skill (OIDC)
-
 ### MCP Registry API (`/v0.1`)
 - `GET /v0.1` - API info
 - `GET /v0.1/servers` - List MCP servers
@@ -70,7 +62,7 @@ npx prisma generate
 # Run database migrations
 npx prisma migrate dev
 
-# Seed example data (skills with versions, downloads, tags)
+# Seed example data (bundles with versions, trust scores, and scans)
 npm run db:seed
 
 # Start development server
@@ -88,7 +80,7 @@ pnpm typecheck
 
 ### Seed data
 
-`npm run db:seed` populates the database with example skills from the NimbleBrain catalog. The seed script uses upserts, so it's safe to run repeatedly. To add more examples, edit `prisma/seed.ts`.
+`npm run db:seed` populates the database with example bundles (each with versions, a completed security scan, and a trust score). The seed script uses upserts, so it's safe to run repeatedly. To add more examples, edit `prisma/seed.ts`.
 
 ## Environment Variables
 

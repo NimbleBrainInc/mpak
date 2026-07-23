@@ -1,936 +1,256 @@
-/** biome-ignore-all lint/suspicious/noTemplateCurlyInString: intentional mpak manifest placeholders (${var} substituted at install time) */
 /**
- * Database Seed Script
+ * Seed script: inserts a handful of example MCPB bundles so the local UI has
+ * something to show. Safe to run multiple times (uses upserts).
  *
- * Populates the local development database with realistic example data.
- * Safe to run multiple times (uses upserts).
- *
- * Usage:
- *   npx tsx prisma/seed.ts
- *   # or via npm script:
- *   npm run db:seed
- *
- * Requires DATABASE_URL to be set (defaults from .env).
+ * Bundles enter the production registry through the GitHub Actions OIDC
+ * announce flow; this seed only exists for local development.
  */
 
-import 'dotenv/config';
-import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
-import pg from 'pg';
+import { disconnectDatabase, getPrismaClient } from '../src/db/index.js';
 
-// ---------------------------------------------------------------------------
-// Database setup (standalone, doesn't use the app's singleton)
-// ---------------------------------------------------------------------------
-
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-
-// ---------------------------------------------------------------------------
-// Seed data: Skills
-// ---------------------------------------------------------------------------
-
-interface SeedSkill {
-  name: string;
-  description: string;
-  license: string;
-  category: string;
-  tags: string[];
-  triggers: string[];
-  keywords: string[];
-  authorName: string;
-  authorUrl: string;
-  githubRepo: string;
-  compatibility?: string;
-  allowedTools?: string;
-  versions: {
-    version: string;
-    downloads: number;
-    frontmatter: Record<string, unknown>;
-    content?: string;
-  }[];
-}
-
-const SKILLS: SeedSkill[] = [
-  {
-    name: '@nimblebraininc/docs-auditor',
-    description:
-      'Systematically audit documentation against actual codebase to determine accuracy, staleness, and relevance. Use when auditing docs for accuracy, cleaning up stale docs after refactoring, validating docs match implementation, or building documentation health reports.',
-    license: 'Apache-2.0',
-    category: 'development',
-    tags: ['documentation', 'audit', 'code-quality', 'maintenance', 'accuracy'],
-    triggers: [
-      'audit the docs',
-      'check if docs are stale',
-      'validate documentation',
-      'docs match implementation',
-      'documentation health report',
-      'find outdated docs',
-    ],
-    keywords: ['documentation', 'audit', 'stale', 'accuracy', 'codebase'],
-    authorName: 'NimbleBrain',
-    authorUrl: 'https://nimblebrain.ai',
-    githubRepo: 'NimbleBrainInc/skills',
-    allowedTools: 'Read Glob Grep Task',
-    versions: [
-      {
-        version: '1.0.0',
-        downloads: 87,
-        frontmatter: {
-          name: 'docs-auditor',
-          description:
-            'Systematically audit documentation against actual codebase to determine accuracy, staleness, and relevance.',
-          metadata: {
-            version: '1.0.0',
-            category: 'development',
-            tags: ['documentation', 'audit', 'code-quality', 'maintenance', 'accuracy'],
-            triggers: [
-              'audit the docs',
-              'check if docs are stale',
-              'validate documentation',
-              'docs match implementation',
-              'documentation health report',
-              'find outdated docs',
-            ],
-            surfaces: ['claude-code'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-          },
-        },
-      },
-      {
-        version: '1.1.0',
-        downloads: 142,
-        frontmatter: {
-          name: 'docs-auditor',
-          description:
-            'Systematically audit documentation against actual codebase to determine accuracy, staleness, and relevance.',
-          metadata: {
-            version: '1.1.0',
-            category: 'development',
-            tags: ['documentation', 'audit', 'code-quality', 'maintenance', 'accuracy'],
-            triggers: [
-              'audit the docs',
-              'check if docs are stale',
-              'validate documentation',
-              'docs match implementation',
-              'documentation health report',
-              'find outdated docs',
-            ],
-            surfaces: ['claude-code'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-            examples: [
-              {
-                prompt: 'Audit the docs in the docs/ folder against the current codebase',
-                context: 'After a major refactor',
-              },
-              { prompt: 'Find all stale documentation that references removed APIs' },
-            ],
-          },
-        },
-        content: `## How It Works
-
-The docs auditor scans your documentation files and cross-references them against the actual codebase to find inconsistencies, stale references, and missing documentation.
-
-### Audit Process
-
-1. **Discovery** - Finds all documentation files (Markdown, RST, plain text)
-2. **Cross-reference** - Checks code references, function names, file paths, and API endpoints against the codebase
-3. **Staleness detection** - Identifies docs that reference removed or renamed symbols
-4. **Gap analysis** - Finds public APIs and exported functions that lack documentation
-5. **Report** - Generates a structured health report with actionable findings
-
-### Output Format
-
-The audit produces a structured report with:
-
-- **Accuracy score** - Percentage of code references that are still valid
-- **Stale references** - Specific lines that reference code that no longer exists
-- **Missing docs** - Public APIs without corresponding documentation
-- **Recommendations** - Prioritized list of fixes
-
-### Tips
-
-- Run after major refactors to catch documentation drift
-- Pair with CI to prevent stale docs from merging
-- Use the gap analysis to prioritize which docs to write next`,
-      },
-    ],
-  },
-  {
-    name: '@nimblebraininc/seo-optimizer',
-    description:
-      'Analyzes and optimizes content for search engine visibility. Use when reviewing blog posts for SEO, optimizing landing pages, checking meta descriptions, analyzing keyword usage, or improving content discoverability.',
-    license: 'Apache-2.0',
-    category: 'writing',
-    tags: ['seo', 'content', 'marketing', 'optimization', 'search'],
-    triggers: [
-      'optimize for SEO',
-      'check SEO',
-      'improve search ranking',
-      'keyword analysis',
-      'review for search',
-      'SEO audit',
-      'meta description',
-    ],
-    keywords: ['seo', 'search', 'optimization', 'meta', 'keywords', 'ranking'],
-    authorName: 'NimbleBrain',
-    authorUrl: 'https://nimblebrain.ai',
-    githubRepo: 'NimbleBrainInc/skills',
-    versions: [
-      {
-        version: '1.0.0',
-        downloads: 45,
-        frontmatter: {
-          name: 'seo-optimizer',
-          description: 'Analyzes and optimizes content for search engine visibility.',
-          metadata: {
-            version: '1.0.0',
-            category: 'writing',
-            tags: ['seo', 'content', 'marketing', 'optimization', 'search'],
-            triggers: [
-              'optimize for SEO',
-              'check SEO',
-              'improve search ranking',
-              'keyword analysis',
-              'review for search',
-              'SEO audit',
-              'meta description',
-            ],
-            surfaces: ['claude-code', 'claude-ai'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-          },
-        },
-      },
-      {
-        version: '1.0.7',
-        downloads: 213,
-        frontmatter: {
-          name: 'seo-optimizer',
-          description: 'Analyzes and optimizes content for search engine visibility.',
-          metadata: {
-            version: '1.0.7',
-            category: 'writing',
-            tags: ['seo', 'content', 'marketing', 'optimization', 'search'],
-            triggers: [
-              'optimize for SEO',
-              'check SEO',
-              'improve search ranking',
-              'keyword analysis',
-              'review for search',
-              'SEO audit',
-              'meta description',
-            ],
-            surfaces: ['claude-code', 'claude-ai'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-            examples: [
-              {
-                prompt: 'Optimize this blog post for SEO',
-                context: 'Before publishing a new article',
-              },
-              { prompt: 'Check the meta descriptions on our landing pages' },
-            ],
-          },
-        },
-        content: `## What It Does
-
-Analyzes your content for search engine optimization and provides actionable recommendations to improve visibility and ranking.
-
-### Analysis Areas
-
-- **Title tags** - Length, keyword placement, uniqueness
-- **Meta descriptions** - Compelling copy within character limits
-- **Heading structure** - Proper H1/H2/H3 hierarchy
-- **Keyword density** - Natural usage without stuffing
-- **Internal linking** - Opportunities to connect related content
-- **Readability** - Sentence length, paragraph structure, scan-ability
-
-### Best Practices
-
-The optimizer follows current SEO best practices:
-
-- Write for humans first, search engines second
-- Use natural language and semantic variations
-- Structure content with clear headings and short paragraphs
-- Include relevant internal and external links
-- Optimize images with alt text and descriptive filenames`,
-      },
-    ],
-  },
-  {
-    name: '@nimblebraininc/strategic-thought-partner',
-    description:
-      'Collaborative strategic thinking for founders, operators, and decision-makers. Use when someone needs help working through business strategy, product direction, positioning, prioritization, or major decisions. Not for execution, for clarification and decision-making.',
-    license: 'Apache-2.0',
-    category: 'consulting',
-    tags: ['strategy', 'business', 'decision-making', 'product', 'founders'],
-    triggers: [
-      'think through strategy',
-      'evaluate tradeoffs',
-      'pressure-test this idea',
-      'help me decide',
-      'clarify direction',
-      'scope this product',
-      'navigate this pivot',
-      'strategic thinking',
-    ],
-    keywords: ['strategy', 'business', 'decisions', 'tradeoffs', 'product', 'founders'],
-    authorName: 'NimbleBrain',
-    authorUrl: 'https://nimblebrain.ai',
-    githubRepo: 'NimbleBrainInc/skills',
-    compatibility: 'Claude Code, Claude AI',
-    versions: [
-      {
-        version: '1.0.0',
-        downloads: 64,
-        frontmatter: {
-          name: 'strategic-thought-partner',
-          description:
-            'Collaborative strategic thinking for founders, operators, and decision-makers.',
-          metadata: {
-            version: '1.0.0',
-            category: 'consulting',
-            tags: ['strategy', 'business', 'decision-making', 'product', 'founders'],
-            triggers: [
-              'think through strategy',
-              'evaluate tradeoffs',
-              'pressure-test this idea',
-              'help me decide',
-              'clarify direction',
-              'scope this product',
-              'navigate this pivot',
-              'strategic thinking',
-            ],
-            surfaces: ['claude-code', 'claude-ai'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-          },
-        },
-      },
-      {
-        version: '1.1.0',
-        downloads: 189,
-        frontmatter: {
-          name: 'strategic-thought-partner',
-          description:
-            'Collaborative strategic thinking for founders, operators, and decision-makers.',
-          metadata: {
-            version: '1.1.0',
-            category: 'consulting',
-            tags: ['strategy', 'business', 'decision-making', 'product', 'founders'],
-            triggers: [
-              'think through strategy',
-              'evaluate tradeoffs',
-              'pressure-test this idea',
-              'help me decide',
-              'clarify direction',
-              'scope this product',
-              'navigate this pivot',
-              'strategic thinking',
-            ],
-            surfaces: ['claude-code', 'claude-ai'],
-            author: { name: 'NimbleBrain', url: 'https://nimblebrain.ai' },
-            examples: [
-              {
-                prompt: 'Help me think through whether to pivot from B2C to B2B',
-                context: 'Early-stage startup with declining consumer metrics',
-              },
-              { prompt: 'Evaluate the tradeoffs of building vs buying our auth system' },
-            ],
-          },
-        },
-        content: `## Approach
-
-This skill acts as a strategic thought partner, not an executor. It helps you think clearly through complex decisions by structuring the problem, surfacing assumptions, and pressure-testing your reasoning.
-
-### When to Use
-
-- Evaluating major product direction changes
-- Weighing build vs. buy decisions
-- Navigating pivot decisions with incomplete information
-- Prioritizing across competing opportunities
-- Stress-testing a strategy before committing resources
-
-### How It Works
-
-The skill follows a structured thinking process:
-
-1. **Clarify the decision** - What exactly are you deciding? What are the constraints?
-2. **Map the landscape** - What options exist? What are the second-order effects?
-3. **Surface assumptions** - What are you taking for granted? What would change if those assumptions were wrong?
-4. **Evaluate tradeoffs** - What do you gain and lose with each path?
-5. **Identify the crux** - What is the single most important factor in this decision?
-
-### What It Does Not Do
-
-- Make decisions for you
-- Execute on strategy
-- Provide industry-specific market data
-- Replace domain expertise`,
-      },
-    ],
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Seed data: Packages (bundles)
-// ---------------------------------------------------------------------------
+const prisma = getPrismaClient();
 
 interface SeedArtifact {
   os: string;
   arch: string;
   sizeBytes: number;
-  sourceUrl: string;
 }
 
-interface SeedPackageVersion {
+interface SeedVersion {
   version: string;
-  prerelease?: boolean;
   downloads: number;
-  manifest: object;
-  publishedAt: string;
-  publishMethod: string;
-  provenanceRepository: string;
-  provenanceSha: string;
-  releaseTag?: string;
-  releaseUrl?: string;
-  artifacts?: SeedArtifact[];
+  releaseTag: string;
+  artifacts: SeedArtifact[];
+  // MTF certification (drives the trust badge in the UI)
+  certificationLevel: number; // 1=Basic, 2=Standard, 3=Verified, 4=Attested
+  controlsPassed: number;
+  controlsTotal: number;
+  riskScore: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 }
 
-interface SeedPackage {
+interface SeedBundle {
   name: string;
   description: string;
+  serverType: string; // node | python | binary
   authorName: string;
-  serverType: string;
-  license?: string;
-  githubRepo?: string;
-  versions: SeedPackageVersion[];
+  githubRepo: string;
+  versions: SeedVersion[];
 }
 
-const echoManifest = (version: string) => ({
-  name: '@nimblebraininc/echo',
-  version,
-  description: 'Echo server for testing and debugging MCP connections',
-  manifest_version: '0.3',
-  author: { name: 'NimbleBrain Inc' },
-  server: {
-    type: 'python',
-    mcp_config: { command: 'python', args: ['-m', 'mcp_echo.server'] },
-    entry_point: 'mcp_echo.server',
-  },
-});
-
-const nationalparksManifest = (version: string) => ({
-  name: '@nimblebraininc/nationalparks',
-  version,
-  description: 'MCP server for National Parks Service API',
-  manifest_version: '0.3',
-  author: { name: 'NimbleBrain Inc' },
-  server: {
-    type: 'node',
-    mcp_config: {
-      command: 'node',
-      args: ['${__dirname}/build/index.js'],
-      env: { NPS_API_KEY: '${user_config.api_key}' },
-    },
-    entry_point: 'build/index.js',
-  },
-  user_config: {
-    api_key: {
-      type: 'string',
-      title: 'NPS API Key',
-      required: true,
-      sensitive: true,
-      description: 'Your NPS API key from https://www.nps.gov/subjects/developer/get-started.htm',
-    },
-  },
-});
-
-const PACKAGES: SeedPackage[] = [
+const BUNDLES: SeedBundle[] = [
   {
-    name: '@nimblebraininc/echo',
-    description: 'Echo server for testing and debugging MCP connections',
-    authorName: 'NimbleBrain Inc',
+    name: '@nimblebraininc/ipinfo',
+    description:
+      'Look up geolocation, ASN, and privacy data for any IP address via the IPInfo API.',
     serverType: 'python',
-    license: 'Apache-2.0',
-    githubRepo: 'NimbleBrainInc/mcp-echo',
+    authorName: 'NimbleBrain',
+    githubRepo: 'NimbleBrainInc/mcp-servers',
     versions: [
       {
+        version: '0.2.0',
+        downloads: 1840,
+        releaseTag: 'ipinfo/v0.2.0',
+        certificationLevel: 3,
+        controlsPassed: 19,
+        controlsTotal: 22,
+        riskScore: 'LOW',
+        artifacts: [{ os: 'any', arch: 'any', sizeBytes: 48213 }],
+      },
+      {
         version: '0.1.0',
-        downloads: 103,
-        publishedAt: '2025-12-31T19:46:28.468Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: 'e3406ec72697feaba4da26f18f356ac9aae8a31f',
-        releaseTag: 'v0.1.0',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.0',
-        manifest: echoManifest('0.1.0'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.0', 14_200),
-      },
-      {
-        version: '0.1.1-beta.1',
-        prerelease: true,
-        downloads: 208,
-        publishedAt: '2026-01-02T22:00:46.118Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: '1b0be7da2ff7f6f88e738e8897b8b2e602816935',
-        releaseTag: 'v0.1.1-beta.1',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1-beta.1',
-        manifest: echoManifest('0.1.1-beta.1'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.1-beta.1', 14_350),
-      },
-      {
-        version: '0.1.1',
-        downloads: 336,
-        publishedAt: '2026-01-02T22:27:05.591Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: 'df13c722759cd066aa97ce6a9921cab52dbf5c58',
-        releaseTag: 'v0.1.1',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.1',
-        manifest: echoManifest('0.1.1'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.1', 14_500),
-      },
-      {
-        version: '0.1.2',
-        downloads: 124,
-        publishedAt: '2026-01-04T19:22:00.731Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: '01a67c0c69847783c53fb428b898ebd64d439a4a',
-        releaseTag: 'v0.1.2',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.2',
-        manifest: echoManifest('0.1.2'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.2', 14_600),
-      },
-      {
-        version: '0.1.3',
-        downloads: 226,
-        publishedAt: '2026-01-04T19:48:38.421Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: 'ea9ea341fdd7085e5ced55c8748010efa07ef492',
-        releaseTag: 'v0.1.3',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.3',
-        manifest: echoManifest('0.1.3'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.3', 14_700),
-      },
-      {
-        version: '0.1.4-rc.1',
-        prerelease: true,
-        downloads: 0,
-        publishedAt: '2026-02-09T18:47:48.584Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: 'facc63fda3553268eee4da38ceb7758dc7d47607',
-        releaseTag: 'v0.1.4-rc.1',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.1',
-        manifest: echoManifest('0.1.4-rc.1'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4-rc.1', 15_000),
-      },
-      {
-        version: '0.1.4-rc.4',
-        prerelease: true,
-        downloads: 0,
-        publishedAt: '2026-02-09T19:21:38.476Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: 'facc63fda3553268eee4da38ceb7758dc7d47607',
-        releaseTag: 'v0.1.4-rc.4',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4-rc.4',
-        manifest: echoManifest('0.1.4-rc.4'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4-rc.4', 15_100),
-      },
-      {
-        version: '0.1.4',
-        downloads: 2,
-        publishedAt: '2026-02-11T03:40:32.500Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: '638181a3357e89fcf8f77234667459df97d61d89',
-        releaseTag: 'v0.1.4',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.4',
-        manifest: echoManifest('0.1.4'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.4', 15_200),
-      },
-      {
-        version: '0.1.5',
-        downloads: 101,
-        publishedAt: '2026-02-11T08:11:50.559Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-echo',
-        provenanceSha: '640aa8ef2dd3843f834292015b3562349ebcbf00',
-        releaseTag: 'v0.1.5',
-        releaseUrl: 'https://github.com/NimbleBrainInc/mcp-echo/releases/tag/v0.1.5',
-        manifest: echoManifest('0.1.5'),
-        artifacts: universalArtifact('NimbleBrainInc/mcp-echo', '0.1.5', 15_400),
+        downloads: 920,
+        releaseTag: 'ipinfo/v0.1.0',
+        certificationLevel: 2,
+        controlsPassed: 14,
+        controlsTotal: 15,
+        riskScore: 'LOW',
+        artifacts: [{ os: 'any', arch: 'any', sizeBytes: 44102 }],
       },
     ],
   },
   {
-    name: '@nimblebraininc/nationalparks',
-    description: 'MCP server for National Parks Service API',
-    authorName: 'NimbleBrain Inc',
+    name: '@nimblebraininc/postgres',
+    description:
+      'Query and inspect PostgreSQL databases: run SQL, list schemas, and describe tables.',
     serverType: 'node',
-    license: 'Apache-2.0',
-    githubRepo: 'NimbleBrainInc/mcp-server-nationalparks',
+    authorName: 'NimbleBrain',
+    githubRepo: 'NimbleBrainInc/mcp-servers',
     versions: [
       {
-        version: '0.1.1',
-        downloads: 255,
-        publishedAt: '2026-01-05T05:52:56.802Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: '528a517c72167f6e2903a40a67b233a3c2bb641a',
-        releaseTag: 'v0.1.1',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.1',
-        manifest: nationalparksManifest('0.1.1'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.1.1',
-          82_000,
-        ),
+        version: '1.1.0',
+        downloads: 3275,
+        releaseTag: 'postgres/v1.1.0',
+        certificationLevel: 4,
+        controlsPassed: 24,
+        controlsTotal: 25,
+        riskScore: 'NONE',
+        artifacts: [
+          { os: 'darwin', arch: 'arm64', sizeBytes: 1203945 },
+          { os: 'linux', arch: 'x64', sizeBytes: 1255012 },
+        ],
       },
+    ],
+  },
+  {
+    name: '@anthropic/github-mcp',
+    description: 'GitHub API integration: manage issues, pull requests, and repository contents.',
+    serverType: 'node',
+    authorName: 'Anthropic',
+    githubRepo: 'anthropics/github-mcp',
+    versions: [
       {
-        version: '0.1.2',
-        downloads: 56,
-        publishedAt: '2026-01-05T06:12:53.512Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: 'acd8c36aa4bea46ce69c8b6f3225a23ce8b83e19',
-        releaseTag: 'v0.1.2',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.2',
-        manifest: nationalparksManifest('0.1.2'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.1.2',
-          83_000,
-        ),
-      },
-      {
-        version: '0.1.3',
-        downloads: 67,
-        publishedAt: '2026-01-05T07:01:29.791Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: 'd4d7e54b40a4f96aa79778239da71b5c635f4377',
-        releaseTag: 'v0.1.3',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.3',
-        manifest: nationalparksManifest('0.1.3'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.1.3',
-          83_500,
-        ),
-      },
-      {
-        version: '0.1.4',
-        downloads: 171,
-        publishedAt: '2026-01-05T07:04:34.396Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: '4897a961ace1e34760fd5aff15496ff520ca7ce7',
-        releaseTag: 'v0.1.4',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.4',
-        manifest: nationalparksManifest('0.1.4'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.1.4',
-          84_000,
-        ),
-      },
-      {
-        version: '0.1.5',
-        downloads: 174,
-        publishedAt: '2026-01-05T07:08:30.892Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: '5e6f1f3f5512b837a14f564d6c182e6a370d7a66',
-        releaseTag: 'v0.1.5',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.1.5',
-        manifest: nationalparksManifest('0.1.5'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.1.5',
-          84_500,
-        ),
-      },
-      {
-        version: '0.2.0',
-        downloads: 2,
-        publishedAt: '2026-02-12T23:33:07.687Z',
-        publishMethod: 'oidc',
-        provenanceRepository: 'NimbleBrainInc/mcp-server-nationalparks',
-        provenanceSha: 'b4566b1298b2617aedd1a2cc7d23b1576fe96e5d',
-        releaseTag: 'v0.2.0',
-        releaseUrl:
-          'https://github.com/NimbleBrainInc/mcp-server-nationalparks/releases/tag/v0.2.0',
-        manifest: nationalparksManifest('0.2.0'),
-        artifacts: multiPlatformArtifacts(
-          'NimbleBrainInc/mcp-server-nationalparks',
-          '0.2.0',
-          86_000,
-        ),
+        version: '1.2.0',
+        downloads: 5610,
+        releaseTag: 'v1.2.0',
+        certificationLevel: 3,
+        controlsPassed: 21,
+        controlsTotal: 22,
+        riskScore: 'LOW',
+        artifacts: [{ os: 'any', arch: 'any', sizeBytes: 982310 }],
       },
     ],
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Generate a deterministic fake digest from a string */
-function fakeDigest(input: string): string {
-  return `sha256:${createHash('sha256').update(input).digest('hex')}`;
-}
-
-/** Universal artifact for python/any-platform bundles */
-function universalArtifact(repo: string, version: string, sizeBytes: number): SeedArtifact[] {
-  return [
-    {
-      os: 'any',
-      arch: 'any',
-      sizeBytes,
-      sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${repo.split('/')[1]}-${version}.mcpb`,
-    },
-  ];
-}
-
-/** Multi-platform artifacts for node bundles */
-function multiPlatformArtifacts(repo: string, version: string, sizeBytes: number): SeedArtifact[] {
-  const name = repo.split('/')[1];
-  return [
-    {
-      os: 'darwin',
-      arch: 'arm64',
-      sizeBytes,
-      sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-darwin-arm64.mcpb`,
-    },
-    {
-      os: 'darwin',
-      arch: 'x64',
-      sizeBytes: sizeBytes + 1024,
-      sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-darwin-x64.mcpb`,
-    },
-    {
-      os: 'linux',
-      arch: 'x64',
-      sizeBytes: sizeBytes + 2048,
-      sourceUrl: `https://github.com/${repo}/releases/download/v${version}/${name}-${version}-linux-x64.mcpb`,
-    },
-  ];
-}
-
-/** Generate a deterministic fake storage path */
-function storagePath(scope: string, name: string, version: string): string {
-  return `skills/${scope}/${name}/${version}/skill.bundle`;
-}
-
-// ---------------------------------------------------------------------------
-// Main seed function
-// ---------------------------------------------------------------------------
-
-async function seed() {
-  console.log('Seeding database...\n');
-
-  for (const s of SKILLS) {
-    const [scope, skillName] = s.name.replace('@', '').split('/');
-
-    // Compute total downloads across all versions
-    const totalDownloads = s.versions.reduce((sum, v) => sum + v.downloads, 0);
-    const latestVersion = s.versions[s.versions.length - 1]!.version;
-
-    // Upsert the skill
-    const skill = await prisma.skill.upsert({
-      where: { name: s.name },
-      create: {
-        name: s.name,
-        description: s.description,
-        license: s.license,
-        category: s.category,
-        compatibility: s.compatibility ?? null,
-        allowedTools: s.allowedTools ?? null,
-        tags: s.tags,
-        triggers: s.triggers,
-        keywords: s.keywords,
-        authorName: s.authorName,
-        authorUrl: s.authorUrl,
-        githubRepo: s.githubRepo,
-        latestVersion,
-        totalDownloads: BigInt(totalDownloads),
-      },
-      update: {
-        description: s.description,
-        license: s.license,
-        category: s.category,
-        compatibility: s.compatibility ?? null,
-        allowedTools: s.allowedTools ?? null,
-        tags: s.tags,
-        triggers: s.triggers,
-        keywords: s.keywords,
-        authorName: s.authorName,
-        authorUrl: s.authorUrl,
-        latestVersion,
-        totalDownloads: BigInt(totalDownloads),
-      },
-    });
-
-    console.log(`  Skill: ${s.name} (${skill.id})`);
-
-    // Upsert each version
-    for (const v of s.versions) {
-      const path = storagePath(scope!, skillName!, v.version);
-      const digest = fakeDigest(`${s.name}@${v.version}`);
-
-      await prisma.skillVersion.upsert({
-        where: {
-          skillId_version: { skillId: skill.id, version: v.version },
-        },
-        create: {
-          skillId: skill.id,
-          version: v.version,
-          frontmatter: v.frontmatter,
-          content: v.content ?? null,
-          storagePath: path,
-          digest,
-          sizeBytes: BigInt(Math.floor(Math.random() * 5000) + 2000),
-          downloadCount: BigInt(v.downloads),
-          publishMethod: 'oidc',
-          provenanceRepository: s.githubRepo,
-          provenanceSha: createHash('sha256')
-            .update(`${s.name}@${v.version}-commit`)
-            .digest('hex')
-            .slice(0, 40),
-          releaseTag: `${skillName}/v${v.version}`,
-          releaseUrl: `https://github.com/${s.githubRepo}/releases/tag/${skillName}%2Fv${v.version}`,
-        },
-        update: {
-          frontmatter: v.frontmatter,
-          content: v.content ?? null,
-          downloadCount: BigInt(v.downloads),
-        },
-      });
-
-      console.log(`    v${v.version} (${v.downloads} downloads)`);
-    }
+// Deterministic fake digest (sha256:<64 hex>) for local seed artifacts.
+function fakeDigest(seed: string): string {
+  let hex = '';
+  let acc = 0;
+  for (let i = 0; i < seed.length; i++) acc = (acc * 31 + seed.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < 64; i++) {
+    acc = (acc * 1103515245 + 12345) >>> 0;
+    hex += (acc & 0xf).toString(16);
   }
+  return `sha256:${hex}`;
+}
 
-  console.log(`\nSeeded ${SKILLS.length} skills successfully.\n`);
+function storagePath(scope: string, name: string, version: string, platform?: string): string {
+  const file = platform ? `${platform}.mcpb` : 'bundle.mcpb';
+  return `@${scope}/${name}/${version}/${file}`;
+}
 
-  // Seed packages (bundles)
-  for (const p of PACKAGES) {
-    const totalDownloads = p.versions.reduce((sum, v) => sum + v.downloads, 0);
-    const latestVersion = p.versions[p.versions.length - 1]!.version;
+async function main() {
+  console.log('Seeding example bundles...\n');
+
+  for (const b of BUNDLES) {
+    const [scope, name] = b.name.replace('@', '').split('/');
+    const latest = b.versions[0]!.version;
+    const totalDownloads = BigInt(b.versions.reduce((sum, v) => sum + v.downloads, 0));
 
     const pkg = await prisma.package.upsert({
-      where: { name: p.name },
-      create: {
-        name: p.name,
-        description: p.description,
-        authorName: p.authorName,
-        serverType: p.serverType,
-        license: p.license ?? null,
-        githubRepo: p.githubRepo ?? null,
-        latestVersion,
-        totalDownloads: BigInt(totalDownloads),
-      },
+      where: { name: b.name },
       update: {
-        description: p.description,
-        authorName: p.authorName,
-        serverType: p.serverType,
-        license: p.license ?? null,
-        latestVersion,
-        totalDownloads: BigInt(totalDownloads),
+        description: b.description,
+        serverType: b.serverType,
+        authorName: b.authorName,
+        githubRepo: b.githubRepo,
+        latestVersion: latest,
+        totalDownloads,
+      },
+      create: {
+        name: b.name,
+        description: b.description,
+        serverType: b.serverType,
+        authorName: b.authorName,
+        githubRepo: b.githubRepo,
+        latestVersion: latest,
+        verified: true,
+        totalDownloads,
       },
     });
 
-    console.log(`  Package: ${p.name} (${pkg.id})`);
+    console.log(`  Bundle: ${b.name} (${pkg.id})`);
 
-    for (const v of p.versions) {
-      const pkgVersion = await prisma.packageVersion.upsert({
-        where: {
-          packageId_version: { packageId: pkg.id, version: v.version },
+    for (const v of b.versions) {
+      const manifest = {
+        name: b.name,
+        version: v.version,
+        description: b.description,
+        server_type: b.serverType,
+      };
+
+      const version = await prisma.packageVersion.upsert({
+        where: { packageId_version: { packageId: pkg.id, version: v.version } },
+        update: {
+          manifest,
+          downloadCount: BigInt(v.downloads),
+          releaseTag: v.releaseTag,
+          publishMethod: 'oidc',
+          provenanceRepository: b.githubRepo,
         },
         create: {
           packageId: pkg.id,
           version: v.version,
-          manifest: v.manifest,
-          prerelease: v.prerelease ?? false,
+          manifest,
           downloadCount: BigInt(v.downloads),
-          publishMethod: v.publishMethod,
-          provenanceRepository: v.provenanceRepository,
-          provenanceSha: v.provenanceSha,
-          releaseTag: v.releaseTag ?? null,
-          releaseUrl: v.releaseUrl ?? null,
-          publishedAt: new Date(v.publishedAt),
-        },
-        update: {
-          manifest: v.manifest,
-          downloadCount: BigInt(v.downloads),
+          releaseTag: v.releaseTag,
+          releaseUrl: `https://github.com/${b.githubRepo}/releases/tag/${v.releaseTag}`,
+          publishMethod: 'oidc',
+          provenanceRepository: b.githubRepo,
         },
       });
 
-      // Upsert artifacts for this version
-      for (const a of v.artifacts ?? []) {
-        const digest = fakeDigest(`${p.name}@${v.version}-${a.os}-${a.arch}`);
-        const artifactPath = `${p.name}/${v.version}/${a.os}-${a.arch}.mcpb`;
-
+      for (const a of v.artifacts) {
+        const platform = a.os === 'any' && a.arch === 'any' ? undefined : `${a.os}-${a.arch}`;
         await prisma.artifact.upsert({
-          where: {
-            versionId_os_arch: { versionId: pkgVersion.id, os: a.os, arch: a.arch },
-          },
+          where: { versionId_os_arch: { versionId: version.id, os: a.os, arch: a.arch } },
+          update: { sizeBytes: BigInt(a.sizeBytes) },
           create: {
-            versionId: pkgVersion.id,
+            versionId: version.id,
             os: a.os,
             arch: a.arch,
-            digest,
+            digest: fakeDigest(`${b.name}@${v.version}/${a.os}-${a.arch}`),
             sizeBytes: BigInt(a.sizeBytes),
-            storagePath: artifactPath,
-            sourceUrl: a.sourceUrl,
-          },
-          update: {
-            digest,
-            sizeBytes: BigInt(a.sizeBytes),
-            sourceUrl: a.sourceUrl,
+            storagePath: storagePath(scope!, name!, v.version, platform),
+            sourceUrl: `https://github.com/${b.githubRepo}/releases/download/${v.releaseTag}/${name}.mcpb`,
           },
         });
-
-        // Create placeholder file on disk so local storage can serve it
-        const storagePath = process.env.STORAGE_PATH || './packages';
-        const fullPath = join(storagePath, artifactPath);
-        await mkdir(dirname(fullPath), { recursive: true });
-        await writeFile(fullPath, `placeholder:${p.name}@${v.version}:${a.os}-${a.arch}`);
       }
 
-      const artifactCount = v.artifacts?.length ?? 0;
-      console.log(`    v${v.version} (${v.downloads} downloads, ${artifactCount} artifacts)`);
+      const scanId = `seed-${scope}-${name}-${v.version}`;
+      await prisma.securityScan.upsert({
+        where: { scanId },
+        update: {
+          status: 'completed',
+          riskScore: v.riskScore,
+          certificationLevel: v.certificationLevel,
+          controlsPassed: v.controlsPassed,
+          controlsFailed: v.controlsTotal - v.controlsPassed,
+          controlsTotal: v.controlsTotal,
+        },
+        create: {
+          versionId: version.id,
+          scanId,
+          status: 'completed',
+          riskScore: v.riskScore,
+          certificationLevel: v.certificationLevel,
+          controlsPassed: v.controlsPassed,
+          controlsFailed: v.controlsTotal - v.controlsPassed,
+          controlsTotal: v.controlsTotal,
+          findingsSummary: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: v.controlsTotal - v.controlsPassed,
+          },
+          completedAt: new Date(),
+        },
+      });
+
+      console.log(
+        `    v${v.version}  L${v.certificationLevel} ${v.controlsPassed}/${v.controlsTotal}`,
+      );
     }
   }
 
-  console.log(`\nSeeded ${PACKAGES.length} packages successfully.`);
+  console.log(`\nSeeded ${BUNDLES.length} bundles successfully.\n`);
 }
 
-// ---------------------------------------------------------------------------
-// Run
-// ---------------------------------------------------------------------------
-
-seed()
-  .catch((err) => {
-    console.error('Seed failed:', err);
+main()
+  .catch((e) => {
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
-    await pool.end();
+    await disconnectDatabase();
   });

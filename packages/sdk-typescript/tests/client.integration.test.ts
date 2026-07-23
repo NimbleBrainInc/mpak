@@ -14,9 +14,8 @@ import { describe, expect, it } from 'vitest';
 import { MpakClient } from '../src/client.js';
 import { MpakNotFoundError } from '../src/errors.js';
 
-// Known bundle and skill that exist in the registry
+// Known bundle that exists in the registry
 const KNOWN_BUNDLE = '@nimblebraininc/echo';
-const KNOWN_SKILL = '@nimblebraininc/ipinfo';
 
 const registryUrl = process.env.MPAK_REGISTRY_URL ?? 'https://registry.mpak.dev';
 
@@ -135,43 +134,6 @@ describe('MpakClient Integration Tests', () => {
 
     it('throws MpakNotFoundError for nonexistent bundle', async () => {
       await expect(client.getBundle('@nonexistent/bundle-that-does-not-exist')).rejects.toThrow(
-        MpakNotFoundError,
-      );
-    });
-  });
-
-  describe('Skill API', () => {
-    it('searches skills', async () => {
-      const result = await client.searchSkills({ limit: 5 });
-
-      expect(result.skills).toBeInstanceOf(Array);
-      expect(result.pagination).toBeDefined();
-      // Note: There may be no skills yet, so we just check the response structure
-    });
-
-    it('searches skills with filters', async () => {
-      const result = await client.searchSkills({
-        surface: 'claude-code',
-        limit: 10,
-      });
-
-      expect(result.skills).toBeInstanceOf(Array);
-      expect(result.pagination).toBeDefined();
-    });
-
-    it('downloads skill bundle with verified integrity', async () => {
-      const { data, metadata } = await client.downloadSkillBundle(KNOWN_SKILL);
-
-      expect(data).toBeInstanceOf(Uint8Array);
-      expect(data.byteLength).toBeGreaterThan(0);
-      expect(metadata.name).toBe(KNOWN_SKILL);
-      expect(metadata.version).toBeDefined();
-      expect(metadata.sha256).toBeDefined();
-      expect(metadata.size).toBeGreaterThan(0);
-    });
-
-    it('throws MpakNotFoundError for nonexistent skill', async () => {
-      await expect(client.getSkill('@nonexistent/skill-that-does-not-exist')).rejects.toThrow(
         MpakNotFoundError,
       );
     });

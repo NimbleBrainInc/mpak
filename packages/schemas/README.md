@@ -89,14 +89,6 @@ All API response schemas for both internal and v1 APIs.
 
 - `UserProfileSchema` - user profile from /app/auth/me
 
-### `skill.ts`
-
-Agent Skills specification schemas.
-
-- `SkillFrontmatterSchema` - SKILL.md frontmatter
-- `SkillAnnounceRequestSchema` - POST /v1/skills/announce
-- `SkillSearchResponseSchema`, `SkillDetailSchema`, etc.
-
 ### `mpak-json.ts`
 
 mpak.json ownership claim file schema.

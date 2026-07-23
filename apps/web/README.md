@@ -1,6 +1,6 @@
 # @nimblebrain/mpak-web
 
-The mpak web UI. A React single-page application for the mpak package registry, enabling users to discover, browse, and manage MCP bundles and Agent Skills.
+The mpak web UI. A React single-page application for the mpak package registry, enabling users to discover, browse, and manage MCP bundles.
 
 ## Stack
 

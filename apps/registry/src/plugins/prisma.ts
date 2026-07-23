@@ -10,7 +10,6 @@ import {
   disconnectDatabase,
   getPrismaClient,
   PackageRepository,
-  SkillRepository,
   UserRepository,
 } from '../db/index.js';
 
@@ -20,7 +19,6 @@ declare module 'fastify' {
     repositories: {
       packages: PackageRepository;
       users: UserRepository;
-      skills: SkillRepository;
     };
   }
 }
@@ -40,7 +38,6 @@ const prismaPlugin: FastifyPluginAsync = async (fastify) => {
   const repositories = {
     packages: new PackageRepository(),
     users: new UserRepository(),
-    skills: new SkillRepository(),
   };
 
   fastify.decorate('prisma', prisma);

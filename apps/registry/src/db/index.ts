@@ -9,18 +9,13 @@ export { disconnectDatabase, getPrismaClient, runInTransaction } from './client.
 export type {
   CreatePackageData,
   CreatePackageVersionData,
-  CreateSkillData,
-  CreateSkillVersionData,
   CreateUserData,
   PackageSearchResult,
-  SkillSearchFilters,
-  SkillSearchResult,
   UpdateUserData,
 } from './repositories/index.js';
 // Repositories
 export {
   PackageRepository,
-  SkillRepository,
   UserRepository,
 } from './repositories/index.js';
 

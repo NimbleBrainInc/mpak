@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/pypi/l/mpak)](https://github.com/NimbleBrainInc/mpak/blob/main/packages/sdk-python/LICENSE)
 [![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev)
 
-Python SDK for the mpak registry - search, download, and resolve MCPB bundles and Agent Skills.
+Python SDK for the mpak registry - search, download, and resolve MCPB bundles.
 
 ## Installation
 

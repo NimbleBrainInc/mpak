@@ -1,14 +1,14 @@
 [project]
 name = "mpak"
 version = "0.2.0"
-description = "Python SDK for the mpak registry - MCPB bundles and Agent Skills"
+description = "Python SDK for the mpak registry - MCPB bundles"
 authors = [
     {name = "NimbleBrain Inc", email = "engineering@mpak.dev"}
 ]
 license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.11"
-keywords = ["mpak", "mcp", "mcpb", "model-context-protocol", "agent-skills"]
+keywords = ["mpak", "mcp", "mcpb", "model-context-protocol"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

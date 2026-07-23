@@ -6,19 +6,11 @@ import type {
   PlatformInfo,
   ServerDetail,
   ServerListResponse,
-  SkillDetail,
-  SkillDownloadInfo,
-  SkillSearchResponse,
   VersionDetail,
   VersionsResponse,
 } from '@nimblebrain/mpak-schemas';
 import { MpakError, MpakIntegrityError, MpakNetworkError, MpakNotFoundError } from './errors.js';
-import type {
-  BundleSearchParams,
-  MpakClientConfig,
-  ServerSearchParams,
-  SkillSearchParams,
-} from './types.js';
+import type { BundleSearchParams, MpakClientConfig, ServerSearchParams } from './types.js';
 
 const DEFAULT_REGISTRY_URL = 'https://registry.mpak.dev';
 const DEFAULT_TIMEOUT = 30000;
@@ -231,104 +223,6 @@ export class MpakClient {
   }
 
   // ===========================================================================
-  // Skill API
-  // ===========================================================================
-
-  /**
-   * Search for skills
-   */
-  async searchSkills(params: SkillSearchParams = {}): Promise<SkillSearchResponse> {
-    const searchParams = new URLSearchParams();
-    if (params.q) searchParams.set('q', params.q);
-    if (params.tags) searchParams.set('tags', params.tags);
-    if (params.category) searchParams.set('category', params.category);
-    if (params.sort) searchParams.set('sort', params.sort);
-    if (params.limit) searchParams.set('limit', String(params.limit));
-    if (params.offset) searchParams.set('offset', String(params.offset));
-
-    const queryString = searchParams.toString();
-    const url = `${this.registryUrl}/v1/skills/search${queryString ? `?${queryString}` : ''}`;
-
-    const response = await this.fetchWithTimeout(url);
-
-    if (response.status === 404) {
-      throw new MpakNotFoundError('skills/search endpoint');
-    }
-
-    if (!response.ok) {
-      throw new MpakNetworkError(`Failed to search skills: HTTP ${response.status}`);
-    }
-
-    return response.json() as Promise<SkillSearchResponse>;
-  }
-
-  /**
-   * Get skill details
-   */
-  async getSkill(name: string): Promise<SkillDetail> {
-    this.validateScopedName(name);
-
-    const url = `${this.registryUrl}/v1/skills/${name}`;
-    const response = await this.fetchWithTimeout(url);
-
-    if (response.status === 404) {
-      throw new MpakNotFoundError(name);
-    }
-
-    if (!response.ok) {
-      throw new MpakNetworkError(`Failed to get skill: HTTP ${response.status}`);
-    }
-
-    return response.json() as Promise<SkillDetail>;
-  }
-
-  /**
-   * Get download info for a skill (latest version)
-   */
-  async getSkillDownload(name: string): Promise<SkillDownloadInfo> {
-    this.validateScopedName(name);
-
-    const url = `${this.registryUrl}/v1/skills/${name}/download`;
-
-    const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: 'application/json' },
-    });
-
-    if (response.status === 404) {
-      throw new MpakNotFoundError(name);
-    }
-
-    if (!response.ok) {
-      throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
-    }
-
-    return response.json() as Promise<SkillDownloadInfo>;
-  }
-
-  /**
-   * Get download info for a specific skill version
-   */
-  async getSkillVersionDownload(name: string, version: string): Promise<SkillDownloadInfo> {
-    this.validateScopedName(name);
-
-    const url = `${this.registryUrl}/v1/skills/${name}/versions/${version}/download`;
-
-    const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: 'application/json' },
-    });
-
-    if (response.status === 404) {
-      throw new MpakNotFoundError(`${name}@${version}`);
-    }
-
-    if (!response.ok) {
-      throw new MpakNetworkError(`Failed to get skill download: HTTP ${response.status}`);
-    }
-
-    return response.json() as Promise<SkillDownloadInfo>;
-  }
-
-  // ===========================================================================
   // Download Methods
   // ===========================================================================
 
@@ -378,29 +272,6 @@ export class MpakClient {
     const data = await this.downloadContent(downloadInfo.url, downloadInfo.bundle.sha256);
 
     return { data, metadata: downloadInfo.bundle };
-  }
-
-  /**
-   * Download a skill bundle by name, with optional version.
-   * Defaults to latest version.
-   *
-   * @throws {MpakNotFoundError} If skill not found
-   * @throws {MpakIntegrityError} If SHA-256 doesn't match
-   * @throws {MpakNetworkError} For network failures
-   */
-  async downloadSkillBundle(
-    name: string,
-    version?: string,
-  ): Promise<{
-    data: Uint8Array;
-    metadata: SkillDownloadInfo['skill'];
-  }> {
-    const resolvedVersion = version ?? 'latest';
-
-    const downloadInfo = await this.getSkillVersionDownload(name, resolvedVersion);
-    const data = await this.downloadContent(downloadInfo.url, downloadInfo.skill.sha256);
-
-    return { data, metadata: downloadInfo.skill };
   }
 
   // ===========================================================================

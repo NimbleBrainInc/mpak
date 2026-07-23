@@ -1154,7 +1154,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         );
 
         // Non-blocking Discord notification for new or updated bundles
-        notifyDiscordAnnounce({ name, version, type: 'bundle', repo: claims.repository });
+        notifyDiscordAnnounce({ name, version, repo: claims.repository });
 
         // Non-blocking security scan trigger
         if (config.scanner.enabled && versionId) {

@@ -13,24 +13,14 @@ import { handleSearch } from './commands/packages/search.js';
 import { handleShow } from './commands/packages/show.js';
 import { handleUpdate } from './commands/packages/update.js';
 import { handleUnifiedSearch } from './commands/search.js';
-import {
-  handleSkillInstall,
-  handleSkillList,
-  handleSkillPack,
-  handleSkillPull,
-  handleSkillSearch,
-  handleSkillShow,
-  handleSkillValidate,
-} from './commands/skills/index.js';
 import { getVersion } from './utils/version.js';
 
 /**
  * Creates and configures the CLI program
  *
  * Command structure:
- * - mpak search <query>    - Unified search (bundles + skills)
+ * - mpak search <query>    - Search bundles
  * - mpak bundle <command>  - MCP bundle commands
- * - mpak skill <command>   - Agent skill commands
  * - mpak config <command>  - Configuration commands
  */
 export function createProgram(): Command {
@@ -38,17 +28,16 @@ export function createProgram(): Command {
 
   program
     .name('mpak')
-    .description('CLI for MCP bundles and Agent Skills')
+    .description('CLI for MCP bundles')
     .version(getVersion(), '-v, --version', 'Output the current version');
 
   // ==========================================================================
-  // Unified search (bundles + skills)
+  // Search (bundles)
   // ==========================================================================
 
   program
     .command('search <query>')
-    .description('Search bundles and skills')
-    .option('--type <type>', 'Filter by type (bundle, skill)')
+    .description('Search bundles')
     .option('--sort <field>', 'Sort by: downloads, recent, name')
     .option('--limit <number>', 'Limit results', parseInt)
     .option('--offset <number>', 'Pagination offset', parseInt)
@@ -153,78 +142,7 @@ export function createProgram(): Command {
     });
 
   // ==========================================================================
-  // Skill namespace (Agent Skills)
-  // ==========================================================================
-
-  const skill = program.command('skill').description('Agent skill commands');
-
-  skill
-    .command('validate <path>')
-    .description('Validate a skill directory against the Agent Skills spec')
-    .option('--json', 'Output as JSON')
-    .action(async (path, options) => {
-      await handleSkillValidate(path, options);
-    });
-
-  skill
-    .command('pack <path>')
-    .description('Create a .skill bundle from a skill directory')
-    .option('-o, --output <path>', 'Output file path')
-    .option('--json', 'Output as JSON')
-    .action(async (path, options) => {
-      await handleSkillPack(path, options);
-    });
-
-  skill
-    .command('search <query>')
-    .description('Search skills in the registry')
-    .option('--tags <tags>', 'Filter by tags (comma-separated)')
-    .option('--category <category>', 'Filter by category')
-    .option('--surface <surface>', 'Filter by surface (claude-code, claude-api, claude-ai)')
-    .option('--sort <field>', 'Sort by: downloads, recent, name')
-    .option('--limit <number>', 'Limit results', parseInt)
-    .option('--offset <number>', 'Pagination offset', parseInt)
-    .option('--json', 'Output as JSON')
-    .action(async (query, options) => {
-      await handleSkillSearch(query, options);
-    });
-
-  skill
-    .command('show <name>')
-    .description('Show detailed information about a skill')
-    .option('--json', 'Output as JSON')
-    .action(async (name, options) => {
-      await handleSkillShow(name, options);
-    });
-
-  skill
-    .command('pull <name>')
-    .description('Download a .skill bundle from the registry')
-    .option('-o, --output <path>', 'Output file path')
-    .option('--json', 'Output as JSON')
-    .action(async (name, options) => {
-      await handleSkillPull(name, options);
-    });
-
-  skill
-    .command('install <name>')
-    .description('Install a skill to ~/.claude/skills/')
-    .option('--force', 'Overwrite existing installation')
-    .option('--json', 'Output as JSON')
-    .action(async (name, options) => {
-      await handleSkillInstall(name, options);
-    });
-
-  skill
-    .command('list')
-    .description('List installed skills')
-    .option('--json', 'Output as JSON')
-    .action(async (options) => {
-      await handleSkillList(options);
-    });
-
-  // ==========================================================================
-  // Config commands (shared for bundles and skills)
+  // Config commands
   // ==========================================================================
 
   const configCmd = program

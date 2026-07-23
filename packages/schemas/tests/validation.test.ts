@@ -10,8 +10,6 @@ import {
   validatePackageDetail,
   validatePackageSearchParams,
   validatePackageSearchResponse,
-  validateSkillDetail,
-  validateSkillFrontmatter,
   validateUserProfile,
 } from '../src/validation.js';
 
@@ -213,40 +211,5 @@ describe('validateMpakJson', () => {
     if (!result.success) {
       expect(result.errors.length).toBeGreaterThan(0);
     }
-  });
-});
-
-describe('validateSkillFrontmatter', () => {
-  it('validates valid frontmatter', () => {
-    const result = validateSkillFrontmatter({
-      name: 'my-skill',
-      description: 'A skill',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('returns errors for invalid frontmatter', () => {
-    const result = validateSkillFrontmatter({});
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('validateSkillDetail', () => {
-  it('validates a skill detail', () => {
-    const result = validateSkillDetail({
-      name: '@user/skill',
-      description: 'A skill',
-      latest_version: '1.0.0',
-      downloads: 0,
-      published_at: '2025-01-01T00:00:00Z',
-      versions: [
-        {
-          version: '1.0.0',
-          published_at: '2025-01-01T00:00:00Z',
-          downloads: 0,
-        },
-      ],
-    });
-    expect(result.success).toBe(true);
   });
 });

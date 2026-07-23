@@ -98,7 +98,6 @@ describe('Bundle Routes', () => {
     app.decorate('repositories', {
       packages: packageRepo,
       users: {},
-      skills: {},
     });
     app.decorate('storage', storage);
     app.decorate('prisma', prisma);
