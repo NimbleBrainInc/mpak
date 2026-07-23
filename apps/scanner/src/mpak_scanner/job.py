@@ -13,6 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from mpak_scanner.models import ControlStatus
 from mpak_scanner.scanner import scan_bundle
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def run_job() -> None:
     logger.info("Starting scan job %s for %s", scan_id, env["BUNDLE_S3_KEY"])
 
     try:
-        import boto3  # type: ignore[unresolved-import]
+        import boto3
 
         s3 = boto3.client("s3", region_name=region)
 
@@ -89,15 +90,39 @@ def run_job() -> None:
             )
 
             # 6. POST callback
-            callback_body = json.dumps(
-                {
-                    "scan_id": scan_id,
-                    "status": "completed",
-                    "risk_score": report.risk_score.value,
-                    "report": report_dict,
-                    "report_s3_uri": report_s3_uri,
-                }
-            ).encode()
+            #
+            # A degraded scan is reported as failed, not completed. Its
+            # compliance level was computed without every level-bearing control
+            # running, so publishing it would record a scanner-side outage as a
+            # trust-level downgrade the bundle did not earn. Certification
+            # lookups read only completed scans, so reporting failure here
+            # preserves the bundle's previous level and leaves the scan
+            # retryable. The report still ships for diagnosis.
+            payload: dict[str, object] = {
+                "scan_id": scan_id,
+                "status": "completed",
+                "risk_score": report.risk_score.value,
+                "report": report_dict,
+                "report_s3_uri": report_s3_uri,
+            }
+
+            degraded = False
+            if report.degraded:
+                # `degraded` is derived by re-deriving the level with every
+                # errored control treated as passing, so the honest list is the
+                # errored controls themselves -- collectively they are what held
+                # the level down. Filtering further would name a subset the
+                # calculation never singled out.
+                unavailable = sorted(
+                    cid for cid, ctrl in report.all_controls.items() if ctrl.status == ControlStatus.ERROR
+                )
+                reason = f"Scan degraded: {', '.join(unavailable)} did not run"
+                logger.error("%s. Certification left unchanged.", reason)
+                payload["status"] = "failed"
+                payload["error"] = reason
+                degraded = True
+
+            callback_body = json.dumps(payload).encode()
 
             logger.info("Sending callback to %s", callback_url)
             req = urllib.request.Request(  # noqa: S310
@@ -112,7 +137,14 @@ def run_job() -> None:
             with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
                 logger.info("Callback response: %s", resp.status)
 
-        logger.info("Scan job %s completed successfully", scan_id)
+        # The job itself succeeded either way: it scanned and reported the
+        # outcome. A degraded scan is a result the job delivered correctly, not
+        # a job malfunction, so it does not exit non-zero -- conflating the two
+        # is the same category error this change removes from the controls.
+        if degraded:
+            logger.error("Scan job %s reported a degraded scan; no certification published", scan_id)
+        else:
+            logger.info("Scan job %s completed successfully", scan_id)
 
     except Exception as e:
         logger.exception("Scan job %s failed: %s", scan_id, e)

@@ -13,11 +13,13 @@ Run:
     uv run pytest -m e2e -v
 """
 
+import os
+import shutil
 from pathlib import Path
 
 import pytest
 
-from mpak_scanner import scan_bundle
+from mpak_scanner import SecurityReport, scan_bundle
 from mpak_scanner.models import ControlStatus, Severity
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -43,9 +45,38 @@ NODE_BUNDLES = [
 ]
 
 
+# SC-02 reports real CVEs in these bundles' real dependencies. Those are true
+# positives and they move as advisories land, so they are not what this suite
+# guards -- which is the analysis controls inventing findings on ordinary code.
+CONTROLS_WITH_MOVING_TRUE_POSITIVES = {"SC-02"}
+
+
+def critical_findings_excluding_true_positives(report: SecurityReport) -> list[str]:
+    """Critical findings that would indicate a false positive, not a real CVE."""
+    return [
+        f"{control_id}: {f.title}"
+        for control_id, result in report.all_controls.items()
+        if control_id not in CONTROLS_WITH_MOVING_TRUE_POSITIVES
+        for f in result.findings
+        if f.severity == Severity.CRITICAL
+    ]
+
+
 def skip_if_missing(bundle_path: Path) -> None:
-    if not bundle_path.exists():
-        pytest.skip(f"Bundle not found: {bundle_path.name} (run: mpak bundle pull ... -o {bundle_path})")
+    """Skip when the corpus is absent, unless MPAK_E2E_REQUIRED is set.
+
+    These are the only tests that run the real tools against real bundles, and
+    a silent skip is how a regression reaches production with CI green. Setting
+    MPAK_E2E_REQUIRED turns a missing corpus into a failure. Nothing sets it
+    yet: running this suite in CI also needs the external toolchain, which the
+    runner does not have. See #137.
+    """
+    if bundle_path.exists():
+        return
+    message = f"Bundle not found: {bundle_path.name} (run: mpak bundle pull ... -o {bundle_path})"
+    if os.environ.get("MPAK_E2E_REQUIRED"):
+        pytest.fail(message)
+    pytest.skip(message)
 
 
 @pytest.mark.e2e
@@ -114,11 +145,7 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
-        critical = []
-        for control_id, result in report.all_controls.items():
-            for f in result.findings:
-                if f.severity == Severity.CRITICAL:
-                    critical.append(f"{control_id}: {f.title}")
+        critical = critical_findings_excluding_true_positives(report)
         assert critical == [], f"Critical findings on {bundle.name}: {critical}"
 
     @pytest.mark.parametrize("bundle", NODE_BUNDLES)
@@ -127,11 +154,7 @@ class TestFullScan:
         skip_if_missing(bundle)
         report = scan_bundle(bundle)
 
-        critical = []
-        for control_id, result in report.all_controls.items():
-            for f in result.findings:
-                if f.severity == Severity.CRITICAL:
-                    critical.append(f"{control_id}: {f.title}")
+        critical = critical_findings_excluding_true_positives(report)
         assert critical == [], f"Critical findings on {bundle.name}: {critical}"
 
     @pytest.mark.parametrize("bundle", ALL_BUNDLES)
@@ -142,3 +165,65 @@ class TestFullScan:
 
         errors = [f"{cid}: {r.findings}" for cid, r in report.all_controls.items() if r.status == ControlStatus.ERROR]
         assert errors == [], f"Controls errored on {bundle.name}: {errors}"
+
+
+@pytest.mark.e2e
+class TestCQ03AgainstRealESLint:
+    """Drives the real ESLint binary, because the mocked suite cannot see argv.
+
+    Every other CQ-03 test monkeypatches subprocess.run and asserts on the
+    arguments, which is how `--no-eslintrc` survived against an ESLint 10 image
+    and how `--ext .jsx` without a parser option reached review: both suites
+    were green while the invocation was wrong. Only running the tool catches
+    that class.
+    """
+
+    @staticmethod
+    def _require_eslint() -> None:
+        if shutil.which("eslint") is None:
+            message = "eslint not installed (npm install -g eslint eslint-plugin-security)"
+            if os.environ.get("MPAK_E2E_REQUIRED"):
+                pytest.fail(message)
+            pytest.skip(message)
+
+    def test_real_jsx_component_does_not_false_fail(self, tmp_path: Path) -> None:
+        """JSX syntax must parse. Without the parser option it is a fatal error.
+
+        espree cannot read JSX by default, so `--ext .jsx` alone turns every
+        genuine component into `fatal: Parsing error`, which this control
+        reports as a HIGH finding and fails the bundle on.
+        """
+        self._require_eslint()
+        (tmp_path / "server.js").write_text("const a = 1;\n")
+        (tmp_path / "App.jsx").write_text("const App = () => <div>hi</div>;\nexport default App;\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a benign JSX component failed CQ-03: {[(f.severity.value, f.title) for f in result.findings]}"
+        )
+
+    def test_real_jsx_payload_is_still_detected(self, tmp_path: Path) -> None:
+        """Parsing JSX must not come at the cost of analysing it."""
+        self._require_eslint()
+        (tmp_path / "Evil.jsx").write_text("const P = () => <b>{eval(process.env.P)}</b>;\nexport default P;\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL
+        assert any("detect-eval-with-expression" in f.title for f in result.findings)
+
+    def test_real_js_payload_is_detected(self, tmp_path: Path) -> None:
+        """The baseline the flag fix exists to preserve."""
+        self._require_eslint()
+        (tmp_path / "server.js").write_text("const x = eval(process.argv[2]);\n")
+
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        result = CQ03StaticAnalysis().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL

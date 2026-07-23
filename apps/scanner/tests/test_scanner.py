@@ -1,6 +1,7 @@
 """Tests for the mpak-scanner core functionality."""
 
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from mpak_scanner.models import (
     ComplianceLevel,
     ControlResult,
     ControlStatus,
+    DomainResult,
     Finding,
     RiskScore,
     Severity,
@@ -1930,28 +1932,42 @@ class TestCQ03JavaScript:
         bundle.mkdir()
         return bundle
 
-    def test_no_js_files_passes(self, bundle_dir: Path) -> None:
-        """Bundle without JavaScript should pass CQ-03."""
+    def test_bundle_with_nothing_analysable_skips(self, bundle_dir: Path) -> None:
+        """No analysable code is not evidence of clean code.
+
+        Passing here would certify a bundle nothing inspected. SKIP caps the
+        level honestly instead, matching what CQ-02 does for bundles with no
+        ecosystem it can analyse.
+        """
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
-        control = CQ03StaticAnalysis()
-        result = control.run(bundle_dir, {})
-        assert result.status == ControlStatus.PASS
-        assert any("No server code found" in f.title for f in result.findings)
+        result = CQ03StaticAnalysis().run(bundle_dir, {})
+        assert result.status == ControlStatus.SKIP
+        assert result.status != ControlStatus.PASS
 
     def test_js_file_discovery(self, bundle_dir: Path) -> None:
-        """Should discover JavaScript and TypeScript files."""
+        """Discovers the JavaScript ESLint can lint, including .jsx.
+
+        `.jsx` needs --ext to be matched by flat config, which the invocation
+        passes. TypeScript is discovered separately, as source no installed
+        analyser can read.
+        """
         src = bundle_dir / "src"
         src.mkdir()
         (src / "server.js").write_text("console.log('hello');")
-        (src / "utils.ts").write_text("export const foo = 1;")
+        (src / "widget.jsx").write_text("const a = 1;")
         (src / "index.mjs").write_text("export default {};")
+        (src / "utils.ts").write_text("export const foo = 1;")
 
         from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
 
         control = CQ03StaticAnalysis()
-        js_files = control._find_server_js_files(bundle_dir)
-        assert len(js_files) == 3
+        assert {f.name for f in control._find_server_js_files(bundle_dir)} == {
+            "server.js",
+            "widget.jsx",
+            "index.mjs",
+        }
+        assert {f.name for f in control._find_unanalysed_sources(bundle_dir)} == {"utils.ts"}
 
     def test_node_modules_excluded(self, bundle_dir: Path) -> None:
         """node_modules should be excluded from JS file discovery."""
@@ -2201,3 +2217,1023 @@ class TestUnsafeNodeBundle:
 
         # Should find at least 2 different patterns
         assert len(patterns_found) >= 2, f"Expected multiple patterns, found: {patterns_found}"
+
+
+class TestToolFailureIsNotControlFailure:
+    """External tool failures must not be reported as control failures.
+
+    A FAIL asserts the bundle failed a security control. When the underlying
+    tool never ran, nothing about the bundle was established, so the correct
+    status is ERROR. Reporting FAIL turns a scanner outage into a durable
+    trust-level downgrade that publishers cannot act on.
+    """
+
+    def test_sc01_errors_when_syft_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Syft exiting non-zero is a tool failure, not an SBOM control failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="syft: boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.error is not None and "boom" in result.error
+
+    def test_sc01_errors_on_unparseable_sbom(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unparseable syft output is a tool failure."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_sc02_errors_when_vulnerability_db_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unavailable grype database must not read as a failed CVE scan.
+
+        This is the regression that capped every bundle at L1: grype exits
+        non-zero with empty stdout when it cannot load its database, and SC-02
+        is required for L2.
+        """
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[],
+                returncode=1,
+                stdout="",
+                stderr="failed to load vulnerability db: database does not exist",
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.FAIL
+        assert result.error is not None and "vulnerability db" in result.error
+
+    def test_sc02_still_fails_on_real_blocking_vulnerability(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuine blocking CVE must still FAIL -- ERROR is only for tool failures."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        grype_output = json.dumps(
+            {
+                "matches": [
+                    {
+                        "vulnerability": {
+                            "id": "CVE-2024-0001",
+                            "severity": "Critical",
+                            "cvss": [{"metrics": {"baseScore": 9.8}}],
+                        },
+                        "artifact": {"name": "somepkg", "version": "1.0.0"},
+                    }
+                ]
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=grype_output, stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.FAIL
+
+
+class TestDegradedScan:
+    """A compliance level is only publishable when every level-bearing control ran."""
+
+    # A control set that certifies L2 outright. Errors are layered onto it so
+    # each fixture exercises a level that is genuinely within reach -- an error
+    # in isolation suppresses nothing, because no level was attainable anyway.
+    @staticmethod
+    def _l2_controls() -> dict[str, ControlResult]:
+        return {
+            "AI-01": ControlResult("AI-01", "Manifest", ControlStatus.PASS),
+            "SC-01": ControlResult("SC-01", "SBOM", ControlStatus.PASS),
+            "CQ-01": ControlResult("CQ-01", "Secrets", ControlStatus.PASS),
+            "CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.PASS),
+            "CD-01": ControlResult("CD-01", "Tools", ControlStatus.PASS),
+            "AI-05": ControlResult("AI-05", "Completeness", ControlStatus.PASS),
+            "SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS),
+            "SC-03": ControlResult("SC-03", "Pinning", ControlStatus.PASS),
+            "SC-04": ControlResult("SC-04", "Lockfile", ControlStatus.PASS),
+            "CQ-03": ControlResult("CQ-03", "Static", ControlStatus.PASS),
+            "CD-02": ControlResult("CD-02", "Perms", ControlStatus.PASS),
+            "CD-03": ControlResult("CD-03", "ToolDesc", ControlStatus.PASS),
+            "PR-01": ControlResult("PR-01", "Repo", ControlStatus.PASS),
+            "PR-02": ControlResult("PR-02", "Author", ControlStatus.PASS),
+        }
+
+    @staticmethod
+    def _report(controls: dict[str, ControlResult]) -> SecurityReport:
+        report = SecurityReport(
+            bundle_name="test",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["supply_chain"] = DomainResult(domain="supply_chain", controls=controls)
+        return report
+
+    def test_degraded_when_level_bearing_control_errors(self) -> None:
+        """An errored L2 control means the level is unmeasured, not merely unmet."""
+        report = self._report(
+            self._l2_controls()
+            | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR, error="db unavailable")}
+        )
+        assert report.degraded is True
+        assert report.controls_errored == 1
+
+    def test_not_degraded_when_control_genuinely_fails(self) -> None:
+        """A real control failure is a measurement, so the level stands."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.FAIL)})
+        assert report.degraded is False
+
+    def test_not_degraded_when_non_level_bearing_control_errors(self) -> None:
+        """A control required at no level cannot suppress a level."""
+        report = self._report({"AI-02": ControlResult("AI-02", "Hashes", ControlStatus.ERROR)})
+        assert report.degraded is False
+
+    def test_degraded_surfaced_in_report_dict(self) -> None:
+        """Consumers read `degraded` off the report to decide whether to publish."""
+        report = self._report(self._l2_controls() | {"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.ERROR)})
+        compliance = report.to_dict()["compliance"]
+        assert compliance["degraded"] is True
+        assert compliance["controls_errored"] == 1
+
+    def test_clean_report_is_not_degraded(self) -> None:
+        """A scan where everything ran is publishable."""
+        report = self._report({"SC-02": ControlResult("SC-02", "Vulns", ControlStatus.PASS)})
+        assert report.to_dict()["compliance"]["degraded"] is False
+
+    def test_not_degraded_when_error_does_not_suppress_a_level(self) -> None:
+        """An error in a control the achieved level does not need is not degrading.
+
+        PR-05 is required only at L3+. A bundle that reaches L2 is not held back
+        by it, so the level it reports is still a real measurement.
+        """
+        report = self._report(
+            self._l2_controls() | {"PR-05": ControlResult("PR-05", "RepoHealth", ControlStatus.ERROR)}
+        )
+        assert report.compliance_level == ComplianceLevel.L2_STANDARD
+        assert report.degraded is False
+
+
+class TestControlsWithNothingToInspect:
+    """Having nothing to analyse is a property of the bundle, not a scanner failure."""
+
+    def test_cq02_skips_bundle_with_no_python_or_javascript(self, tmp_path: Path) -> None:
+        """`binary` is a supported server type; CQ-02 must not error on it.
+
+        ERROR would mark the scan degraded and suppress certification entirely,
+        claiming the scanner could not measure when in fact it measured
+        correctly and found nothing to analyse.
+        """
+        (tmp_path / "server").write_bytes(b"\x7fELF\x02\x01\x01\x00binary")
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {"server_type": "binary"})
+        assert result.status == ControlStatus.SKIP
+        assert result.status != ControlStatus.ERROR
+
+    def test_binary_bundle_scan_is_not_degraded(self) -> None:
+        """A binary bundle produces a publishable scan, not a degraded one."""
+        report = SecurityReport(
+            bundle_name="t",
+            bundle_version="1.0.0",
+            bundle_hash="sha256:abc",
+            scan_timestamp="2026-01-01T00:00:00Z",
+            scanner_version="test",
+            duration_ms=0,
+        )
+        report.domains["code_quality"] = DomainResult(
+            domain="code_quality",
+            controls={"CQ-02": ControlResult("CQ-02", "Malicious", ControlStatus.SKIP)},
+        )
+        assert report.degraded is False
+
+
+class TestToolCrashDoesNotSilentlyPass:
+    """A control must not certify on the strength of a scan that never ran."""
+
+    def test_cq01_errors_when_trufflehog_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crashed trufflehog must not read as 'no secrets found'."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="trufflehog: panic")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq01_passes_when_trufflehog_finds_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A clean exit with no findings is a genuine pass."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_error_result_records_duration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Errored controls still report how long they took."""
+        from mpak_scanner.controls.supply_chain import sc01_sbom
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="boom")
+
+        monkeypatch.setattr(sc01_sbom.subprocess, "run", fake_run)
+
+        result = sc01_sbom.SC01SbomGeneration().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.duration_ms >= 0
+
+    def test_cq02_errors_when_guarddog_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crashed guarddog must not certify the bundle free of malicious patterns."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="guarddog: OOM")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq02_errors_on_unparseable_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unparseable results are unknown, not empty."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="Traceback...", stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_cq02_passes_on_clean_scan(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A clean guarddog run is a genuine pass."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"results": {}}', stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_sc02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty output is not a clean bill of health, whatever the exit code."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_sc02_passes_when_there_are_no_packages_to_scan(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bundle with no components has no vulnerabilities -- a real result."""
+        from mpak_scanner.controls.supply_chain import sc02_vuln_scan
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args=[], returncode=1, stdout="", stderr="no packages discovered in the given source"
+            )
+
+        monkeypatch.setattr(sc02_vuln_scan.subprocess, "run", fake_run)
+
+        result = sc02_vuln_scan.SC02VulnerabilityScan().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+
+    def test_cq02_errors_on_clean_exit_with_no_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GuardDog always emits JSON; empty output means it analysed nothing."""
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_cq02_errors_when_analysis_engine_fails_in_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GuardDog reports engine failures inside a zero-exit JSON document.
+
+        Rules that never executed produce an empty `results` map. Reading that
+        as "clean" would certify the bundle free of malicious patterns on an
+        analysis that did not happen.
+        """
+        (tmp_path / "server.py").write_text("print('hi')\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "package": str(tmp_path),
+                "issues": 0,
+                "errors": {"rules-all": "failed to run rule: An error occurred when running Semgrep."},
+                "results": {},
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+
+        result = cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+        assert result.error is not None and "Semgrep" in result.error
+
+    def test_cq01_errors_on_crash_after_partial_findings(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A crash mid-scan must not pass on the findings it managed to emit."""
+        from mpak_scanner.controls.code_quality import cq01_secrets
+
+        partial = json.dumps({"DetectorName": "AWS", "SourceMetadata": {}}) + "\n"
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout=partial, stderr="killed")
+
+        monkeypatch.setattr(cq01_secrets.subprocess, "run", fake_run)
+
+        result = cq01_secrets.CQ01NoEmbeddedSecrets().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+
+class TestCQ02GuardDogThreeTaxonomy:
+    """GuardDog 3.x renamed and re-scoped its rules; CQ-02 reads that taxonomy.
+
+    The real failure this guards: every finding in the ipgeolocation bundle came
+    back CRITICAL, including ones inside the official MCP SDK, because
+    dependency paths were not recognised and capability rules were read as
+    threats. A legitimate server cannot be certified as containing malware.
+    """
+
+    @staticmethod
+    def _bundle(tmp_path: Path) -> Path:
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+        return tmp_path
+
+    @staticmethod
+    def _guarddog_output(rule: str, location: str) -> str:
+        return json.dumps(
+            {
+                "package": "x",
+                "issues": 1,
+                "errors": {},
+                "results": {rule: [{"location": location, "message": f"{rule} matched"}]},
+            }
+        )
+
+    def _run(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rule: str, location: str):
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = self._guarddog_output(rule, location)
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(self._bundle(tmp_path), {})
+
+    def test_capability_in_a_dependency_does_not_fail_the_bundle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The original false positive: capability rules inside the MCP SDK."""
+        result = self._run(
+            tmp_path,
+            monkeypatch,
+            "capability-process-spawn",
+            "node_modules/@modelcontextprotocol/sdk/dist/index.js",
+        )
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+        assert all(f.in_deps for f in result.findings)
+
+    def test_threat_in_a_dependency_is_reported_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Vendored code is reported, not charged to the bundle.
+
+        GuardDog's threat rules fire on ordinary libraries -- PyYAML's loader,
+        pyperclip shelling out, dotenv reading a file -- so blocking on them
+        fails most of the fleet. That is a concession to detector precision and
+        it leaves a real gap: the path is author-controlled, so a payload in a
+        directory named `vendor` exempts itself. Closing it needs attribution
+        against the SBOM rather than a path convention.
+        """
+        result = self._run(tmp_path, monkeypatch, "threat-process-cryptomining", "node_modules/some-dep/index.js")
+        assert result.status == ControlStatus.PASS
+        assert all(f.severity == Severity.INFO for f in result.findings)
+
+    def test_capability_rule_is_informational(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`capability-*` states what the code can do, which is not a verdict.
+
+        A server that calls the API it wraps trips this by existing.
+        """
+        result = self._run(tmp_path, monkeypatch, "capability-network-outbound", "dist/client.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.INFO for f in result.findings)
+
+    def test_reading_environment_is_reported_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credentials arrive through the environment by design in MCP."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-environment-read", "dist/config.js")
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    def test_real_threat_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The control must still catch what it exists to catch."""
+        result = self._run(tmp_path, monkeypatch, "threat-network-exfiltration", "dist/evil.js")
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscation_in_server_code_still_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Obfuscation is a threat verdict, not a capability."""
+        result = self._run(tmp_path, monkeypatch, "threat-runtime-obfuscation-base64exec", "dist/a.js")
+        assert result.status == ControlStatus.FAIL
+
+
+class TestCQ02AgainstRealGuardDog:
+    """Runs the real analyser, because mocks cannot see a taxonomy change.
+
+    Every other CQ-02 test hand-authors GuardDog's output, so they stay green
+    when GuardDog renames or re-scopes its rules -- which is exactly how this
+    control came to certify a legitimate bundle as containing critical malware.
+    These deliberately do not skip when the tool is missing: a silent skip
+    would restore the blind spot they exist to remove.
+    """
+
+    def test_ordinary_server_behaviour_does_not_fail(self, tmp_path: Path) -> None:
+        """Reading a key from the environment and calling an API is the job."""
+        (tmp_path / "server.js").write_text(
+            'const k = process.env.API_KEY;\nfetch("https://api.example.com?k=" + k);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a plain API client failed CQ-02: {[(f.severity.value, f.title) for f in result.findings]}"
+        )
+        assert not any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_obfuscated_execution_still_fails(self, tmp_path: Path) -> None:
+        """The control must still catch what it exists to catch."""
+        (tmp_path / "server.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    def test_threat_inside_a_dependency_is_reported_not_blocking(self, tmp_path: Path) -> None:
+        """Real GuardDog output through the dependency path, end to end.
+
+        The matcher has to recognise the relative paths GuardDog reports, or a
+        bundle gets charged for the code it merely depends on.
+        """
+        (tmp_path / "server.js").write_text('console.log("hello");\n')
+        vendored = tmp_path / "node_modules" / "some-dep"
+        vendored.mkdir(parents=True)
+        (vendored / "index.js").write_text(
+            'const p = Buffer.from("Y29uc29sZS5sb2coMSk=", "base64").toString();\neval(p);\n'
+        )
+
+        from mpak_scanner.controls.code_quality import CQ02NoMaliciousPatterns
+
+        result = CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+        assert result.status == ControlStatus.PASS, (
+            f"a dependency's code failed the bundle: {[(f.severity.value, f.file) for f in result.findings]}"
+        )
+        assert any(f.in_deps for f in result.findings)
+
+
+class TestCQ02CredentialAccess:
+    """`threat-filesystem-read` is GuardDog's credential-access rule.
+
+    It matches /etc/shadow, .ssh/id_rsa, .aws/credentials, .npmrc and the
+    browser credential stores as well as .env. Exempting the rule so a server
+    can load its own config would exempt reading someone else's secret, so the
+    exemption is gated on which string matched.
+    """
+
+    @staticmethod
+    def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str):
+        (tmp_path / "server.js").write_text("console.log(1);\n")
+
+        from mpak_scanner.controls.code_quality import cq02_malicious
+
+        payload = json.dumps(
+            {
+                "issues": 1,
+                "errors": {},
+                "results": {"threat-filesystem-read": [{"location": "server.js:1", "message": "m", "match": match}]},
+            }
+        )
+
+        def fake_run(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq02_malicious.subprocess, "run", fake_run)
+        return cq02_malicious.CQ02NoMaliciousPatterns().run(tmp_path, {})
+
+    @pytest.mark.parametrize("match", ['".env"', '".env.local"', '"../.env"'])
+    def test_reading_own_config_is_not_blocking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """How a server loads its own configuration."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.PASS
+        assert any(f.severity == Severity.MEDIUM for f in result.findings)
+
+    @pytest.mark.parametrize(
+        "match",
+        [".ssh/id_rsa", ".aws/credentials", ".npmrc", "/etc/shadow", "Google/Chrome/User Data"],
+    )
+    def test_reading_someone_elses_secret_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """The hole this closes: the rule-wide exemption passed all of these."""
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL
+        assert any(f.severity == Severity.CRITICAL for f in result.findings)
+
+    @pytest.mark.parametrize("match", [".envrc", "/home/victim/.env", '"~/.env"'])
+    def test_env_named_file_outside_the_bundle_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, match: str
+    ) -> None:
+        """A `.env` somewhere else is still someone else's secret.
+
+        `.envrc` is direnv's and routinely holds exported credentials; an
+        absolute or home-relative path names a file the bundle does not own.
+        """
+        result = self._run(tmp_path, monkeypatch, match)
+        assert result.status == ControlStatus.FAIL
+
+
+# ESLint emits one entry per file it was given, so `[]` is not a clean run --
+# it is "no files analysed", which the control treats as a tool failure. Using
+# it as a success stub let tests assert on argv while the control errored.
+CLEAN_ESLINT_OUTPUT = json.dumps([{"filePath": "server.js", "messages": []}])
+
+
+class TestStaticAnalysisDoesNotCertifyUnrunTools:
+    """CQ-03 is L2-required, so a tool that did not run must not read as clean."""
+
+    def test_bandit_internal_error_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bandit runs with --exit-zero, so a non-zero exit is an internal failure."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="bandit: boom")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_internal_error_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ESLint exit 2 is an internal error -- a bad flag, an unresolvable plugin."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="Invalid option '--eslintrc'")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_missing_tool_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An absent tool did not analyse anything; an INFO note and a pass hid that."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: None)
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_eslint_findings_exit_code_still_reports_findings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Exit 1 means ESLint found problems -- a real result, not a failure."""
+        (tmp_path / "server.js").write_text("var x = eval(u);\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "server.js"),
+                    "messages": [
+                        {
+                            "ruleId": "security/detect-eval-with-expression",
+                            "message": "eval with expression",
+                            "severity": 2,
+                            "line": 1,
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status != ControlStatus.ERROR
+        assert any("detect-eval-with-expression" in f.title for f in result.findings)
+
+    def test_bandit_timeout_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An analysis that never finished has unknown findings, not none."""
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(cmd="bandit", timeout=120)
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_timeout_becomes_control_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A bundle that is slow to analyse must not certify as clean."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            raise subprocess.TimeoutExpired(cmd="eslint", timeout=120)
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_eslint_ignored_file_notice_becomes_control_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ESLint ignoring every file must not read as a clean bundle.
+
+        With --no-config-lookup the working directory is the flat-config base
+        path, and a file outside it comes back as a rule-less warning with exit
+        0 and non-empty JSON -- so neither the exit-code nor the empty-output
+        guard sees it, and the parse loop would file it as a MEDIUM finding
+        while nothing was analysed.
+        """
+        (tmp_path / "server.js").write_text("var x = eval(u);\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "server.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "severity": 1,
+                            "message": "File ignored because outside of base path.",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+        assert result.status != ControlStatus.PASS
+
+    def test_eslint_parse_error_stays_a_finding(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A file ESLint cannot parse is a property of the bundle, not a tool failure."""
+        (tmp_path / "bad.js").write_text("var x = ;;;broken(\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "bad.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": True,
+                            "severity": 2,
+                            "message": "Parsing error: Unexpected token ;",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=1, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status != ControlStatus.ERROR
+        assert any("Parsing error" in f.title for f in result.findings)
+
+    def test_eslint_runs_from_a_root_anchored_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The working directory must contain the bundle, and must not be it.
+
+        Anything below the root risks ESLint ignoring files outside its base
+        path; the bundle itself would let it supply its own configuration.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        seen: dict[str, object] = {}
+
+        def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen.update(kwargs)
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=CLEAN_ESLINT_OUTPUT, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+
+        cwd = str(seen["cwd"])
+        assert cwd == tmp_path.anchor
+        assert cwd != str(tmp_path)
+        assert str(tmp_path).startswith(cwd)
+
+    def test_eslint_skipped_file_alongside_analysed_files_is_not_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One skipped file says nothing about the rest of the bundle.
+
+        ESLint emits rule-less notices for files it declines to lint. Treating
+        any of them as a tool failure would stop every bundle carrying one from
+        ever certifying, which is the opposite of the intent.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / "types.d.ts"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": False,
+                            "severity": 1,
+                            "message": "File ignored because no matching configuration was supplied.",
+                        }
+                    ],
+                },
+                {"filePath": str(tmp_path / "server.js"), "messages": []},
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.PASS
+        # The notice is not a finding either -- it describes ESLint, not the code.
+        assert not any("File ignored" in f.title for f in result.findings)
+
+    def test_eslint_errors_only_when_no_file_was_analysed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every file skipped means the tool reported nothing about the bundle."""
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            [
+                {
+                    "filePath": str(tmp_path / f"{name}.js"),
+                    "messages": [
+                        {
+                            "ruleId": None,
+                            "fatal": False,
+                            "severity": 1,
+                            "message": "File ignored because outside of base path.",
+                        }
+                    ],
+                }
+                for name in ("a", "b")
+            ]
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert result.status == ControlStatus.ERROR
+
+    def test_eslint_disables_unused_directive_reporting(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unused eslint-disable comments are rule-less but not a skipped file.
+
+        Left on, they would be indistinguishable from a genuine skip notice.
+        """
+        (tmp_path / "server.js").write_text("var x = 1;\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        seen: list[str] = []
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            seen.extend(cmd)
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=CLEAN_ESLINT_OUTPUT, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/eslint")
+
+        cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert "--report-unused-disable-directives-severity" in seen
+        assert seen[seen.index("--report-unused-disable-directives-severity") + 1] == "off"
+
+    def test_bandit_unreadable_file_is_reported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bandit lists unparseable files in `errors`, apart from `results`.
+
+        Reading only `results` let a file that was never analysed pass as clean.
+        """
+        (tmp_path / "server.py").write_text("import os\n")
+
+        from mpak_scanner.controls.code_quality import cq03_static_analysis
+
+        payload = json.dumps(
+            {
+                "results": [],
+                "errors": [
+                    {
+                        "filename": str(tmp_path / "bad.py"),
+                        "reason": "syntax error while parsing AST from file",
+                    }
+                ],
+            }
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout=payload, stderr="")
+
+        monkeypatch.setattr(cq03_static_analysis.subprocess, "run", fake_run)
+        monkeypatch.setattr(cq03_static_analysis.shutil, "which", lambda _n: "/usr/bin/bandit")
+
+        result = cq03_static_analysis.CQ03StaticAnalysis().run(tmp_path, {})
+        assert any("could not be analysed" in f.title for f in result.findings)
+        assert result.status != ControlStatus.PASS
+
+
+class TestCQ03Discovery:
+    """What reaches the analyser, and what silently does not.
+
+    Both failures here are invisible at runtime: a dropped file produces no
+    finding, which is indistinguishable from a clean one.
+    """
+
+    @staticmethod
+    def _bundle(tmp_path: Path, *names: str) -> Path:
+        for n in names:
+            f = tmp_path / n
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("var x = 1;\n" if f.suffix != ".py" else "import os\n")
+        return tmp_path
+
+    def test_ordinary_names_containing_test_or_spec_are_analysed(self, tmp_path: Path) -> None:
+        """Substring matching dropped real server files.
+
+        "test" appears inside `latest.js`, "spec" inside `inspector.js`, "deps"
+        inside `depsolver.js`. Dropping those is worse than noise: the file is
+        never analysed and nothing says so.
+        """
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(tmp_path, "dist/latest.js", "src/inspector.js", "lib/attestation.js", "src/depsolver.js")
+        found = {f.name for f in CQ03StaticAnalysis()._find_server_js_files(d)}
+        assert found == {"latest.js", "inspector.js", "attestation.js", "depsolver.js"}
+
+    def test_genuine_tests_and_dependencies_are_skipped(self, tmp_path: Path) -> None:
+        """The filtering still has to do its actual job."""
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(
+            tmp_path,
+            "src/server.js",
+            "tests/helper.js",
+            "src/thing.test.js",
+            "node_modules/dep/index.js",
+            "vendor/lib.js",
+        )
+        found = {f.name for f in CQ03StaticAnalysis()._find_server_js_files(d)}
+        assert found == {"server.js"}
+
+    def test_jsx_is_submitted_to_eslint(self, tmp_path: Path) -> None:
+        """`.jsx` is lintable with --ext, so dropping it would just stop looking.
+
+        Left undiscovered, a bundle pairing a .jsx payload with any trivial .js
+        passed with the .jsx never inspected.
+        """
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(tmp_path, "src/server.js", "src/widget.jsx")
+        found = {f.name for f in CQ03StaticAnalysis()._find_server_js_files(d)}
+        assert found == {"server.js", "widget.jsx"}
+
+    def test_typescript_is_reported_as_uncovered_not_dropped(self, tmp_path: Path) -> None:
+        """Source no analyser can read must not vanish.
+
+        Dropping it silently let a bundle pairing a .ts payload with a trivial
+        .js come back clean on an analysis that never read the .ts.
+        """
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(tmp_path, "src/app.ts", "src/types.d.ts")
+        found = {f.name for f in CQ03StaticAnalysis()._find_unanalysed_sources(d)}
+        assert found == {"app.ts"}, "declaration files carry no executable code"
+
+    def test_python_discovery_uses_the_same_rules(self, tmp_path: Path) -> None:
+        """Both languages share the filtering, so both share the fix."""
+        from mpak_scanner.controls.code_quality import CQ03StaticAnalysis
+
+        d = self._bundle(tmp_path, "src/latest.py", "tests/conftest.py", "test_thing.py", "deps/lib/mod.py")
+        found = {f.name for f in CQ03StaticAnalysis()._find_server_python_files(d)}
+        assert found == {"latest.py"}

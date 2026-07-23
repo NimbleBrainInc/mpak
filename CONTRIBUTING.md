@@ -105,7 +105,7 @@ pnpm format
 1. Create a branch from `main`
 2. Make your changes
 3. Add tests for new functionality
-4. Ensure all checks pass: `pnpm build && pnpm test && pnpm lint && pnpm typecheck`
+4. Ensure all checks pass: `pnpm verify`
 5. Submit a pull request
 
 ### Commit Convention

@@ -93,12 +93,12 @@ class ControlResult:
 class DomainResult:
     """Results for a security domain."""
 
+    # A domain deliberately has no `passed` of its own. Compliance is decided
+    # per control by calculate_compliance_level, which counts a SKIP as not
+    # passed: a control that never inspected the bundle cannot vouch for it.
+    # A domain-level rule that excluded skips would contradict that.
     domain: str
     controls: dict[str, ControlResult] = field(default_factory=dict)
-
-    @property
-    def passed(self) -> bool:
-        return all(c.passed for c in self.controls.values() if c.status != ControlStatus.SKIP)
 
 
 # Control requirements per level
@@ -280,6 +280,36 @@ class SecurityReport:
         return sum(1 for c in self.all_controls.values() if c.status == ControlStatus.FAIL)
 
     @property
+    def controls_errored(self) -> int:
+        """Count of controls that could not be evaluated."""
+        return sum(1 for c in self.all_controls.values() if c.status == ControlStatus.ERROR)
+
+    @property
+    def degraded(self) -> bool:
+        """True if an unevaluated control is holding the compliance level down.
+
+        A level is only a measurement when every control behind it actually
+        executed. An error matters when passing that control would have unlocked
+        a higher level: the reported level then reflects a control the scanner
+        could not apply, not one the bundle failed, and must not be published.
+
+        Errors in controls the bundle does not need for the level it reached
+        cannot understate it, so they do not degrade the scan -- a failure in an
+        L4-only control says nothing about a bundle certifying at L2.
+        """
+        controls = self.all_controls
+        errored = [cid for cid, c in controls.items() if c.status == ControlStatus.ERROR]
+        if not errored:
+            return False
+
+        # Re-derive the level treating each errored control as if it had passed.
+        # A higher result means the errors, not the bundle, capped the level.
+        optimistic = dict(controls)
+        for cid in errored:
+            optimistic[cid] = ControlResult(cid, controls[cid].control_name, ControlStatus.PASS)
+        return calculate_compliance_level(optimistic) > self.compliance_level
+
+    @property
     def controls_total(self) -> int:
         """Total controls checked."""
         return sum(1 for c in self.all_controls.values() if c.status != ControlStatus.SKIP)
@@ -304,7 +334,9 @@ class SecurityReport:
                 "level_name": self.compliance_level.name_str,
                 "controls_passed": self.controls_passed,
                 "controls_failed": self.controls_failed,
+                "controls_errored": self.controls_errored,
                 "controls_total": self.controls_total,
+                "degraded": self.degraded,
             },
             "risk_score": self.risk_score.value,
             "domains": {

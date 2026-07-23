@@ -83,6 +83,31 @@ tests/
 4. Add tests in `test_scanner.py`
 5. Update `CONTROL_LEVELS` in `models.py` if needed
 
+### The failure mode to hunt: fail-open
+
+Every control wraps an external tool, and the recurring, dangerous bug is one
+shape — a tool that did not run reads as a clean pass. When authoring or
+reviewing a control, walk each way its tool can fail to produce a result and
+confirm each one `ERROR`s rather than passes:
+
+- non-zero exit, timeout, missing binary — the tool never ran
+- empty or unparseable output — nothing was inspected
+- an in-band error (GuardDog reports engine failures in a zero-exit JSON whose
+  `errors` map is set while `results` is empty; a rule-less ESLint notice is the
+  file being skipped)
+
+Emptiness and in-band errors, **not the exit code alone**, are the reliable
+signal: grype and guarddog both exit non-zero on legitimate findings. A control
+must never certify on a scan that did not happen.
+
+### Attribute findings by path component, never substring
+
+To tell the bundle's own code from a vendored dependency, match path
+*components* — `any(part in DEP_DIRS for part in relative.parts)` — not a
+substring. Tools report paths relative to the scan directory, so `"/deps/" in
+path` or `dep in path_str` silently matches nothing (and also false-matches
+`depsolver.js`). This bug recurred across CQ-01, CQ-02 and CQ-03.
+
 Example:
 ```python
 from mpak_scanner.controls.base import Control, ControlRegistry
@@ -107,7 +132,8 @@ class SC99NewControl(Control):
 
 ## External Tools
 
-Controls use these external tools (gracefully skip if not installed):
+Controls use these external tools. A missing tool is an ERROR, not a skip —
+a control that never ran cannot vouch for the bundle:
 
 | Tool | Control | Language | Install |
 |------|---------|----------|---------|
@@ -116,7 +142,49 @@ Controls use these external tools (gracefully skip if not installed):
 | TruffleHog | CQ-01 | All | `brew install trufflehog` |
 | GuardDog | CQ-02 | Python | `uv pip install guarddog` |
 | Bandit | CQ-03 | Python | `uv pip install bandit` |
-| ESLint | CQ-03 | JavaScript | `npm install -g eslint eslint-plugin-security` |
+| ESLint | CQ-03 | JavaScript | `npm install -g eslint eslint-plugin-security` (then `export NODE_PATH=$(npm root -g)`) |
+
+Tool versions are **pinned in the Dockerfile**. The image is rebuilt nightly to
+refresh the baked vulnerability database, so an unpinned tool would silently
+re-resolve every night — that is how guarddog moved 2.x → 3.x and started
+requiring a kernel sandbox. Bump the `ARG` pins deliberately.
+
+Tools are invoked **by absolute path, never through `npx`, and never with the
+bundle as the working directory**. `npx` prefers `./node_modules/.bin`, so a
+bundle shipping its own `eslint` would have that binary executed by the scan
+pod — which holds S3 credentials and the callback secret. Running inside the
+bundle would also let it supply its own tool configuration. ESLint additionally
+runs with `--no-config-lookup` and a working directory anchored at the
+filesystem root: with that flag the working directory is its config base path,
+and any file outside it is silently skipped. That also means it resolves plugins
+through `NODE_PATH` rather than from the file's own tree, which the image sets
+and a local install needs to export.
+
+When a tool runs but cannot produce a result — grype without a usable
+vulnerability database, a scanner that crashes — the control reports `ERROR`,
+not `FAIL`. `FAIL` asserts the bundle failed a check; `ERROR` says the check
+never ran. Any `ERROR` on a control that feeds the compliance level marks the
+scan degraded, and a degraded scan publishes no certification at all rather
+than a level it could not measure. Prefer `ERROR` over an empty pass whenever a
+tool's output is missing or unparseable.
+
+### Grype database freshness
+
+The Docker image bakes the vulnerability database in and owns it as uid 1000,
+matching `runAsUser` in the scan Job, so grype refreshes it at runtime whenever
+it can reach `grype.anchore.io`. The baked copy is the fallback, not the primary
+source, and it has a shelf life: grype rejects a database older than
+`max-allowed-built-age` (5 days) rather than scanning against stale data.
+
+So a pod that has *both* an image older than five days *and* no route to
+`grype.anchore.io` errors on every scan, and no bundle certifies until the image
+is rebuilt. That is the correct outcome — scanning against a stale database and
+reporting a pass would be worse — but it means image rebuild cadence bounds scan
+availability wherever egress is unavailable or rate-limited.
+
+Do not raise `GRYPE_DB_MAX_ALLOWED_BUILT_AGE` to paper over this. It buys
+availability by certifying bundles against a database that no longer reflects
+known CVEs, which is the false assurance these controls exist to prevent.
 
 ## Test Fixtures
 
@@ -143,6 +211,14 @@ mpak bundle pull @nimblebraininc/nationalparks -o tests/data/nationalparks.mcpb
 ```
 
 Bundles are stored in `tests/data/` (gitignored). Tests skip gracefully if bundles are missing.
+
+These are the only tests that run the real analysers. The mocked unit tests
+assert on argv and hand-written output, so they cannot see a tool renaming a
+rule, changing a flag, or requiring a new parser option — every scanner defect
+in this suite's history passed the mocked tests and failed only against the
+real binary. Drive the real tool for anything that depends on its output shape.
+`MPAK_E2E_REQUIRED=1` turns a missing corpus into a failure rather than a silent
+skip; wiring this into CI is tracked in the issues.
 
 ### Running
 
@@ -180,6 +256,13 @@ Releases are automated via GitHub Actions and PyPI trusted publishing. Pushing a
    ```
 
 CI handles PyPI publish and Docker build/push to `ghcr.io/nimblebraininc/mpak-scanner`. See `.github/workflows/scanner-publish.yml`.
+
+**PyPI propagation race:** the Docker build installs the just-published version
+from PyPI, and it can start before PyPI has indexed it — failing with "No
+matching distribution found for mpak-scanner==X.Y.Z" while `publish-pypi`
+reports success. It is a propagation lag, not a real failure. Confirm the
+version is live (`pip index versions mpak-scanner`, or the PyPI JSON API) and
+re-run the failed job; the publish is idempotent.
 
 ### Schemas and Rules
 

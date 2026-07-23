@@ -253,6 +253,151 @@ describe('Scanner Routes', () => {
         }),
       );
     });
+
+    // A level computed from controls that never ran is not a measurement of the
+    // bundle. Leaving the certification fields unset keeps the previous level,
+    // rather than recording a scanner outage as a downgrade.
+    const degradedReport = {
+      compliance: {
+        level: 1,
+        controls_passed: 15,
+        controls_failed: 0,
+        controls_errored: 1,
+        controls_total: 16,
+        degraded: true,
+      },
+      findings: [],
+    };
+
+    const recordedUpdateData = (): Record<string, unknown> =>
+      (prisma.securityScan.update.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+
+    it('does not publish certification from a degraded scan', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-degraded',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-degraded',
+          status: 'completed',
+          report: degradedReport,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data).not.toHaveProperty('certificationLevel');
+      expect(data).not.toHaveProperty('controlsPassed');
+      expect(data).not.toHaveProperty('controlsFailed');
+      // Storing it as completed is what would do the damage: certification
+      // lookups take the newest completed scan, so a completed row with no
+      // certification shadows the last good one and blanks the level.
+      expect(data.status).toBe('failed');
+      // The report itself is still recorded so the failure can be diagnosed.
+      expect(data.report).toBeDefined();
+    });
+
+    it('stores a degraded scan as failed even when the scanner calls it completed', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-degraded-completed',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-degraded-completed',
+          status: 'completed',
+          report: degradedReport,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data.status).toBe('failed');
+      expect(data).not.toHaveProperty('certificationLevel');
+    });
+
+    it('does not publish certification from a failed scan', async () => {
+      prisma.securityScan.findUnique.mockResolvedValue({
+        id: 'db-scan-id',
+        scanId: 'scan-failed',
+        status: 'scanning',
+      });
+      prisma.securityScan.update.mockResolvedValue({});
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/scan-results',
+        headers: { 'x-callback-secret': 'test-secret-value' },
+        payload: {
+          scan_id: 'scan-failed',
+          status: 'failed',
+          error: 'Scan degraded: SC-02 did not run',
+          report: {
+            ...degradedReport,
+            compliance: { ...degradedReport.compliance, degraded: false },
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = recordedUpdateData();
+      expect(data.status).toBe('failed');
+      expect(data).not.toHaveProperty('certificationLevel');
+    });
+  });
+
+  // A domain rollup must not report `pass` for a control that never ran --
+  // the whole point of separating ERROR from FAIL is lost if both collapse
+  // into an affirmative result on the publisher-facing endpoint.
+  describe('domain rollup status', () => {
+    const scanWithControlStatus = (status: string) => ({
+      riskScore: 'LOW',
+      status: 'completed',
+      completedAt: new Date('2026-01-01'),
+      report: {
+        findings: [],
+        domains: { supply_chain: { controls: { 'SC-02': { status, findings: [] } } } },
+      },
+    });
+
+    const readDomainStatus = async (controlStatus: string) => {
+      packageRepo.findByName.mockResolvedValue({ ...mockPackage, latestVersion: '1.0.0' });
+      prisma.packageVersion.findFirst.mockResolvedValue({
+        securityScans: [scanWithControlStatus(controlStatus)],
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/@scope/pkg/security' });
+      return JSON.parse(res.payload).scans.supply_chain.status;
+    };
+
+    it('reports error for a domain whose control could not run', async () => {
+      expect(await readDomainStatus('error')).toBe('error');
+    });
+
+    it('reports fail for a domain whose control failed', async () => {
+      expect(await readDomainStatus('fail')).toBe('fail');
+    });
+
+    it('reports pass only when the control actually passed', async () => {
+      expect(await readDomainStatus('pass')).toBe('pass');
+    });
+
+    it('does not let a skipped control downgrade the domain', async () => {
+      expect(await readDomainStatus('skip')).toBe('pass');
+    });
   });
 
   // =========================================================================

@@ -53,13 +53,14 @@ class Control(ABC):
             error=reason,
         )
 
-    def error(self, message: str) -> ControlResult:
+    def error(self, message: str, duration_ms: int = 0) -> ControlResult:
         """Return an error result for this control."""
         return ControlResult(
             control_id=self.id,
             control_name=self.name,
             status=ControlStatus.ERROR,
             error=message,
+            duration_ms=duration_ms,
         )
 
 

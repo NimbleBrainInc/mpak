@@ -168,6 +168,9 @@ describe('Skill Routes', () => {
     });
 
     it('normalises uppercase skill name to lowercase before validation', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(null, { status: 404, statusText: 'Not Found' }),
+      );
       (verifyGitHubOIDC as Mock).mockResolvedValue({
         ...validOIDCClaims,
         repository_owner: 'TestOrg',
@@ -184,14 +187,15 @@ describe('Skill Routes', () => {
         },
       });
 
-      // Should NOT fail with "Invalid skill name" — the name is normalised
-      // to lowercase before the regex check. It will fail later (GitHub fetch),
-      // but the validation gate must pass.
       const body = JSON.parse(res.payload);
-      expect(body.error?.message ?? '').not.toContain('Invalid skill name');
+      expect(res.statusCode).toBe(400);
+      expect(body.error.message).toBe('Failed to fetch release v1.0.0: Not Found');
     });
 
     it('normalises mixed-case scope for OIDC owner matching', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(null, { status: 404, statusText: 'Not Found' }),
+      );
       (verifyGitHubOIDC as Mock).mockResolvedValue({
         ...validOIDCClaims,
         repository_owner: 'MyOrg',
@@ -209,7 +213,8 @@ describe('Skill Routes', () => {
       });
 
       const body = JSON.parse(res.payload);
-      expect(body.error?.message ?? '').not.toContain('Scope mismatch');
+      expect(res.statusCode).toBe(400);
+      expect(body.error.message).toBe('Failed to fetch release v1.0.0: Not Found');
     });
 
     it('rejects scope mismatch between skill name and OIDC owner', async () => {

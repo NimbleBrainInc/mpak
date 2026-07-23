@@ -44,25 +44,30 @@ function shortId(uuid: string): string {
 }
 
 /**
- * Trigger a security scan for a bundle
+ * Deterministic Job name for a scan. Single source so buildScanJob (which sets
+ * metadata.name) and triggerScan (which logs and returns it) cannot drift.
  */
-export async function triggerScan(params: TriggerScanParams): Promise<TriggerScanResult> {
-  const { scanId, bundleS3Key, packageName, version } = params;
+function scanJobName(scanId: string): string {
+  return `scan-${shortId(scanId)}`;
+}
 
-  if (!config.scanner.enabled) {
-    console.log(`[scanner] Scanning disabled, skipping scan for ${packageName}@${version}`);
-    return { jobName: 'disabled' };
-  }
+/**
+ * Build the K8s Job manifest for a bundle scan.
+ *
+ * Pure (no cluster calls) so the pod's security posture — the scoped
+ * ServiceAccount, non-root user, dropped capabilities, and read-only reach —
+ * can be asserted directly in tests and can't be silently dropped by a refactor.
+ */
+export function buildScanJob(params: TriggerScanParams): k8s.V1Job {
+  const { scanId, bundleS3Key, packageName } = params;
+  const jobName = scanJobName(scanId);
 
-  const jobName = `scan-${shortId(scanId)}`;
-  const namespace = config.scanner.namespace;
-
-  const job: k8s.V1Job = {
+  return {
     apiVersion: 'batch/v1',
     kind: 'Job',
     metadata: {
       name: jobName,
-      namespace,
+      namespace: config.scanner.namespace,
       labels: {
         app: 'mpak-scanner',
         'scan-id': scanId,
@@ -82,6 +87,11 @@ export async function triggerScan(params: TriggerScanParams): Promise<TriggerSca
         },
         spec: {
           restartPolicy: 'Never',
+          // ServiceAccount the scan pod runs as. Point SCANNER_SERVICE_ACCOUNT
+          // at one carrying cloud identity (e.g. IRSA / workload identity) scoped
+          // to reading the bundle under scan and writing its report; defaults to
+          // the namespace default SA.
+          serviceAccountName: config.scanner.serviceAccountName,
           securityContext: {
             runAsNonRoot: true,
             runAsUser: 1000,
@@ -144,9 +154,24 @@ export async function triggerScan(params: TriggerScanParams): Promise<TriggerSca
       },
     },
   };
+}
+
+/**
+ * Trigger a security scan for a bundle
+ */
+export async function triggerScan(params: TriggerScanParams): Promise<TriggerScanResult> {
+  const { scanId, packageName, version } = params;
+
+  if (!config.scanner.enabled) {
+    console.log(`[scanner] Scanning disabled, skipping scan for ${packageName}@${version}`);
+    return { jobName: 'disabled' };
+  }
+
+  const jobName = scanJobName(scanId);
+  const job = buildScanJob(params);
 
   const client = getK8sClient();
-  await client.createNamespacedJob({ namespace, body: job });
+  await client.createNamespacedJob({ namespace: config.scanner.namespace, body: job });
 
   console.log(`[scanner] Created scan Job ${jobName} for ${packageName}@${version}`);
 

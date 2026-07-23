@@ -55,6 +55,13 @@ class CQ01NoEmbeddedSecrets(Control):
 
         duration = int((time.time() - start) * 1000)
 
+        # Trufflehog is not invoked with --fail, so findings never set the exit
+        # code and any non-zero status is an internal failure. Keying off the
+        # exit code alone also catches a crash that emitted partial findings,
+        # which would otherwise pass on partial coverage.
+        if result.returncode != 0:
+            return self.error(result.stderr.strip() or "Secret scanning failed", duration_ms=duration)
+
         findings: list[Finding] = []
         has_verified_secret = False
 
