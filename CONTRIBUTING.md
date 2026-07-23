@@ -24,7 +24,7 @@ pnpm install
 # Set up the database (requires PostgreSQL, see README for setup)
 cd apps/registry && cp .env.example .env && npx prisma migrate dev && cd ../..
 
-# Seed example data (skills with versions, tags, triggers)
+# Seed example data (bundles with versions and trust scores)
 cd apps/registry && npm run db:seed && cd ../..
 
 # Build all packages
@@ -113,7 +113,7 @@ pnpm format
 We use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
-feat(schemas): add skill manifest schema
+feat(schemas): add bundle manifest validator
 fix(cli): handle missing config file gracefully
 docs(registry): update API reference
 chore(ci): update Node.js version in workflows
