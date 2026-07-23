@@ -12,11 +12,8 @@ import PackageDetailPage from './pages/PackageDetailPage';
 import PrivacyPage from './pages/PrivacyPage';
 import PublishBundlesPage from './pages/PublishBundlesPage';
 import PublishGatewayPage from './pages/PublishGatewayPage';
-import PublishSkillsPage from './pages/PublishSkillsPage';
 import SecurityControlsPage from './pages/SecurityControlsPage';
 import SecurityPage from './pages/SecurityPage';
-import SkillDetailPage from './pages/SkillDetailPage';
-import SkillsPage from './pages/SkillsPage';
 import TermsPage from './pages/TermsPage';
 import UserPackagesPage from './pages/UserPackagesPage';
 
@@ -46,8 +43,8 @@ const router = createBrowserRouter([
       { path: 'browse', element: <Navigate to="/bundles" replace /> },
       { path: 'packages/*', element: <PackageDetailPage /> },
 
-      { path: 'skills', element: <SkillsPage /> },
-      { path: 'skills/*', element: <SkillDetailPage /> },
+      { path: 'skills', element: <Navigate to="/bundles" replace /> },
+      { path: 'skills/*', element: <Navigate to="/bundles" replace /> },
       { path: 'login/*', element: <LoginPage /> },
       { path: 'my-packages', element: <UserPackagesPage /> },
       { path: 'about', element: <AboutPage /> },
@@ -58,7 +55,7 @@ const router = createBrowserRouter([
       { path: 'certified/controls', element: <Navigate to="/security/controls" replace /> },
       { path: 'publish', element: <PublishGatewayPage /> },
       { path: 'publish/bundles', element: <PublishBundlesPage /> },
-      { path: 'publish/skills', element: <PublishSkillsPage /> },
+      { path: 'publish/skills', element: <Navigate to="/publish" replace /> },
       { path: 'privacy', element: <PrivacyPage /> },
       { path: 'terms', element: <TermsPage /> },
     ],

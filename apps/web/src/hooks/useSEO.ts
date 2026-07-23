@@ -15,7 +15,7 @@ export interface SEOProps {
 
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 const SITE_NAME = 'mpak';
-const DEFAULT_OG_IMAGE_ALT = 'mpak - The secure registry for MCP servers and skills';
+const DEFAULT_OG_IMAGE_ALT = 'mpak - The secure registry for MCP servers';
 
 /**
  * Custom SEO hook for React 19 that directly manipulates document.head

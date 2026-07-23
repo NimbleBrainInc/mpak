@@ -5,8 +5,7 @@ import { siteConfig } from '../lib/siteConfig';
 export default function TermsPage() {
   useSEO({
     title: 'Terms of Service - mpak',
-    description:
-      'Terms of service for mpak, the secure package registry for MCP servers and agent skills.',
+    description: 'Terms of service for mpak, the secure package registry for MCP servers.',
     canonical: 'https://www.mpak.dev/terms',
   });
 

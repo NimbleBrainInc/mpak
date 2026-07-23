@@ -1,7 +1,7 @@
 /**
  * RSS Feed Generator Script
  *
- * Generates an RSS feed (feed.xml) for recently published packages and skills.
+ * Generates an RSS feed (feed.xml) for recently published packages.
  * Runs automatically via `npm run prebuild` before each build.
  *
  * Usage:
@@ -36,17 +36,6 @@ interface PackageApiResponse {
   total: number;
 }
 
-interface Skill {
-  name: string;
-  description?: string;
-  updated_at?: string;
-}
-
-interface SkillApiResponse {
-  skills: Skill[];
-  total: number;
-}
-
 async function fetchWithTimeout<T>(url: string, label: string): Promise<T | null> {
   try {
     console.log(`Fetching ${label} from ${url}...`);
@@ -75,7 +64,7 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function generateFeed(packages: Package[], skills: Skill[]): string {
+function generateFeed(packages: Package[]): string {
   const now = new Date().toUTCString();
 
   // Combine and sort by date, most recent first
@@ -94,16 +83,6 @@ function generateFeed(packages: Package[], skills: Skill[]): string {
       description: pkg.description || `${pkg.name} MCP server bundle`,
       pubDate: new Date(pkg.updated_at || pkg.published_at || Date.now()).toUTCString(),
       category: 'Bundles',
-    });
-  }
-
-  for (const skill of skills) {
-    items.push({
-      title: skill.name,
-      link: `${BASE_URL}/skills/${skill.name}`,
-      description: skill.description || `${skill.name} agent skill`,
-      pubDate: new Date(skill.updated_at || Date.now()).toUTCString(),
-      category: 'Skills',
     });
   }
 
@@ -129,7 +108,7 @@ function generateFeed(packages: Package[], skills: Skill[]): string {
   <channel>
     <title>mpak - New Packages</title>
     <link>${BASE_URL}</link>
-    <description>Recently published MCP server bundles and agent skills on mpak.</description>
+    <description>Recently published MCP server bundles on mpak.</description>
     <language>en-us</language>
     <lastBuildDate>${now}</lastBuildDate>
     <atom:link href="${BASE_URL}/feed.xml" rel="self" type="application/rss+xml" />
@@ -141,16 +120,15 @@ ${itemEntries}
 async function main() {
   console.log('Generating RSS feed...');
 
-  const [pkgData, skillData] = await Promise.all([
-    fetchWithTimeout<PackageApiResponse>(`${API_URL}/app/packages?limit=50`, 'packages'),
-    fetchWithTimeout<SkillApiResponse>(`${API_URL}/v1/skills/search?limit=50`, 'skills'),
-  ]);
+  const pkgData = await fetchWithTimeout<PackageApiResponse>(
+    `${API_URL}/app/packages?limit=50`,
+    'packages',
+  );
 
   const packages = pkgData?.packages ?? [];
-  const skills = skillData?.skills ?? [];
-  console.log(`Found ${packages.length} packages, ${skills.length} skills`);
+  console.log(`Found ${packages.length} packages`);
 
-  const feed = generateFeed(packages, skills);
+  const feed = generateFeed(packages);
 
   const fs = await import('node:fs');
   const path = await import('node:path');
@@ -158,7 +136,7 @@ async function main() {
 
   fs.writeFileSync(outputPath, feed, { encoding: 'utf-8', mode: 0o644 });
   console.log(`RSS feed written to ${outputPath}`);
-  console.log(`Total items: ${Math.min(packages.length + skills.length, 50)}`);
+  console.log(`Total items: ${Math.min(packages.length, 50)}`);
 }
 
 main().catch(console.error);

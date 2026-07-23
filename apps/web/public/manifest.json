@@ -1,7 +1,7 @@
 {
   "name": "mpak - The Package Manager for AI",
   "short_name": "mpak",
-  "description": "Install bundles and skills for your AI agent. The package registry for MCP servers and Agent Skills.",
+  "description": "Install MCP server bundles for your AI agent. The secure package registry for MCP servers.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c0a0f",
@@ -36,13 +36,13 @@
     {
       "name": "Browse Bundles",
       "short_name": "Bundles",
-      "description": "Browse available bundles and skills",
+      "description": "Browse available MCP server bundles",
       "url": "/bundles"
     },
     {
-      "name": "Publish Package",
+      "name": "Publish Bundle",
       "short_name": "Publish",
-      "description": "Publish a new bundle or skill",
+      "description": "Publish a new MCP server bundle",
       "url": "/publish"
     }
   ]

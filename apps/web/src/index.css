@@ -2,7 +2,7 @@
 
 /* =============================================================================
    Workshop Design System - mpak.dev
-   Dark theme with dual-accent system: Gold (bundles/security) + Purple (skills)
+   Dark theme with dual-accent system: Gold (bundles/security) + Purple (accents)
    ============================================================================= */
 
 @theme {
@@ -17,7 +17,7 @@
   --color-accent-gold-glow: rgba(245, 158, 11, 0.12);
   --color-accent-gold-border: rgba(245, 158, 11, 0.25);
 
-  /* --- Accent Purple (skills) --- */
+  /* --- Accent Purple (accents) --- */
   --color-accent-purple: #8b5cf6;
   --color-accent-purple-50: #f5f3ff;
   --color-accent-purple-100: #ede9fe;
@@ -202,7 +202,7 @@ body::before {
 
 /* =============================================================================
    Workshop Card System
-   Bundle cards get gold top-border on hover, skill cards get purple
+   Bundle cards get a gold top-border on hover
    ============================================================================= */
 
 .workshop-card {
@@ -238,10 +238,6 @@ body::before {
 
 .workshop-card-gold::before {
   background: linear-gradient(90deg, #f59e0b, #d97706);
-}
-
-.workshop-card-purple::before {
-  background: linear-gradient(90deg, #a78bfa, #7c3aed);
 }
 
 /* =============================================================================

@@ -5,8 +5,7 @@ import { siteConfig } from '../lib/siteConfig';
 export default function PrivacyPage() {
   useSEO({
     title: 'Privacy Policy - mpak',
-    description:
-      'Privacy policy for mpak, the secure package registry for MCP servers and agent skills.',
+    description: 'Privacy policy for mpak, the secure package registry for MCP servers.',
     canonical: 'https://www.mpak.dev/privacy',
   });
 

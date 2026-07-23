@@ -1,16 +1,12 @@
 # mpak
 
-> mpak is the secure, open-source package registry for MCP (Model Context Protocol) servers and Agent Skills. Standardized packaging, automated security scanning, and public trust scores for AI tool distribution.
+> mpak is the secure, open-source package registry for MCP (Model Context Protocol) servers. Standardized packaging, automated security scanning, and public trust scores for AI tool distribution.
 
 mpak is available at [mpak.dev](https://www.mpak.dev). Install the CLI with `npm install -g @nimblebrain/mpak`.
 
-## Package Types
+## Bundles
 
-mpak hosts two types of packages:
-
-**Bundles** are pre-packaged MCP servers in the MCPB format that give AI agents new capabilities (database access, API integrations, file operations). They work cross-platform (macOS, Linux, Windows) and install with a single command: `mpak bundle pull @scope/name`.
-
-**Skills** are markdown instructions that teach AI agents new behaviors and domain expertise (code review patterns, writing styles, specialized knowledge). They follow the Agent Skills specification and work across AI platforms. Install with: `mpak skill install @scope/name`.
+mpak hosts **bundles**: pre-packaged MCP servers in the MCPB format that give AI agents new capabilities (database access, API integrations, file operations). They work cross-platform (macOS, Linux, Windows) and install with a single command: `mpak bundle pull @scope/name`.
 
 ## Security Model
 
@@ -42,7 +38,6 @@ MCP-specific controls unique to mpak:
 npm install -g @nimblebrain/mpak
 mpak search postgres
 mpak bundle pull @mcp/server-postgres
-mpak skill install @scope/skill-name
 ```
 
 ## Publishing
@@ -52,10 +47,8 @@ Publishers add a `manifest.json` to their MCP server repo and the `mcpb-pack` Gi
 ## Documentation
 
 - [Browse Bundles](https://www.mpak.dev/bundles): Search and discover MCP server bundles
-- [Browse Skills](https://www.mpak.dev/skills): Search and discover agent skills
 - [Security Certification](https://www.mpak.dev/security): MTF certification levels and security domains
 - [Publish Bundles](https://www.mpak.dev/publish/bundles): Guide to publishing MCP servers
-- [Publish Skills](https://www.mpak.dev/publish/skills): Guide to publishing agent skills
 - [Full Documentation](https://docs.mpak.dev): Complete mpak documentation
 - [About](https://www.mpak.dev/about): About mpak and NimbleBrain
 

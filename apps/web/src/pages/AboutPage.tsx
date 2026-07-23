@@ -7,10 +7,9 @@ import { siteConfig } from '../lib/siteConfig';
 export default function AboutPage() {
   useSEO({
     title: 'About mpak',
-    description:
-      'mpak is the secure, open-source package registry for MCP servers and agent skills.',
+    description: 'mpak is the secure, open-source package registry for MCP servers.',
     canonical: 'https://www.mpak.dev/about',
-    keywords: ['about mpak', 'ai package manager', 'mcp bundles', 'agent skills', 'nimblebrain'],
+    keywords: ['about mpak', 'ai package manager', 'mcp bundles', 'mcp servers', 'nimblebrain'],
     schema: [
       generateOrganizationSchema(),
       generateBreadcrumbSchema([
@@ -46,52 +45,28 @@ export default function AboutPage() {
         </p>
       </section>
 
-      {/* Two Package Types */}
+      {/* Bundles */}
       <section className="mb-12">
-        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">Two Package Types</h2>
-        <div className="grid gap-4 sm:grid-cols-2 mb-4">
-          <div className="bg-mpak-gray-50 border border-mpak-gray-200 rounded-xl p-5">
-            <h3 className="font-semibold text-mpak-gray-900 mb-2">Bundles</h3>
-            <p className="text-sm text-mpak-gray-600 mb-3">
-              Pre-built MCP servers that give your AI new capabilities.
-            </p>
-            <ul className="text-sm text-mpak-gray-500 space-y-1">
-              <li>• Database access, API integrations, file operations</li>
-              <li>• Cross-platform: macOS, Linux, Windows</li>
-              <li>
-                • <code className="bg-mpak-gray-100 px-1 rounded">.mcpb</code> format by{' '}
-                <a
-                  href="https://github.com/anthropics/mcpb"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-gold-400 hover:text-accent-gold-500"
-                >
-                  Anthropic
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div className="bg-mpak-gray-50 border border-mpak-gray-200 rounded-xl p-5">
-            <h3 className="font-semibold text-mpak-gray-900 mb-2">Skills</h3>
-            <p className="text-sm text-mpak-gray-600 mb-3">
-              Instructions that teach your AI new behaviors and expertise.
-            </p>
-            <ul className="text-sm text-mpak-gray-500 space-y-1">
-              <li>• Code review patterns, writing styles, domain knowledge</li>
-              <li>• Universal: works across AI platforms</li>
-              <li>
-                • <code className="bg-mpak-gray-100 px-1 rounded">.skill</code> format per{' '}
-                <a
-                  href="https://agentskills.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-gold-400 hover:text-accent-gold-500"
-                >
-                  Agent Skills spec
-                </a>
-              </li>
-            </ul>
-          </div>
+        <h2 className="text-2xl font-semibold text-mpak-gray-900 mb-4">Bundles</h2>
+        <div className="bg-mpak-gray-50 border border-mpak-gray-200 rounded-xl p-5">
+          <p className="text-sm text-mpak-gray-600 mb-3">
+            Pre-built MCP servers that give your AI new capabilities.
+          </p>
+          <ul className="text-sm text-mpak-gray-500 space-y-1">
+            <li>• Database access, API integrations, file operations</li>
+            <li>• Cross-platform: macOS, Linux, Windows</li>
+            <li>
+              • <code className="bg-mpak-gray-100 px-1 rounded">.mcpb</code> format by{' '}
+              <a
+                href="https://github.com/anthropics/mcpb"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-gold-400 hover:text-accent-gold-500"
+              >
+                Anthropic
+              </a>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -101,15 +76,15 @@ export default function AboutPage() {
           mpak: The Secure Package Registry
         </h2>
         <p className="text-mpak-gray-600 mb-4">
-          mpak is the central registry and CLI for AI packages. Discover, install, and manage
-          bundles and skills with simple commands.
+          mpak is the central registry and CLI for MCP servers. Discover, install, and manage
+          bundles with simple commands.
         </p>
         <div className="bg-mpak-gray-50 border border-mpak-gray-200 rounded-xl p-6 mb-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <h3 className="font-semibold text-mpak-gray-900 mb-2">For Users</h3>
               <ul className="text-sm text-mpak-gray-600 space-y-1">
-                <li>Search bundles and skills in one place</li>
+                <li>Search bundles in one place</li>
                 <li>One command to install</li>
                 <li>Automatic platform detection</li>
                 <li>Version management</li>
@@ -159,12 +134,6 @@ export default function AboutPage() {
             className="px-4 py-2 bg-accent-gold-400 text-mpak-dark font-medium rounded-lg hover:bg-accent-gold-500 transition-colors"
           >
             Browse Bundles
-          </Link>
-          <Link
-            to="/skills"
-            className="px-4 py-2 bg-accent-purple text-white font-medium rounded-lg hover:bg-accent-purple/90 transition-colors"
-          >
-            Browse Skills
           </Link>
           <Link
             to="/publish"

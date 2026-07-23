@@ -33,16 +33,6 @@ interface PackageApiResponse {
   total: number;
 }
 
-interface Skill {
-  name: string;
-  updated_at?: string;
-}
-
-interface SkillApiResponse {
-  skills: Skill[];
-  total: number;
-}
-
 async function fetchWithTimeout<T>(url: string, label: string): Promise<T | null> {
   try {
     console.log(`Fetching ${label} from ${url}...`);
@@ -70,27 +60,17 @@ async function fetchAllPackages(): Promise<Package[]> {
   return data?.packages ?? [];
 }
 
-async function fetchAllSkills(): Promise<Skill[]> {
-  const data = await fetchWithTimeout<SkillApiResponse>(
-    `${API_URL}/v1/skills/search?limit=1000`,
-    'skills',
-  );
-  return data?.skills ?? [];
-}
-
-function generateSitemap(packages: Package[], skills: Skill[]): string {
+function generateSitemap(packages: Package[]): string {
   const today = new Date().toISOString().split('T')[0];
 
   // Static pages - must match actual routes in App.tsx
   const staticUrls = [
     { loc: '/', changefreq: 'weekly', priority: '1.0' },
     { loc: '/bundles', changefreq: 'daily', priority: '0.9' },
-    { loc: '/skills', changefreq: 'daily', priority: '0.9' },
     { loc: '/security', changefreq: 'monthly', priority: '0.8' },
     { loc: '/security/controls', changefreq: 'monthly', priority: '0.7' },
     { loc: '/publish', changefreq: 'monthly', priority: '0.7' },
     { loc: '/publish/bundles', changefreq: 'monthly', priority: '0.7' },
-    { loc: '/publish/skills', changefreq: 'monthly', priority: '0.7' },
     { loc: '/about', changefreq: 'monthly', priority: '0.6' },
     { loc: '/contact', changefreq: 'monthly', priority: '0.5' },
   ];
@@ -103,15 +83,7 @@ function generateSitemap(packages: Package[], skills: Skill[]): string {
     lastmod: pkg.updated_at ? pkg.updated_at.split('T')[0] : today,
   }));
 
-  // Skill detail pages
-  const skillUrls = skills.map((skill) => ({
-    loc: `/skills/${skill.name}`,
-    changefreq: 'weekly',
-    priority: '0.7',
-    lastmod: skill.updated_at ? skill.updated_at.split('T')[0] : today,
-  }));
-
-  const allUrls = [...staticUrls, ...packageUrls, ...skillUrls];
+  const allUrls = [...staticUrls, ...packageUrls];
 
   const urlEntries = allUrls
     .map(
@@ -133,21 +105,21 @@ ${urlEntries}
 
 async function main() {
   console.log('Fetching data from API...');
-  const [packages, skills] = await Promise.all([fetchAllPackages(), fetchAllSkills()]);
-  console.log(`Found ${packages.length} packages, ${skills.length} skills`);
+  const packages = await fetchAllPackages();
+  console.log(`Found ${packages.length} packages`);
 
   console.log('Generating sitemap...');
-  const sitemap = generateSitemap(packages, skills);
+  const sitemap = generateSitemap(packages);
 
   // Write to file
   const fs = await import('node:fs');
   const path = await import('node:path');
   const outputPath = path.join(process.cwd(), 'public', 'sitemap.xml');
 
-  const staticPageCount = 10;
+  const staticPageCount = 8;
   fs.writeFileSync(outputPath, sitemap, { encoding: 'utf-8', mode: 0o644 });
   console.log(`Sitemap written to ${outputPath}`);
-  console.log(`Total URLs: ${staticPageCount + packages.length + skills.length}`);
+  console.log(`Total URLs: ${staticPageCount + packages.length}`);
 }
 
 main().catch(console.error);

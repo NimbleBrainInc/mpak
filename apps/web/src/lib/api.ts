@@ -4,25 +4,11 @@ import type {
   PackageSearchParams,
   UserProfile,
 } from '../schemas/generated';
-import type {
-  SkillDetail,
-  SkillSearchParams,
-  SkillSearchResponse,
-  SkillSummary,
-} from '../schemas/generated/skill';
 import { API_URL } from './siteConfig';
 
 // Re-export for convenience
 export type SearchParams = PackageSearchParams;
-export type {
-  Package,
-  PackageDetail,
-  SkillDetail,
-  SkillSearchParams,
-  SkillSearchResponse,
-  SkillSummary,
-  UserProfile,
-};
+export type { Package, PackageDetail, UserProfile };
 
 /**
  * Converts a Package (from browse/search) to a PackageDetail for use as placeholder data.
@@ -265,42 +251,6 @@ class ApiClient {
     }
 
     return response.json();
-  }
-
-  // =============================================================================
-  // Skills API
-  // =============================================================================
-
-  async searchSkills(params: SkillSearchParams = {}): Promise<SkillSearchResponse> {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        query.append(key, String(value));
-      }
-    });
-
-    const queryString = query.toString();
-    return this.fetch(`/v1/skills/search${queryString ? `?${queryString}` : ''}`);
-  }
-
-  async getSkill(name: string): Promise<SkillDetail> {
-    // name is @scope/skill-name, convert to URL path
-    if (!name.startsWith('@')) {
-      throw new Error('Skill name must be scoped (e.g., @scope/skill-name)');
-    }
-    const [scope, skillName] = name.substring(1).split('/');
-    return this.fetch(`/v1/skills/@${scope}/${skillName}`);
-  }
-
-  getSkillDownloadUrl(name: string, version?: string): string {
-    if (!name.startsWith('@')) {
-      throw new Error('Skill name must be scoped (e.g., @scope/skill-name)');
-    }
-    const [scope, skillName] = name.substring(1).split('/');
-    if (version) {
-      return `${this.baseUrl}/v1/skills/@${scope}/${skillName}/versions/${version}/download`;
-    }
-    return `${this.baseUrl}/v1/skills/@${scope}/${skillName}/download`;
   }
 }
 

@@ -927,7 +927,7 @@ export default function PackageDetailPage() {
 
                   {/* Badge */}
                   <section className="mb-10">
-                    <BadgeSection packageName={pkg.name} packageType="bundle" />
+                    <BadgeSection packageName={pkg.name} />
                   </section>
                 </>
               )}

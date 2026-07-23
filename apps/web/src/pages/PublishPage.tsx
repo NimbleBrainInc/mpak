@@ -153,25 +153,6 @@ export default function PublishPage() {
         </div>
       </section>
 
-      {/* Publishing Skills */}
-      <section className="mb-12">
-        <div className="workshop-card workshop-card-purple p-6">
-          <h3 className="font-semibold text-mpak-gray-900 mb-2">Publishing Skills</h3>
-          <p className="text-sm text-mpak-gray-600 mb-3">
-            You can also publish Agent Skills to mpak. Skills are markdown instructions that teach
-            AI new behaviors and domain expertise.
-          </p>
-          <a
-            href={`${siteConfig.docsUrl}/skills/overview`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-accent-purple-400 hover:text-accent-purple-300 font-medium"
-          >
-            Skills publishing guide →
-          </a>
-        </div>
-      </section>
-
       {/* CTA */}
       <section className="bg-surface-raised border border-white/[0.08] rounded-xl p-6 text-center">
         <h3 className="font-semibold text-mpak-gray-900 mb-2">Ready to publish?</h3>
