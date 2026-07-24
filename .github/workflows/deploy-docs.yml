@@ -40,9 +40,11 @@ jobs:
         run: pnpm --filter mpak-docs build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: apps/docs/dist
+          # v5 excludes hidden files by default; keep v3's include-everything behavior.
+          include-hidden-files: true
 
   deploy:
     needs: build
