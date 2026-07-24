@@ -31,6 +31,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0  # setup-uv dropped floating major tags (v8+); pin exact
+        with:
+          enable-cache: false  # keep v4's no-cache default; a caching change is out of scope
 
       - name: Install dependencies
         run: uv sync --dev
