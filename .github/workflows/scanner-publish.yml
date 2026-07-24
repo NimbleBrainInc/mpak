@@ -26,7 +26,7 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v9.0.0  # setup-uv dropped floating major tags (v8+); pin exact
         with:
-          enable-cache: false  # keep v4's no-cache default; a caching change is out of scope
+          enable-cache: false  # no uv cache: v9 defaults to 'auto', and unpruned caching would eat the shared 10 GB Actions budget
       - run: uv sync --extra dev
       - run: uv run ruff check src/ tests/
       - run: uv run ruff format --check src/ tests/
@@ -49,7 +49,7 @@ jobs:
           python-version: '3.13'
       - uses: astral-sh/setup-uv@v9.0.0  # setup-uv dropped floating major tags (v8+); pin exact
         with:
-          enable-cache: false  # keep v4's no-cache default; a caching change is out of scope
+          enable-cache: false  # no uv cache: v9 defaults to 'auto', and unpruned caching would eat the shared 10 GB Actions budget
 
       - name: Verify tag matches package version
         run: |
