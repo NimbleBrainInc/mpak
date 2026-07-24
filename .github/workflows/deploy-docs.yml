@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/docs/**'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
 permissions:
