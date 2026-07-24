@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'packages/sdk-typescript/**'
+      - '.github/workflows/sdk-typescript-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'packages/sdk-typescript/**'
+      - '.github/workflows/sdk-typescript-ci.yml'
 
 concurrency:
   group: sdk-typescript-ci-${{ github.ref }}

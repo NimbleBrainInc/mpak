@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'apps/scanner/**'
+      - '.github/workflows/scanner-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/scanner/**'
+      - '.github/workflows/scanner-ci.yml'
 
 concurrency:
   group: scanner-ci-${{ github.ref }}

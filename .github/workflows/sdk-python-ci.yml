@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'packages/sdk-python/**'
+      - '.github/workflows/sdk-python-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'packages/sdk-python/**'
+      - '.github/workflows/sdk-python-ci.yml'
 
 concurrency:
   group: sdk-python-ci-${{ github.ref }}
