@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'packages/sdk-typescript/**'
+      - '.github/workflows/sdk-typescript-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'packages/sdk-typescript/**'
+      - '.github/workflows/sdk-typescript-ci.yml'
 
 concurrency:
   group: sdk-typescript-ci-${{ github.ref }}
@@ -19,13 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
