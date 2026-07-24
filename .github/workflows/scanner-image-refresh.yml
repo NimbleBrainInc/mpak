@@ -53,7 +53,7 @@ jobs:
         run: git checkout --detach "${{ steps.version.outputs.tag }}"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -63,7 +63,7 @@ jobs:
       # vulnerability database changes, so the image contents stay reproducible
       # apart from the data this job exists to refresh.
       - name: Rebuild and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: apps/scanner
           file: apps/scanner/Dockerfile
