@@ -21,7 +21,7 @@ vi.mock('../src/config.js', () => ({
       type: 'local',
       path: '/tmp/test-storage',
       cloudfront: { urlExpirationSeconds: 900, domain: '', keyPairId: '' },
-      s3: { bucket: '', region: '', accessKeyId: '', secretAccessKey: '' },
+      s3: { bucket: '', region: '' },
     },
     scanner: { enabled: false, callbackSecret: 'test-secret' },
     server: { nodeEnv: 'test', port: 3000, host: '0.0.0.0', corsOrigins: [] },

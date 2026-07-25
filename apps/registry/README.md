@@ -97,8 +97,8 @@ pnpm typecheck
 | `STORAGE_PATH` | No | Local storage path (default: ./packages) |
 | `S3_BUCKET` | No | S3 bucket name |
 | `S3_REGION` | No | S3 region |
-| `S3_ACCESS_KEY_ID` | No | S3 access key |
-| `S3_SECRET_ACCESS_KEY` | No | S3 secret key |
+| `AWS_ACCESS_KEY_ID` | No | S3 access key. Omit where the host supplies an AWS identity (instance/container role, `~/.aws` profile) |
+| `AWS_SECRET_ACCESS_KEY` | No | S3 secret key. Omit alongside `AWS_ACCESS_KEY_ID` |
 | `CLOUDFRONT_DOMAIN` | No | CloudFront distribution domain |
 | `CLOUDFRONT_KEY_PAIR_ID` | No | CloudFront key pair ID |
 | `CLOUDFRONT_PRIVATE_KEY` | No | CloudFront private key (PEM) |

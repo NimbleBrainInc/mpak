@@ -17,6 +17,11 @@ registry:
     tag: ""  # Defaults to Chart.appVersion
     pullPolicy: IfNotPresent
 
+  # Point this at a ServiceAccount you have bound to a cloud identity to give
+  # the registry S3 access without static keys (on EKS, one annotated with
+  # eks.amazonaws.com/role-arn). The chart does not create it.
+  serviceAccountName: ""
+
   service:
     type: ClusterIP
     port: 3200
@@ -194,8 +199,10 @@ secrets:
   clerkSecretKey: ""
   clerkPublishableKey: ""
   s3Bucket: ""
-  s3AccessKeyId: ""
-  s3SecretAccessKey: ""
+  # Leave both empty on a cluster that gives the registry pod an AWS identity
+  # (IRSA — annotate a ServiceAccount and set registry.serviceAccountName).
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
   cloudfrontDomain: ""
   cloudfrontKeyPairId: ""
   cloudfrontPrivateKeyBase64: ""

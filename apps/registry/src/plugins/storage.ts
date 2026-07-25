@@ -135,15 +135,15 @@ class S3StorageService implements StorageService {
   private s3Client: S3Client;
   private bucket: string;
 
-  constructor(bucket: string, region: string, accessKeyId: string, secretAccessKey: string) {
+  constructor(bucket: string, region: string) {
     this.bucket = bucket;
-    this.s3Client = new S3Client({
-      region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
+    // Credentials are resolved by the AWS SDK's default provider chain, so the
+    // deployment decides how this process authenticates without a code change:
+    // a container/pod role (ECS, EKS IRSA) or EC2 instance role where one is
+    // attached, otherwise the standard AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    // environment variables or a shared ~/.aws profile. Passing `credentials`
+    // here would pin the process to static keys and disable all of that.
+    this.s3Client = new S3Client({ region });
   }
 
   async saveBundle(
@@ -342,15 +342,13 @@ const storagePlugin: FastifyPluginAsync = async (fastify) => {
     storageService = new LocalStorageService(config.storage.path);
     fastify.log.info(`Using local storage at ${config.storage.path}`);
   } else {
-    const { bucket, region, accessKeyId, secretAccessKey } = config.storage.s3;
+    const { bucket, region } = config.storage.s3;
 
-    if (!bucket || !region || !accessKeyId || !secretAccessKey) {
-      throw new Error(
-        'S3 storage requires bucket, region, accessKeyId, and secretAccessKey to be configured',
-      );
+    if (!bucket || !region) {
+      throw new Error('S3 storage requires bucket and region to be configured');
     }
 
-    storageService = new S3StorageService(bucket, region, accessKeyId, secretAccessKey);
+    storageService = new S3StorageService(bucket, region);
     fastify.log.info(`Using S3 storage with bucket: ${bucket} in region: ${region}`);
   }
 
