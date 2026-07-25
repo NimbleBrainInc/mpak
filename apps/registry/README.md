@@ -99,6 +99,7 @@ pnpm typecheck
 | `S3_REGION` | No | S3 region |
 | `AWS_ACCESS_KEY_ID` | No | S3 access key. Omit where the host supplies an AWS identity (instance/container role, `~/.aws` profile) |
 | `AWS_SECRET_ACCESS_KEY` | No | S3 secret key. Omit alongside `AWS_ACCESS_KEY_ID` |
+| `AWS_SESSION_TOKEN` | No | Session token, for temporary credentials from `sts:AssumeRole` or SSO. Set alongside the pair above |
 | `CLOUDFRONT_DOMAIN` | No | CloudFront distribution domain |
 | `CLOUDFRONT_KEY_PAIR_ID` | No | CloudFront key pair ID |
 | `CLOUDFRONT_PRIVATE_KEY` | No | CloudFront private key (PEM) |
@@ -112,12 +113,6 @@ pnpm typecheck
 | `SCANNER_NAMESPACE` | No | K8s namespace for scans |
 | `SCANNER_SERVICE_ACCOUNT` | No | ServiceAccount for scan Job pods (default: `default`). Point at one carrying cloud identity (e.g. IRSA) scoped to bundle reads + report writes; it must exist in `SCANNER_NAMESPACE` |
 | `SCANNER_CALLBACK_SECRET` | No | Scanner callback auth secret |
-
-The `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` pair is for **long-lived keys
-only** — `AWS_SESSION_TOKEN` is not plumbed, so temporary credentials from
-`sts:AssumeRole` or SSO will not work through those variables. Use a `~/.aws`
-profile or an attached instance/container role for those; both refresh
-themselves and are the better option regardless.
 
 With `STORAGE_TYPE=s3` only `S3_BUCKET` is checked at startup.
 Credentials are resolved by the AWS SDK when a request is made, not when the

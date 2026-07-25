@@ -206,10 +206,13 @@ secrets:
   clerkSecretKey: ""
   clerkPublishableKey: ""
   s3Bucket: ""
-  # Leave both empty on a cluster that gives the registry pod an AWS identity
+  # Leave empty on a cluster that gives the registry pod an AWS identity
   # (IRSA — annotate a ServiceAccount and set registry.serviceAccountName).
   awsAccessKeyId: ""
   awsSecretAccessKey: ""
+  # Only for temporary credentials (sts:AssumeRole, SSO). They expire, so a
+  # pod identity is the better fit for anything long-running.
+  awsSessionToken: ""
   cloudfrontDomain: ""
   cloudfrontKeyPairId: ""
   cloudfrontPrivateKeyBase64: ""

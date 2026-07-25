@@ -86,6 +86,12 @@ spec:
                   name: {{ include "mpak.secretName" . }}
                   key: aws-secret-access-key
                   optional: true
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mpak.secretName" . }}
+                  key: aws-session-token
+                  optional: true
             - name: CLOUDFRONT_DOMAIN
               valueFrom:
                 secretKeyRef:

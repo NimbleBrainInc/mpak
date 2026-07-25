@@ -3,10 +3,9 @@
  *
  * S3 credentials are resolved by the AWS SDK's default provider chain, not by
  * configuration this app reads. These assertions pin that boundary from both
- * sides: the client must be constructed WITHOUT a credentials option (passing
- * one pins the process to static keys and disables the chain -- the defect that
- * took publishing down), and the absence of a credential must not block boot,
- * since a pod authenticating by container or instance role has none to present.
+ * sides: the client carries no credentials option, which is what keeps the
+ * chain reachable, and a missing credential does not block boot, since a pod
+ * authenticating by container or instance role has none to present.
  */
 
 import Fastify from 'fastify';
