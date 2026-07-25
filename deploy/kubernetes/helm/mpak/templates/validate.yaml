@@ -1,6 +1,10 @@
 {{/*
 Upgrade guards. Renders nothing.
 
+Delete this file at the next major version of this chart: it exists to catch a
+one-time rename during an upgrade, and past that boundary a chart is not
+expected to accept the old key names anyway.
+
 Helm ignores values a chart no longer defines, so a renamed key fails silently:
 the credential is simply absent, the pod starts (bucket and region are all the
 registry requires at boot), and the failure only appears on the first publish as

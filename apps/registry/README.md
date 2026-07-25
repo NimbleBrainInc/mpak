@@ -113,7 +113,13 @@ pnpm typecheck
 | `SCANNER_SERVICE_ACCOUNT` | No | ServiceAccount for scan Job pods (default: `default`). Point at one carrying cloud identity (e.g. IRSA) scoped to bundle reads + report writes; it must exist in `SCANNER_NAMESPACE` |
 | `SCANNER_CALLBACK_SECRET` | No | Scanner callback auth secret |
 
-With `STORAGE_TYPE=s3` only `S3_BUCKET` and `S3_REGION` are checked at startup.
+The `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` pair is for **long-lived keys
+only** — `AWS_SESSION_TOKEN` is not plumbed, so temporary credentials from
+`sts:AssumeRole` or SSO will not work through those variables. Use a `~/.aws`
+profile or an attached instance/container role for those; both refresh
+themselves and are the better option regardless.
+
+With `STORAGE_TYPE=s3` only `S3_BUCKET` is checked at startup.
 Credentials are resolved by the AWS SDK when a request is made, not when the
 process boots, so a missing, expired, or deactivated credential does not prevent
 startup — it surfaces on the first bundle upload or download. If publishing

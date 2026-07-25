@@ -1,16 +1,34 @@
 /**
- * Storage plugin boot contract.
+ * Storage plugin credential and boot contract.
  *
  * S3 credentials are resolved by the AWS SDK's default provider chain, not by
- * configuration this app reads. These assertions pin that boundary: bucket and
- * region are required because only the deployment knows them, and the absence
- * of a credential must NOT block boot -- a pod authenticating by instance or
- * container role has no credential to present here, and rejecting it would put
- * the app back to static keys as the only option.
+ * configuration this app reads. These assertions pin that boundary from both
+ * sides: the client must be constructed WITHOUT a credentials option (passing
+ * one pins the process to static keys and disables the chain -- the defect that
+ * took publishing down), and the absence of a credential must not block boot,
+ * since a pod authenticating by container or instance role has none to present.
  */
 
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
+
+const { s3ClientOptions } = vi.hoisted(() => ({
+  s3ClientOptions: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: class {
+    constructor(options: Record<string, unknown>) {
+      s3ClientOptions.push(options);
+    }
+    send() {
+      return Promise.resolve({});
+    }
+  },
+  GetObjectCommand: class {},
+  PutObjectCommand: class {},
+  DeleteObjectCommand: class {},
+}));
 
 const s3Config = { bucket: '', region: '' };
 
@@ -37,6 +55,24 @@ async function register() {
   return app;
 }
 
+describe('storage plugin credential contract', () => {
+  it('constructs the S3 client with no credentials option, leaving the SDK chain intact', async () => {
+    s3ClientOptions.length = 0;
+    s3Config.bucket = 'mpak-cdn';
+    s3Config.region = 'us-east-1';
+
+    const app = await register();
+
+    expect(s3ClientOptions).toHaveLength(1);
+    // Not `toHaveProperty`: an explicit `credentials: undefined` would still
+    // pass that, and it is equally fatal to the chain.
+    expect(Object.keys(s3ClientOptions[0])).not.toContain('credentials');
+    expect(s3ClientOptions[0]).toMatchObject({ region: 'us-east-1' });
+
+    await app.close();
+  });
+});
+
 describe('storage plugin boot contract', () => {
   it('registers S3 storage without any credential configured', async () => {
     s3Config.bucket = 'mpak-cdn';
@@ -52,13 +88,6 @@ describe('storage plugin boot contract', () => {
     s3Config.bucket = '';
     s3Config.region = 'us-east-1';
 
-    await expect(register()).rejects.toThrow(/bucket and region/);
-  });
-
-  it('rejects S3 storage with no region', async () => {
-    s3Config.bucket = 'mpak-cdn';
-    s3Config.region = '';
-
-    await expect(register()).rejects.toThrow(/bucket and region/);
+    await expect(register()).rejects.toThrow(/bucket/);
   });
 });

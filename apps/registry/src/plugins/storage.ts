@@ -344,8 +344,8 @@ const storagePlugin: FastifyPluginAsync = async (fastify) => {
   } else {
     const { bucket, region } = config.storage.s3;
 
-    if (!bucket || !region) {
-      throw new Error('S3 storage requires bucket and region to be configured');
+    if (!bucket) {
+      throw new Error('S3 storage requires a bucket to be configured');
     }
 
     storageService = new S3StorageService(bucket, region);
