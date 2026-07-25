@@ -206,13 +206,16 @@ secrets:
   clerkSecretKey: ""
   clerkPublishableKey: ""
   s3Bucket: ""
-  # Leave empty on a cluster that gives the registry pod an AWS identity
-  # (IRSA — annotate a ServiceAccount and set registry.serviceAccountName).
+  # Long-lived keys only. Leave empty on a cluster that gives the registry pod
+  # an AWS identity (IRSA — annotate a ServiceAccount and set
+  # registry.serviceAccountName), which is the better arrangement anyway.
+  #
+  # There is deliberately no session-token key here. A pod's environment is
+  # fixed when the pod is created and never refreshes, so temporary credentials
+  # would expire mid-life with no way to renew them. Pod identity is the
+  # refreshing equivalent, and it is what this chart steers you toward.
   awsAccessKeyId: ""
   awsSecretAccessKey: ""
-  # Only for temporary credentials (sts:AssumeRole, SSO). They expire, so a
-  # pod identity is the better fit for anything long-running.
-  awsSessionToken: ""
   cloudfrontDomain: ""
   cloudfrontKeyPairId: ""
   cloudfrontPrivateKeyBase64: ""
