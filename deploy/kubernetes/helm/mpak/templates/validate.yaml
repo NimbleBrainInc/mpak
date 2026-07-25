@@ -1,9 +1,10 @@
 {{/*
 Upgrade guards. Renders nothing.
 
-Delete this file at the next major version of this chart: it exists to catch a
-one-time rename during an upgrade, and past that boundary a chart is not
-expected to accept the old key names anyway.
+Delete this file at chart 0.3.0. It exists to catch a one-time rename for
+anyone upgrading across 0.2.0, so it is dead weight one minor later — and a
+concrete version is a boundary this chart actually reaches, unlike "the next
+major".
 
 Helm ignores values a chart no longer defines, so a renamed key fails silently:
 the credential is simply absent, the pod starts (bucket and region are all the
