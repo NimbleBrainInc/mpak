@@ -5,6 +5,13 @@
 registry:
   replicaCount: 3
 
+  # Preferred way to give the registry S3 access: name a ServiceAccount already
+  # bound to a cloud identity (on EKS, one annotated with
+  # eks.amazonaws.com/role-arn) and hold no credentials at all. The chart does
+  # not create it. Leaving this unset falls back to the `default` ServiceAccount,
+  # which carries no identity — then S3 credentials must come from the Secret.
+  # serviceAccountName: ""
+
   resources:
     requests:
       cpu: 500m
@@ -98,7 +105,15 @@ config:
 
 # -- Secrets -------------------------------------------------------------------
 secrets:
-  # In production, use an externally managed secret
+  # In production, use an externally managed secret.
+  #
+  # This recipe is the one shape the chart cannot check for you: it manages no
+  # Secret, so it cannot tell whether yours carries S3 credentials under the
+  # current key names (aws-access-key-id / aws-secret-access-key) or the ones
+  # this chart used to read (s3-*). Stale names satisfy no lookup and the
+  # registry deploys with no S3 credentials. Prefer giving the pod an identity
+  # and holding no keys at all — see registry.serviceAccountName at the top of
+  # this file.
   existingSecret: mpak-secrets
 
 # -- Persistence (disabled in production; use S3) ------------------------------

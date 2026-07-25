@@ -1,0 +1,17 @@
+{{/*
+Upgrade guards. Renders nothing.
+
+Delete this file at chart 0.3.0. It exists to catch a one-time rename for
+anyone upgrading across 0.2.0, so it is dead weight one minor later — and a
+concrete version is a boundary this chart actually reaches, unlike "the next
+major".
+
+Helm ignores values a chart no longer defines, so a renamed key fails silently:
+the credential is simply absent, the pod starts (bucket and region are all the
+registry requires at boot), and the failure only appears on the first publish as
+an S3 credential error. Fail at template time instead, while the operator is
+still looking at the output.
+*/}}
+{{- if or .Values.secrets.s3AccessKeyId .Values.secrets.s3SecretAccessKey }}
+{{- fail "secrets.s3AccessKeyId and secrets.s3SecretAccessKey have been removed. The registry now resolves S3 credentials through the AWS SDK default provider chain. Best: drop them and give the pod a cloud identity via registry.serviceAccountName. Otherwise, if this chart manages your Secret, rename them to secrets.awsAccessKeyId and secrets.awsSecretAccessKey; if you set secrets.existingSecret, these two values do nothing at all -- delete them here and rename the keys inside that Secret to aws-access-key-id and aws-secret-access-key. Left as they are, this deploys a registry with no S3 credentials." }}
+{{- end }}

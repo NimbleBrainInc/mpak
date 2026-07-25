@@ -97,8 +97,9 @@ pnpm typecheck
 | `STORAGE_PATH` | No | Local storage path (default: ./packages) |
 | `S3_BUCKET` | No | S3 bucket name |
 | `S3_REGION` | No | S3 region |
-| `S3_ACCESS_KEY_ID` | No | S3 access key |
-| `S3_SECRET_ACCESS_KEY` | No | S3 secret key |
+| `AWS_ACCESS_KEY_ID` | No | S3 access key. Omit where the host supplies an AWS identity (instance/container role, `~/.aws` profile) |
+| `AWS_SECRET_ACCESS_KEY` | No | S3 secret key. Omit alongside `AWS_ACCESS_KEY_ID` |
+| `AWS_SESSION_TOKEN` | No | Session token, for temporary credentials from `sts:AssumeRole` or SSO. Set alongside the pair above |
 | `CLOUDFRONT_DOMAIN` | No | CloudFront distribution domain |
 | `CLOUDFRONT_KEY_PAIR_ID` | No | CloudFront key pair ID |
 | `CLOUDFRONT_PRIVATE_KEY` | No | CloudFront private key (PEM) |
@@ -112,3 +113,10 @@ pnpm typecheck
 | `SCANNER_NAMESPACE` | No | K8s namespace for scans |
 | `SCANNER_SERVICE_ACCOUNT` | No | ServiceAccount for scan Job pods (default: `default`). Point at one carrying cloud identity (e.g. IRSA) scoped to bundle reads + report writes; it must exist in `SCANNER_NAMESPACE` |
 | `SCANNER_CALLBACK_SECRET` | No | Scanner callback auth secret |
+
+With `STORAGE_TYPE=s3` only `S3_BUCKET` is checked at startup.
+Credentials are resolved by the AWS SDK when a request is made, not when the
+process boots, so a missing, expired, or deactivated credential does not prevent
+startup — it surfaces on the first bundle upload or download. If publishing
+fails against S3 on an otherwise healthy instance, check the identity the
+process resolved rather than its configuration.

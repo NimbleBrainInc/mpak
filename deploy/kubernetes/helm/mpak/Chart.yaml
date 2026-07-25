@@ -2,7 +2,7 @@ apiVersion: v2
 name: mpak
 description: Open source MCP bundle registry and package manager
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.1.0"
 home: https://mpak.dev
 sources:

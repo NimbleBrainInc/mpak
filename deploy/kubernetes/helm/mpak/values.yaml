@@ -17,6 +17,11 @@ registry:
     tag: ""  # Defaults to Chart.appVersion
     pullPolicy: IfNotPresent
 
+  # Point this at a ServiceAccount you have bound to a cloud identity to give
+  # the registry S3 access without static keys (on EKS, one annotated with
+  # eks.amazonaws.com/role-arn). The chart does not create it.
+  serviceAccountName: ""
+
   service:
     type: ClusterIP
     port: 3200
@@ -186,7 +191,14 @@ config:
 # These should be created externally (e.g., via ExternalSecrets, SealedSecrets,
 # or kubectl create secret). Set existingSecret to reference a pre-existing secret.
 secrets:
-  # Use an existing secret instead of creating one from the chart
+  # Use an existing secret instead of creating one from the chart.
+  #
+  # The chart cannot see inside a Secret it does not manage, so nothing here can
+  # catch a stale key name for you: a Secret still holding s3-access-key-id /
+  # s3-secret-access-key satisfies no lookup, and the registry deploys with no S3
+  # credentials at all. Rename those keys to aws-access-key-id /
+  # aws-secret-access-key, or remove them and bind the pod to a cloud identity
+  # through registry.serviceAccountName.
   existingSecret: ""
 
   # Only used if existingSecret is empty (NOT recommended for production)
@@ -194,8 +206,16 @@ secrets:
   clerkSecretKey: ""
   clerkPublishableKey: ""
   s3Bucket: ""
-  s3AccessKeyId: ""
-  s3SecretAccessKey: ""
+  # Long-lived keys only. Leave empty on a cluster that gives the registry pod
+  # an AWS identity (IRSA — annotate a ServiceAccount and set
+  # registry.serviceAccountName), which is the better arrangement anyway.
+  #
+  # There is deliberately no session-token key here. A pod's environment is
+  # fixed when the pod is created and never refreshes, so temporary credentials
+  # would expire mid-life with no way to renew them. Pod identity is the
+  # refreshing equivalent, and it is what this chart steers you toward.
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
   cloudfrontDomain: ""
   cloudfrontKeyPairId: ""
   cloudfrontPrivateKeyBase64: ""
