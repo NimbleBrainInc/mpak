@@ -112,3 +112,10 @@ pnpm typecheck
 | `SCANNER_NAMESPACE` | No | K8s namespace for scans |
 | `SCANNER_SERVICE_ACCOUNT` | No | ServiceAccount for scan Job pods (default: `default`). Point at one carrying cloud identity (e.g. IRSA) scoped to bundle reads + report writes; it must exist in `SCANNER_NAMESPACE` |
 | `SCANNER_CALLBACK_SECRET` | No | Scanner callback auth secret |
+
+With `STORAGE_TYPE=s3` only `S3_BUCKET` and `S3_REGION` are checked at startup.
+Credentials are resolved by the AWS SDK when a request is made, not when the
+process boots, so a missing, expired, or deactivated credential does not prevent
+startup — it surfaces on the first bundle upload or download. If publishing
+fails against S3 on an otherwise healthy instance, check the identity the
+process resolved rather than its configuration.

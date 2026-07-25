@@ -191,7 +191,14 @@ config:
 # These should be created externally (e.g., via ExternalSecrets, SealedSecrets,
 # or kubectl create secret). Set existingSecret to reference a pre-existing secret.
 secrets:
-  # Use an existing secret instead of creating one from the chart
+  # Use an existing secret instead of creating one from the chart.
+  #
+  # The chart cannot see inside a Secret it does not manage, so nothing here can
+  # catch a stale key name for you: a Secret still holding s3-access-key-id /
+  # s3-secret-access-key satisfies no lookup, and the registry deploys with no S3
+  # credentials at all. Rename those keys to aws-access-key-id /
+  # aws-secret-access-key, or remove them and bind the pod to a cloud identity
+  # through registry.serviceAccountName.
   existingSecret: ""
 
   # Only used if existingSecret is empty (NOT recommended for production)
