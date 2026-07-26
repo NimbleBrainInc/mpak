@@ -20,6 +20,7 @@ CREATE TABLE "registry_syncs" (
     "artifacts_stored" INTEGER NOT NULL DEFAULT 0,
     "bytes_stored" BIGINT NOT NULL DEFAULT 0,
     "scans_triggered" INTEGER NOT NULL DEFAULT 0,
+    "mirrors_removed" INTEGER NOT NULL DEFAULT 0,
     "skipped" INTEGER NOT NULL DEFAULT 0,
     "failed" INTEGER NOT NULL DEFAULT 0,
     "report" JSONB,

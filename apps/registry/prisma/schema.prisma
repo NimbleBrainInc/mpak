@@ -227,6 +227,10 @@ model RegistrySync {
   artifactsStored Int       @default(0) @map("artifacts_stored")
   bytesStored     BigInt    @default(0) @map("bytes_stored")
   scansTriggered  Int       @default(0) @map("scans_triggered")
+  // Destructive, so it is recorded rather than only logged: this is the count
+  // of mirrors actually removed, which differs from the number of takedowns
+  // seen whenever one was skipped for being claimed.
+  mirrorsRemoved  Int       @default(0) @map("mirrors_removed")
   skipped         Int       @default(0)
   failed          Int       @default(0)
 

@@ -28,7 +28,7 @@ import {
 import type { McpRegistryClient } from './client.js';
 import type { MappedArtifact, MappedServer, RejectReason } from './mapper.js';
 import { mapServer, mcpbPackages } from './mapper.js';
-import type { UpstreamServerEntry } from './types.js';
+import { officialMeta, type UpstreamServerEntry } from './types.js';
 
 export const INGEST_SOURCE = 'mcp-registry';
 
@@ -74,8 +74,6 @@ export interface IngestOptions {
   /** Only consider servers updated at or after this instant. */
   since?: Date;
   maxBundleBytes: number;
-  /** Bound on declared uncompressed size, so a zip bomb cannot OOM the run. */
-  maxUncompressedBytes?: number;
   /**
    * Furthest back a retryable failure may drag the watermark.
    *
@@ -342,6 +340,26 @@ async function ingestServer(
   const repo = new PackageRepository();
 
   const at = upstreamUpdatedAt(entry);
+
+  // Decided on the raw entry, before any interpretation. A takedown often
+  // arrives with the packages array emptied or invalidated, which makes
+  // mapServer reject the entry — and rejecting it below would mean the one
+  // event we most need to act on is the one we skip. Deleting needs no mapping:
+  // the upstream name is right there, and it is the same value mapServer would
+  // have produced.
+  if (officialMeta(entry).status === 'deleted') {
+    const removed = dryRun ? 0 : await repo.deleteMirror(entry.server.name);
+    if (removed > 0) {
+      logger.info('Removed mirror after upstream takedown', { server: entry.server.name });
+    }
+    return {
+      matched: true,
+      skipReason: 'upstream-deleted',
+      upstreamUpdatedAt: at,
+      mirrorsRemoved: removed,
+    };
+  }
+
   const mapped = mapServer(entry);
   if (!mapped.server) {
     return {
@@ -355,21 +373,6 @@ async function ingestServer(
   // Upstream marks a removed server 'deleted'. Incremental runs see these
   // because upstream flips include_deleted on whenever updated_since is set,
   // which is exactly how a takedown reaches us.
-  if (server.status === 'deleted') {
-    const removed = dryRun ? 0 : await deleteMirror(repo, server.upstreamName);
-    if (removed > 0) {
-      logger.info('Removed mirror after upstream takedown', {
-        server: server.upstreamName,
-      });
-    }
-    return {
-      matched: true,
-      skipReason: 'upstream-deleted',
-      upstreamUpdatedAt: at,
-      mirrorsRemoved: removed,
-    };
-  }
-
   const existing = await repo.findByUpstreamName(server.upstreamName);
 
   // Layer 3: a version we already hold, whose stored artifact digests match
@@ -389,8 +392,14 @@ async function ingestServer(
     scanability: string;
     manifest: Record<string, unknown>;
     serverType: string;
-    cleanup: () => Promise<void>;
   }> = [];
+
+  // Registered the instant a temp file exists, separately from `downloads`,
+  // which is only appended to once the artifact is fully stored. A storage
+  // write that throws used to skip registration entirely and leak that file —
+  // up to INGEST_MAX_BUNDLE_SIZE_MB of it — into an emptyDir the run keeps
+  // using, because the per-server failure is caught and the run continues.
+  const cleanups: Array<() => Promise<void>> = [];
 
   try {
     for (const artifact of server.artifacts) {
@@ -399,9 +408,9 @@ async function ingestServer(
           url: artifact.sourceUrl,
           expectedSha256: artifact.sha256,
           maxBytes: maxBundleBytes,
-          maxUncompressedBytes: options.maxUncompressedBytes,
           timeoutMs: options.downloadTimeoutMs,
         });
+        cleanups.push(bundle.cleanup);
 
         let storagePath = '';
         if (!dryRun) {
@@ -442,7 +451,6 @@ async function ingestServer(
           scanability: bundle.inspection.scanability,
           manifest: bundle.inspection.manifest,
           serverType: bundle.inspection.serverType,
-          cleanup: bundle.cleanup,
         });
       } catch (err) {
         // A per-artifact failure abandons the whole server rather than
@@ -608,7 +616,7 @@ async function ingestServer(
       scanability: primary.scanability,
     };
   } finally {
-    await Promise.all(downloads.map((d) => d.cleanup()));
+    await Promise.all(cleanups.map((fn) => fn()));
   }
 }
 
@@ -667,22 +675,4 @@ async function versionIsCurrent(
 
   const stored = new Set(version.artifacts.map((a) => a.digest.toLowerCase()));
   return server.artifacts.every((a) => stored.has(`sha256:${a.sha256}`));
-}
-
-/**
- * Remove a mirror because upstream took the server down.
- *
- * Deleting rather than flagging is deliberate. A flag has to be honoured by
- * every read path, and three review rounds running found one that did not —
- * search, the unclaimed listing, the download route. Removing the row instead
- * means a route added next year cannot serve a taken-down bundle, because
- * there is nothing to serve.
- *
- * The S3 object is intentionally left in place: it is content-addressed by
- * digest, nothing links to it once the rows are gone, and keeping it means a
- * takedown reversed upstream costs a re-download rather than being
- * unrecoverable.
- */
-async function deleteMirror(repo: PackageRepository, upstreamName: string): Promise<number> {
-  return repo.deleteMirror(upstreamName);
 }

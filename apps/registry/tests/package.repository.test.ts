@@ -185,3 +185,26 @@ describe('PackageRepository.getVersionsWithArtifactsAndScans', () => {
     expect(result.latestCompletedScan).toBeNull();
   });
 });
+
+describe('deleteMirror', () => {
+  it('scopes the delete by ownership, not just provenance', async () => {
+    // The CRITICAL case. Claiming a package writes claimedBy/claimedAt and
+    // never touches `source`, so a claimed mirror still matches on provenance
+    // forever. Without claimedBy: null, an mpak publisher who proved GitHub
+    // control of their entry loses the package, every version, every artifact
+    // and every scan result the next time whoever holds the *upstream* entry
+    // marks it deleted — and those need not be the same person.
+    const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const tx = { package: { deleteMany } } as unknown as TransactionClient;
+
+    await new PackageRepository().deleteMirror('io.github.acme/widget', tx);
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: {
+        upstreamName: 'io.github.acme/widget',
+        source: 'mcp-registry',
+        claimedBy: null,
+      },
+    });
+  });
+});

@@ -107,7 +107,7 @@ const LOCKFILES = new Set([
  * evidence of absence. Recording that distinction is the difference between a
  * trust signal and a number.
  */
-export function inspectBundle(bundlePath: string, maxUncompressedBytes?: number): BundleInspection {
+export function inspectBundle(bundlePath: string): BundleInspection {
   let zip: AdmZip;
   try {
     zip = new AdmZip(bundlePath);
@@ -123,15 +123,20 @@ export function inspectBundle(bundlePath: string, maxUncompressedBytes?: number)
     throw new NotABundleError('Archive has no manifest.json at its root');
   }
 
-  // The size cap on the download bounds *compressed* bytes; this bounds what
-  // decompressing would allocate. They are not the same number and an attacker
-  // picks the ratio: a 398KB archive declaring a 400MB manifest costs ~1.7GB of
-  // RSS on readAsText. That allocation is a Buffer, so it is external memory —
-  // --max-old-space-size does not bound it and only the cgroup limit does,
-  // which means an OOMKill of a job running with backoffLimit: 0.
+  // The download cap bounds *compressed* bytes; this bounds what decompressing
+  // the manifest would allocate, and an attacker picks the ratio. Measured: a
+  // 398KB archive declaring a 400MB manifest costs ~1.7GB RSS on readAsText,
+  // and being a Buffer that is external memory — --max-old-space-size does not
+  // bound it, only the cgroup limit does, i.e. an OOMKill of a job running with
+  // backoffLimit: 0. Upstream accepts publications from anyone.
   //
-  // adm-zip exposes the declared size from the entry header before it
-  // allocates, so the check has to happen here, not after.
+  // Only the manifest needs this. Nothing else here is ever decompressed: the
+  // entry walk below reads names and header sizes and never calls readAsText,
+  // so an archive-wide declared-size bound would guard an allocation that does
+  // not happen — and would reject legitimately large bundles as "not a bundle".
+  //
+  // adm-zip exposes the declared size from the entry header before allocating,
+  // so the check belongs here rather than after.
   if (manifestEntry.header.size > MAX_MANIFEST_BYTES) {
     throw new NotABundleError(
       `manifest.json declares ${manifestEntry.header.size} bytes uncompressed, over the ${MAX_MANIFEST_BYTES} cap`,
@@ -153,19 +158,6 @@ export function inspectBundle(bundlePath: string, maxUncompressedBytes?: number)
 
   const server = (manifest.server ?? {}) as Record<string, unknown>;
   const serverType = typeof server.type === 'string' ? server.type : 'unknown';
-
-  // Same reasoning as the manifest cap, applied to the archive as a whole. The
-  // entry list is walked below anyway; totalling declared sizes first costs
-  // nothing and is the only bound that matches what a decompress would cost.
-  if (maxUncompressedBytes !== undefined) {
-    let declared = 0;
-    for (const entry of entries) declared += entry.header.size;
-    if (declared > maxUncompressedBytes) {
-      throw new NotABundleError(
-        `Archive declares ${declared} bytes uncompressed, over the ${maxUncompressedBytes} budget`,
-      );
-    }
-  }
 
   let sourceFileCount = 0;
   let hasLockfile = false;
@@ -208,8 +200,6 @@ export async function downloadAndVerify(options: {
   url: string;
   expectedSha256: string;
   maxBytes: number;
-  /** Bound on total *declared uncompressed* size; see inspectBundle. */
-  maxUncompressedBytes?: number;
   timeoutMs?: number;
   userAgent?: string;
   fetchImpl?: typeof fetch;
@@ -272,7 +262,7 @@ export async function downloadAndVerify(options: {
       );
     }
 
-    const inspection = inspectBundle(tempPath, options.maxUncompressedBytes);
+    const inspection = inspectBundle(tempPath);
 
     return { tempPath, sha256, size: received, inspection, cleanup };
   } catch (err) {

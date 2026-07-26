@@ -73,6 +73,23 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
+/**
+ * How a finished run is recorded.
+ *
+ * Extracted because it is the decision this job exists to get right, and it
+ * lived untested inside main() for five review rounds — which is how the
+ * watermark freeze above survived that long.
+ */
+export function summarizeRun(result: Pick<IngestResult, 'failed' | 'watermark'>): {
+  status: 'completed' | 'failed';
+  watermark: Date;
+} {
+  return {
+    status: result.failed > 0 ? 'failed' : 'completed',
+    watermark: result.watermark,
+  };
+}
+
 const logger: IngestLogger = {
   info: (msg, fields) => console.log(JSON.stringify({ level: 'info', msg, ...fields })),
   warn: (msg, fields) => console.warn(JSON.stringify({ level: 'warn', msg, ...fields })),
@@ -92,8 +109,15 @@ async function resolveSince(full: boolean): Promise<Date | undefined> {
   if (full) return undefined;
 
   const prisma = getPrismaClient();
+  // Any run that recorded a watermark, not just a clean one. Status answers
+  // "was this run clean"; the watermark answers "how far did it get", and
+  // conflating them let a single recurring failure freeze the window forever —
+  // every subsequent run marked failed, every one re-reading an ever-widening
+  // span. A run that got somewhere is worth resuming from even if it also had
+  // failures, which is why runIngest floors the watermark rather than
+  // discarding it.
   const last = await prisma.registrySync.findFirst({
-    where: { source: INGEST_SOURCE, status: 'completed', watermark: { not: null } },
+    where: { source: INGEST_SOURCE, watermark: { not: null } },
     orderBy: { completedAt: 'desc' },
   });
 
@@ -146,7 +170,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       prisma,
       since,
       maxBundleBytes: config.ingest.maxBundleSizeMB * 1024 * 1024,
-      maxUncompressedBytes: config.ingest.memoryBudgetMB * 1024 * 1024,
       maxHoldbackMs: config.ingest.maxHoldbackHours * 60 * 60 * 1000,
       concurrency,
       downloadTimeoutMs: config.ingest.downloadTimeoutMs,
@@ -161,13 +184,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       await prisma.registrySync.update({
         where: { id: run.id },
         data: {
-          // A run with unclassified failures does not advance the window. Those
-          // are the servers the pipeline could not even categorise, so there is
-          // no per-server timestamp to hold back to — the only safe move is to
-          // leave the watermark where it was and let the next run re-read.
-          status: result.failed > 0 ? 'failed' : 'completed',
+          // Status is for the operator; the watermark is for the next run.
+          // Recorded independently — see resolveSince.
+          ...summarizeRun(result),
           completedAt: new Date(),
-          watermark: result.failed > 0 ? null : result.watermark,
           serversSeen: result.serversSeen,
           serversMatched: result.serversMatched,
           packagesCreated: result.packagesCreated,
@@ -175,6 +195,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           artifactsStored: result.artifactsStored,
           bytesStored: BigInt(result.bytesStored),
           scansTriggered: result.scansTriggered,
+          mirrorsRemoved: result.mirrorsRemoved,
           skipped: result.skipped,
           failed: result.failed,
           report: {

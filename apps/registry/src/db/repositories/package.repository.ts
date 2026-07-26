@@ -375,16 +375,24 @@ export class PackageRepository {
    * it correct by construction: a route added later cannot serve a taken-down
    * bundle, because the row is gone.
    *
-   * Scoped to `source` as well as `upstreamName` so this can only ever reach a
-   * mirror. A natively published package is unreachable from here even if it
-   * somehow carried a matching upstream name. Versions and artifacts cascade.
+   * Scoped three ways, and the third is the one that matters. `upstreamName`
+   * and `source` keep this off natively published packages. `claimedBy: null`
+   * keeps it off a mirror somebody has since *claimed* — claiming does not
+   * change `source`, so provenance alone would still match, and an mpak
+   * publisher who proved GitHub control of their entry would lose the package,
+   * every version, every artifact and every scan result the next time whoever
+   * holds the upstream entry marked it deleted. Those need not be the same
+   * person, and "publisher moved off upstream to mpak" is exactly when both
+   * happen at once. Ownership, not provenance, decides whether this may run.
+   *
+   * Versions and artifacts cascade.
    *
    * Returns how many packages were removed, for the run report.
    */
   async deleteMirror(upstreamName: string, tx?: TransactionClient): Promise<number> {
     const client = tx ?? getPrismaClient();
     const { count } = await client.package.deleteMany({
-      where: { upstreamName, source: 'mcp-registry' },
+      where: { upstreamName, source: 'mcp-registry', claimedBy: null },
     });
     return count;
   }

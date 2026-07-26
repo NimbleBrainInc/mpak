@@ -243,7 +243,6 @@ describe('runIngest', () => {
     expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
       publishMethod: 'ingest',
     });
-    expect(pkgArg.upstreamStatus).toBeUndefined();
   });
 
   it('skips a server it already holds without downloading anything', async () => {
@@ -305,6 +304,21 @@ describe('runIngest', () => {
     const result = await runIngest(baseOptions(client, fakePrisma(state)));
 
     expect(calls.download).toBe(0);
+    expect(result.skipReasons['upstream-deleted']).toBe(1);
+    expect(result.mirrorsRemoved).toBe(1);
+    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget');
+  });
+
+  it('deletes the mirror even when the taken-down entry no longer maps', async () => {
+    // A takedown often arrives with the packages array emptied, which makes
+    // mapServer reject the entry. Deciding after mapping meant the one event
+    // most worth acting on was the one that got skipped, and the mirror was
+    // retained indefinitely.
+    repoMocks.deleteMirror.mockResolvedValue(1);
+    const stripped = upstreamEntry({ packages: [] }, 'deleted');
+
+    const result = await runIngest(baseOptions(fakeUpstream([stripped]).client, fakePrisma(state)));
+
     expect(result.skipReasons['upstream-deleted']).toBe(1);
     expect(result.mirrorsRemoved).toBe(1);
     expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget');

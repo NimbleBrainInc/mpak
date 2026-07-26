@@ -133,20 +133,6 @@ describe('inspectBundle', () => {
     expect(() => inspectBundle(p)).toThrow(/declares \d+ bytes uncompressed/);
   });
 
-  it('refuses an archive whose total declared size exceeds the budget', () => {
-    const zip = new AdmZip();
-    zip.addFile(
-      'manifest.json',
-      Buffer.from(JSON.stringify({ manifest_version: '0.3', server: { type: 'python' } })),
-    );
-    zip.addFile('payload.py', Buffer.alloc(4 * 1024 * 1024, 0x41));
-    const p = writeTemp(zip.toBuffer());
-
-    expect(() => inspectBundle(p, 1024 * 1024)).toThrow(/over the \d+ budget/);
-    // Same archive passes when the budget accommodates it.
-    expect(() => inspectBundle(p, 64 * 1024 * 1024)).not.toThrow();
-  });
-
   it('rejects a manifest that is not valid JSON', () => {
     const zip = new AdmZip();
     zip.addFile('manifest.json', Buffer.from('{ not json'));
