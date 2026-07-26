@@ -57,6 +57,11 @@ export interface ComposerInput {
    */
   pkg: Pick<DbPackage, 'name' | 'latestVersion' | 'totalDownloads'> & {
     githubRepo?: string | null;
+    /**
+     * Canonical upstream identity for an ingested package. When present it is
+     * the server's name, full stop — see {@link buildDetail}.
+     */
+    upstreamName?: string | null;
   };
   /**
    * The version row. `manifest` is the canonical authoring surface;
@@ -120,7 +125,15 @@ function buildDetail(input: ComposerInput): Record<string, unknown> {
   const manifestMeta = (manifest._meta as Record<string, unknown> | undefined) ?? null;
 
   const description = truncate(stringField(manifest, 'description') ?? input.pkg.name, 100);
-  const reverseDnsName = resolveReverseDnsName(input.pkg.name, manifestMeta);
+  // An ingested server keeps the name it is published under upstream. The
+  // mechanical `dev.mpak.<scope>/<name>` rule is for packages that originate
+  // here; applying it to a mirrored server would republish, say,
+  // `com.blackduck/mcp-server` as `dev.mpak.blackduck/mcp-server` — a second
+  // canonical identity for one server, which is the fork the whole subregistry
+  // model exists to avoid. Consumers are supposed to be able to join our record
+  // to upstream's on this field.
+  const reverseDnsName =
+    input.pkg.upstreamName ?? resolveReverseDnsName(input.pkg.name, manifestMeta);
   const display = stringField(manifest, 'display_name');
   // Upstream `Title` caps at 100 chars; truncate so a long display_name
   // (or a long npm scope/name when it falls back) doesn't reject the

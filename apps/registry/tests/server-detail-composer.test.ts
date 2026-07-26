@@ -242,4 +242,20 @@ describe('composeServerDetail', () => {
       },
     ]);
   });
+
+  it('publishes an ingested server under its upstream name, not a derived one', () => {
+    // Republishing `com.blackduck/mcp-server` as `dev.mpak.blackduck/mcp-server`
+    // would mint a second canonical identity for one server. Consumers join our
+    // record to upstream's on this field, so the mechanical rule must not apply
+    // to a package we mirrored rather than minted.
+    const detail = composeServerDetail(
+      input({ pkg: { upstreamName: 'com.blackduck/mcp-server' } }),
+    );
+    expect(detail?.name).toBe('com.blackduck/mcp-server');
+  });
+
+  it('still derives a name for packages that originate here', () => {
+    const detail = composeServerDetail(input({ pkg: { upstreamName: null } }));
+    expect(detail?.name).toBe('ai.nimblebrain/echo');
+  });
 });
