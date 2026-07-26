@@ -47,6 +47,14 @@ model Package {
   // here is what lets a nightly sync re-find its own rows, and keeps mpak a
   // faithful subregistry rather than a renaming fork.
   upstreamName   String?          @unique @map("upstream_name") @db.VarChar(255)
+  // Upstream's lifecycle state for this server, and when upstream last changed
+  // it. Package-level rather than per-version because "should mpak serve this"
+  // is a decision about the package, and the read filter has to be expressible
+  // as a plain column predicate — a relation filter cannot reference
+  // `latestVersion`, and `some(version deleted)` would hide a package forever
+  // once any historical version had been taken down.
+  upstreamStatus    String?       @map("upstream_status") @db.VarChar(20) // 'active' | 'deprecated' | 'deleted'
+  upstreamUpdatedAt DateTime?     @map("upstream_updated_at") @db.Timestamp(6)
   displayName    String?          @map("display_name") @db.VarChar(255)
   description    String?
   authorName     String?          @map("author_name") @db.VarChar(255)
@@ -79,6 +87,8 @@ model Package {
   versions       PackageVersion[]
 
   @@index([name], map: "idx_packages_name")
+  // Partial: takedowns are rare, and every read filters on NOT deleted.
+  @@index([upstreamStatus], map: "idx_packages_upstream_deleted")
   @@index([createdBy], map: "idx_packages_created_by")
   @@index([claimedBy], map: "idx_packages_claimed_by")
   @@index([serverType], map: "idx_packages_server_type")
@@ -112,12 +122,6 @@ model PackageVersion {
 
   // MCP Registry server.json (discovery metadata for this version)
   serverJson       Json?     @map("server_json")
-
-  // Upstream state for ingested versions. `upstreamStatus` mirrors the official
-  // registry's own status so a takedown there propagates here on the next sync;
-  // `upstreamUpdatedAt` is the per-version watermark input.
-  upstreamStatus    String?   @map("upstream_status") @db.VarChar(20) // 'active' | 'deprecated' | 'deleted'
-  upstreamUpdatedAt DateTime? @map("upstream_updated_at") @db.Timestamp(6)
 
   // Provenance - hybrid approach: indexed columns + extensible JSON
   publishMethod         String?   @map("publish_method") @db.VarChar(20) // 'oidc' | 'upload' | 'cli' | 'ingest'
@@ -185,7 +189,6 @@ model SecurityScan {
   jobName         String?   @map("job_name") @db.VarChar(255) // K8s Job name for debugging
   startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamp(6)
   completedAt     DateTime? @map("completed_at") @db.Timestamp(6)
-
 
   // MTF Certification fields (calculated from scan report)
   certificationLevel  Int?      @map("certification_level") // 0=None, 1=Basic, 2=Standard, 3=Verified, 4=Attested

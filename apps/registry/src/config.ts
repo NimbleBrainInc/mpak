@@ -86,6 +86,24 @@ export const config = {
 };
 
 // Validate required config
+/**
+ * Refuse a concurrency/size pair that would not fit the memory budget.
+ *
+ * Split out and parameterised because the ingest job resolves concurrency from
+ * a CLI flag *after* config is read — validating the config value alone would
+ * pass while the run used something else entirely.
+ */
+export function validateIngestMemory(concurrency: number): string | null {
+  const peakBundleMB = concurrency * config.ingest.maxBundleSizeMB;
+  if (peakBundleMB <= config.ingest.memoryBudgetMB) return null;
+  return (
+    `INGEST concurrency (${concurrency}) × INGEST_MAX_BUNDLE_SIZE_MB ` +
+    `(${config.ingest.maxBundleSizeMB}) = ${peakBundleMB}MB of concurrent archive buffers, ` +
+    `over INGEST_MEMORY_BUDGET_MB (${config.ingest.memoryBudgetMB}). Lower concurrency or ` +
+    `the size cap, or raise the budget and the CronJob's memory limit together.`
+  );
+}
+
 export function validateConfig() {
   const errors: string[] = [];
 
@@ -105,16 +123,9 @@ export function validateConfig() {
   // streaming read), so peak heap scales with concurrency × maxBundleSizeMB.
   // Left unchecked the three knobs drift apart silently and the first oversized
   // batch OOMKills the run — and the CronJob sets backoffLimit: 0, so that
-  // costs the entire night. Failing at startup instead surfaces it on deploy.
-  const peakBundleMB = config.ingest.concurrency * config.ingest.maxBundleSizeMB;
-  if (peakBundleMB > config.ingest.memoryBudgetMB) {
-    errors.push(
-      `INGEST_CONCURRENCY (${config.ingest.concurrency}) × INGEST_MAX_BUNDLE_SIZE_MB ` +
-        `(${config.ingest.maxBundleSizeMB}) = ${peakBundleMB}MB of concurrent archive buffers, ` +
-        `over INGEST_MEMORY_BUDGET_MB (${config.ingest.memoryBudgetMB}). Lower concurrency or ` +
-        `the size cap, or raise the budget and the CronJob's memory limit together.`,
-    );
-  }
+  // costs the entire night. The job re-checks against its resolved concurrency.
+  const memoryError = validateIngestMemory(config.ingest.concurrency);
+  if (memoryError) errors.push(memoryError);
 
   if (!config.clerk.secretKey) {
     console.warn('CLERK_SECRET_KEY is not set. Auth endpoints will not work.');

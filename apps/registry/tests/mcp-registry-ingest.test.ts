@@ -115,6 +115,7 @@ function fakePrisma(state: FakeState) {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     package: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
       findUnique: vi.fn(async ({ where }: never) => {
         const w = where as { upstreamName?: string };
         if (!w.upstreamName) return null;
@@ -124,7 +125,11 @@ function fakePrisma(state: FakeState) {
         return null;
       }),
     },
-    securityScan: { create: vi.fn(async () => ({})) },
+    securityScan: {
+      create: vi.fn(async () => ({})),
+      // No prior scan by default, so the scan-trigger gate is open.
+      findFirst: vi.fn(async () => null),
+    },
   } as never;
 }
 
@@ -155,7 +160,7 @@ function fakeStorage() {
 
 const repoMocks = vi.hoisted(() => ({
   findByUpstreamName: vi.fn(),
-  findByName: vi.fn(),
+  findByNameIncludingTakenDown: vi.fn(),
   upsertPackage: vi.fn(),
   upsertVersion: vi.fn(),
   upsertArtifact: vi.fn(),
@@ -165,7 +170,7 @@ const repoMocks = vi.hoisted(() => ({
 vi.mock('../src/db/repositories/package.repository.js', () => ({
   PackageRepository: class {
     findByUpstreamName = repoMocks.findByUpstreamName;
-    findByName = repoMocks.findByName;
+    findByNameIncludingTakenDown = repoMocks.findByNameIncludingTakenDown;
     upsertPackage = repoMocks.upsertPackage;
     upsertVersion = repoMocks.upsertVersion;
     upsertArtifact = repoMocks.upsertArtifact;
@@ -198,7 +203,7 @@ describe('runIngest', () => {
     state = { packages: new Map(), versions: new Map() };
 
     repoMocks.findByUpstreamName.mockResolvedValue(null);
-    repoMocks.findByName.mockResolvedValue(null);
+    repoMocks.findByNameIncludingTakenDown.mockResolvedValue(null);
     repoMocks.upsertPackage.mockResolvedValue({
       package: { id: 'pkg-1', name: '@acme/widget' },
       created: true,
@@ -234,8 +239,11 @@ describe('runIngest', () => {
 
     expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
       publishMethod: 'ingest',
-      upstreamStatus: 'active',
     });
+    // Upstream lifecycle state lives on the package: "should mpak serve this"
+    // is a package-level decision, and the read filter has to be a plain
+    // column predicate.
+    expect(pkgArg).toMatchObject({ upstreamStatus: 'active' });
   });
 
   it('skips a server it already holds without downloading anything', async () => {
@@ -301,8 +309,8 @@ describe('runIngest', () => {
     expect(calls.download).toBe(0);
     expect(result.skipReasons['upstream-deleted']).toBe(1);
     expect(
-      (prisma as unknown as { packageVersion: { updateMany: ReturnType<typeof vi.fn> } })
-        .packageVersion.updateMany,
+      (prisma as unknown as { package: { updateMany: ReturnType<typeof vi.fn> } }).package
+        .updateMany,
     ).toHaveBeenCalled();
   });
 
@@ -310,7 +318,7 @@ describe('runIngest', () => {
     // Both the short and the qualified handle are taken by rows that are not
     // this upstream server. Claiming one would silently hijack someone's
     // package, so the server is skipped and counted instead.
-    repoMocks.findByName.mockResolvedValue({
+    repoMocks.findByNameIncludingTakenDown.mockResolvedValue({
       id: 'other',
       name: '@acme/widget',
       upstreamName: null,
@@ -437,8 +445,8 @@ describe('runIngest', () => {
     // bundle downloads. Without the in-transaction re-check, upsertPackage's
     // update clause would rewrite their display name, description, author, and
     // repo with third-party content.
-    repoMocks.findByName.mockResolvedValueOnce(null); // pre-download check: free
-    repoMocks.findByName.mockResolvedValue({
+    repoMocks.findByNameIncludingTakenDown.mockResolvedValueOnce(null); // pre-download check: free
+    repoMocks.findByNameIncludingTakenDown.mockResolvedValue({
       id: 'other',
       name: '@acme/widget',
       upstreamName: null,

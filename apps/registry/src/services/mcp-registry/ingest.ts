@@ -74,6 +74,8 @@ export interface IngestOptions {
   /** Only consider servers updated at or after this instant. */
   since?: Date;
   maxBundleBytes: number;
+  /** Per-artifact download timeout. Wired from INGEST_DOWNLOAD_TIMEOUT_MS. */
+  downloadTimeoutMs?: number;
   /** Concurrent server pipelines. Downloads dominate, so this is network-bound. */
   concurrency: number;
   /** Map and verify without writing or storing anything. */
@@ -201,7 +203,10 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
       failures.push({ server: name, error: outcome.error });
       // A thrown error is always retryable: it is by definition a case the
       // pipeline did not classify, so assuming it is permanent would lose data.
-      holdWatermark(outcome.upstreamUpdatedAt ?? runStarted);
+      // An entry with no upstream timestamp cannot be held for individually —
+      // the watermark is already floored at runStarted — so the run is marked
+      // failed instead, which stops the job advancing anything at all.
+      holdWatermark(outcome.upstreamUpdatedAt);
     }
     if (outcome.packageCreated) counters.packagesCreated += 1;
     if (outcome.versionCreated) counters.versionsCreated += 1;
@@ -350,6 +355,7 @@ async function ingestServer(
           url: artifact.sourceUrl,
           expectedSha256: artifact.sha256,
           maxBytes: maxBundleBytes,
+          timeoutMs: options.downloadTimeoutMs,
         });
 
         let storagePath = '';
@@ -422,7 +428,10 @@ async function ingestServer(
         if (err instanceof BundleDownloadError) {
           return { matched: true, skipReason: 'download-failed', upstreamUpdatedAt: at };
         }
-        return { matched: true, skipReason: 'download-failed', upstreamUpdatedAt: at };
+        // Anything left is ours, not upstream's — a storage write that failed,
+        // most likely. Reporting that as "download-failed" would point the run
+        // report at the wrong system entirely.
+        throw err;
       }
     }
 
@@ -450,7 +459,7 @@ async function ingestServer(
         // provenance columns are creation-only, but everything a user actually
         // sees is not. Re-checking inside the transaction is what makes the
         // guard at resolveName mean anything.
-        const holder = await repo.findByName(name, tx);
+        const holder = await repo.findByNameIncludingTakenDown(name, tx);
         if (holder && holder.upstreamName !== server.upstreamName) {
           throw new NameConflictError(name);
         }
@@ -476,6 +485,11 @@ async function ingestServer(
             githubRepo: server.githubRepo,
             source: INGEST_SOURCE,
             upstreamName: server.upstreamName,
+            // Refreshed every sync, unlike source/upstreamName which are
+            // creation-only: a takedown or deprecation upstream is a
+            // metadata-only event that still has to land here.
+            upstreamStatus: server.status,
+            upstreamUpdatedAt: server.upstreamUpdatedAt,
           },
           tx,
         );
@@ -491,8 +505,6 @@ async function ingestServer(
             publishMethod: 'ingest',
             provenanceRepository: server.githubRepo,
             serverJson: entry.server,
-            upstreamStatus: server.status,
-            upstreamUpdatedAt: server.upstreamUpdatedAt,
           },
           tx,
         );
@@ -530,7 +542,11 @@ async function ingestServer(
 
     let scanTriggered = false;
 
-    if (options.scanEnabled && written.versionCreated) {
+    // Gated on there being no scan row, not on the version being new. The
+    // version commits before the scan is triggered, so a K8s blip here used to
+    // leave the bundle permanently unscanned: the next run sees the version as
+    // current, skips it as unchanged, and never reaches this line again.
+    if (options.scanEnabled && !(await hasScan(prisma, written.versionId))) {
       await triggerSecurityScan(prisma, {
         versionId: written.versionId,
         bundleStoragePath: primary.storagePath,
@@ -554,11 +570,24 @@ async function ingestServer(
   }
 }
 
-/** Split `@scope/name` into the parts storage keys are built from. */
+/**
+ * Split `@scope/name` into the parts storage keys are built from.
+ *
+ * Total on its actual input: names come from `resolveName`, which only ever
+ * returns `deriveNames` output, and that always emits a leading `@`.
+ */
 function splitName(name: string): { scope: string; packageName: string } {
   const m = /^@([^/]+)\/(.+)$/.exec(name);
-  if (!m) return { scope: 'unscoped', packageName: name };
-  return { scope: m[1] ?? 'unscoped', packageName: m[2] ?? name };
+  if (!m?.[1] || !m[2]) {
+    throw new Error(`Unscoped package name reached storage layout: ${name}`);
+  }
+  return { scope: m[1], packageName: m[2] };
+}
+
+/** Whether this version already has a scan row of any status. */
+async function hasScan(prisma: PrismaClient, versionId: string): Promise<boolean> {
+  const existing = await prisma.securityScan.findFirst({ where: { versionId } });
+  return existing !== null;
 }
 
 /**
@@ -572,7 +601,7 @@ function splitName(name: string): { scope: string; packageName: string } {
  */
 async function resolveName(repo: PackageRepository, server: MappedServer): Promise<string | null> {
   for (const candidate of [server.preferredName, server.qualifiedName]) {
-    const holder = await repo.findByName(candidate);
+    const holder = await repo.findByNameIncludingTakenDown(candidate);
     if (!holder || holder.upstreamName === server.upstreamName) return candidate;
   }
   return null;
@@ -610,11 +639,8 @@ async function markUpstreamStatus(
   server: MappedServer,
   status: string,
 ): Promise<void> {
-  const pkg = await prisma.package.findUnique({ where: { upstreamName: server.upstreamName } });
-  if (!pkg) return;
-
-  await prisma.packageVersion.updateMany({
-    where: { packageId: pkg.id, version: server.version },
+  await prisma.package.updateMany({
+    where: { upstreamName: server.upstreamName },
     data: { upstreamStatus: status, upstreamUpdatedAt: server.upstreamUpdatedAt },
   });
 }

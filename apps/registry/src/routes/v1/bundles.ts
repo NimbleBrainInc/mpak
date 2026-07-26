@@ -274,7 +274,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -359,7 +359,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -416,7 +416,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -492,7 +492,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -547,7 +547,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -613,7 +613,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { os: queryOs, arch: queryArch } = request.query;
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findServableByName(name);
+      const pkg = await packageRepo.findByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');

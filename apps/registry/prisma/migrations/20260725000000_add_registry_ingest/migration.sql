@@ -5,17 +5,17 @@ ALTER TABLE "packages" ADD COLUMN "upstream_name" VARCHAR(255);
 
 CREATE UNIQUE INDEX "packages_upstream_name_key" ON "packages"("upstream_name");
 
--- Upstream state per version, so a takedown upstream stops the package being
--- served on the next sync (see the ingested-package read filters).
-ALTER TABLE "package_versions" ADD COLUMN "upstream_status" VARCHAR(20);
-ALTER TABLE "package_versions" ADD COLUMN "upstream_updated_at" TIMESTAMP(6);
+-- Upstream lifecycle state, so a takedown upstream stops the package being
+-- served on the next sync. Package-level: "should mpak serve this" is a
+-- decision about the package, and it has to be a plain column predicate so
+-- every read path gets it without a correlated subquery.
+ALTER TABLE "packages" ADD COLUMN "upstream_status" VARCHAR(20);
+ALTER TABLE "packages" ADD COLUMN "upstream_updated_at" TIMESTAMP(6);
 
--- Partial index over just the taken-down rows. The read paths filter on
--- `upstream_status IS DISTINCT FROM 'deleted'`, and takedowns are rare, so
--- indexing the whole low-cardinality column would carry a write cost for a
--- selectivity Postgres can get from a handful of rows.
-CREATE INDEX "idx_package_versions_upstream_deleted"
-    ON "package_versions"("package_id")
+-- Partial: takedowns are rare, so indexing only the rows the read filter
+-- excludes keeps the write cost off every other publish.
+CREATE INDEX "idx_packages_upstream_deleted"
+    ON "packages"("id")
     WHERE "upstream_status" = 'deleted';
 
 -- One row per ingest run. Holds the incremental watermark transactionally with

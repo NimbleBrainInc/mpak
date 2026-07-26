@@ -153,7 +153,9 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         // PRE-CHECK: Verify ownership and version availability BEFORE uploading
-        const existingPackage = await packageRepo.findByName(packageName);
+        // Name-is-taken check, not a serve: a taken-down package still occupies
+        // its name and must not be silently republished over.
+        const existingPackage = await packageRepo.findByNameIncludingTakenDown(packageName);
 
         if (existingPackage) {
           // Check if package has been claimed - only the claimer can publish new versions
@@ -961,6 +963,8 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
 
   // GET /app/packages/@{scope}/{package}/claim-status - Check if package can be claimed
   // Optional authentication - will use user's GitHub username if authenticated
+  // Claim flow: about who owns a name, not about serving content, so both of
+  // these use the unfiltered lookup below.
   fastify.get('/@:scope/:package/claim-status', {
     schema: {
       tags: ['packages'],
@@ -988,7 +992,7 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
         // Not authenticated - that's okay for this endpoint
       }
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findByNameIncludingTakenDown(name);
 
       if (!pkg) {
         throw new NotFoundError('Package not found');
@@ -1061,7 +1065,7 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
       const { github_repo } = request.body as { github_repo?: string };
 
       // Get package
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findByNameIncludingTakenDown(name);
 
       if (!pkg) {
         throw new NotFoundError('Package not found');

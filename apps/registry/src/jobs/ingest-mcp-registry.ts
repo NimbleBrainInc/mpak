@@ -8,7 +8,7 @@
  *   npm run ingest:mcp-registry -- --dry-run --limit 50
  */
 
-import { config } from '../config.js';
+import { config, validateConfig, validateIngestMemory } from '../config.js';
 import { disconnectDatabase, getPrismaClient } from '../db/client.js';
 import { createStorageService } from '../plugins/storage.js';
 import { McpRegistryClient } from '../services/mcp-registry/client.js';
@@ -103,6 +103,21 @@ async function resolveSince(full: boolean): Promise<Date | undefined> {
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const args = parseArgs(argv);
+
+  // The job is a separate entrypoint from the API server, so it does not
+  // inherit index.ts's startup validation. Without this the memory budget the
+  // chart advertises would never be enforced anywhere the ingest actually runs.
+  validateConfig();
+
+  // Re-checked against the *resolved* concurrency: --concurrency overrides the
+  // config value after validateConfig has already passed on it.
+  const concurrency = args.concurrency ?? config.ingest.concurrency;
+  const memoryError = validateIngestMemory(concurrency);
+  if (memoryError) {
+    logger.error('Refusing to start', { err: memoryError });
+    return 1;
+  }
+
   const prisma = getPrismaClient();
 
   const since = await resolveSince(args.full);
@@ -131,7 +146,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       prisma,
       since,
       maxBundleBytes: config.ingest.maxBundleSizeMB * 1024 * 1024,
-      concurrency: args.concurrency ?? config.ingest.concurrency,
+      concurrency,
+      downloadTimeoutMs: config.ingest.downloadTimeoutMs,
       dryRun: args.dryRun,
       limit: args.limit,
       maxBundles: args.maxBundles,

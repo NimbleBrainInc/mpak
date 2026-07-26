@@ -92,6 +92,9 @@ export interface CreatePackageData {
   source?: string;
   /** Canonical upstream identity. Creation-only; it is the row's identity. */
   upstreamName?: string;
+  /** Upstream lifecycle state; refreshed on every sync so takedowns land. */
+  upstreamStatus?: string;
+  upstreamUpdatedAt?: Date;
 }
 
 export interface CreatePackageVersionData {
@@ -110,9 +113,6 @@ export interface CreatePackageVersionData {
   provenanceSha?: string;
   provenance?: unknown;
   serverJson?: unknown;
-  /** Upstream lifecycle state, so a takedown there propagates on next sync. */
-  upstreamStatus?: string;
-  upstreamUpdatedAt?: Date;
 }
 
 export interface CreateArtifactData {
@@ -132,20 +132,18 @@ export interface PackageSearchResult {
 }
 
 /**
- * Excludes packages whose upstream took them down.
+ * Excludes packages upstream took down.
  *
- * `upstreamStatus` is only ever set on ingested versions, so this is a no-op
- * for anything published to mpak directly (the column is null there, and null
- * does not match). Ingest holds exactly one version per upstream server — the
- * latest — so "some version is deleted" and "the version we serve is deleted"
- * are the same statement here.
+ * Null passes: `upstreamStatus` is only ever set on ingested packages, so
+ * anything published to mpak directly is unaffected. Written as an explicit OR
+ * because `not: 'deleted'` compiles to `<> 'deleted'`, which is null-unsafe in
+ * SQL and would silently drop every natively published package.
  *
- * Without this the field would be decoration: a malware takedown upstream would
- * leave the bundle listed, downloadable, and MTF-badged on mpak indefinitely,
- * which is the opposite of what a security-scanning registry is for.
+ * Without this a malware takedown upstream would leave the bundle listed,
+ * downloadable, and MTF-badged on mpak indefinitely.
  */
-const NOT_TAKEN_DOWN: Prisma.PackageWhereInput = {
-  NOT: { versions: { some: { upstreamStatus: 'deleted' } } },
+const SERVABLE: Prisma.PackageWhereInput = {
+  OR: [{ upstreamStatus: null }, { upstreamStatus: { not: 'deleted' } }],
 };
 
 export class PackageRepository {
@@ -162,24 +160,38 @@ export class PackageRepository {
   /**
    * Find package by name
    */
+  /**
+   * Name lookup for serving. Excludes packages upstream took down.
+   *
+   * This is the default deliberately. Three review rounds running, a read path
+   * was added or missed and silently served content it should not have,
+   * because the filtered lookup was the one you had to remember. Now the plain
+   * name is the safe one and seeing every row requires asking for it out loud
+   * via {@link findByNameIncludingTakenDown} — so the failure mode of
+   * forgetting is over-filtering, which surfaces as a visible 404 rather than
+   * as a takedown that quietly did nothing.
+   */
   async findByName(name: string, tx?: TransactionClient): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findFirst({ where: { name, ...SERVABLE } });
+  }
+
+  /**
+   * Unfiltered name lookup, including packages upstream took down.
+   *
+   * Only for paths deciding whether a name is *taken*, never for serving: the
+   * publish path detecting an existing package, the claim flow, and ingest's
+   * conflict check. Hiding a taken-down row from those would let a second
+   * package quietly claim a name that is still occupied.
+   */
+  async findByNameIncludingTakenDown(
+    name: string,
+    tx?: TransactionClient,
+  ): Promise<Package | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findUnique({
       where: { name },
     });
-  }
-
-  /**
-   * Name lookup for public read paths: excludes packages upstream took down.
-   *
-   * Deliberately separate from `findByName`, which must keep seeing every row —
-   * the publish path uses it to detect an existing package, and ingest uses it
-   * to detect a name conflict. Hiding a taken-down row from those would let a
-   * second package quietly claim the same name.
-   */
-  async findServableByName(name: string, tx?: TransactionClient): Promise<Package | null> {
-    const client = tx ?? getPrismaClient();
-    return client.package.findFirst({ where: { name, ...NOT_TAKEN_DOWN } });
   }
 
   /**
@@ -191,7 +203,7 @@ export class PackageRepository {
   ): Promise<PackageWithRelations | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findFirst({
-      where: { name, ...NOT_TAKEN_DOWN },
+      where: { name, ...SERVABLE },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },
@@ -210,7 +222,7 @@ export class PackageRepository {
   ): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
-    const where: Prisma.PackageWhereInput = { ...NOT_TAKEN_DOWN };
+    const where: Prisma.PackageWhereInput = { ...SERVABLE };
 
     if (filters.query) {
       where.OR = [
@@ -360,6 +372,12 @@ export class PackageRepository {
       iconUrl: data.iconUrl,
       serverType: data.serverType,
       githubRepo: data.githubRepo,
+      // Refreshed every sync — a takedown is a metadata-only event, so it has
+      // to land on a package whose bytes did not change.
+      ...(data.upstreamStatus !== undefined ? { upstreamStatus: data.upstreamStatus } : {}),
+      ...(data.upstreamUpdatedAt !== undefined
+        ? { upstreamUpdatedAt: data.upstreamUpdatedAt }
+        : {}),
     };
 
     const pkg = await client.package.upsert({
@@ -449,7 +467,7 @@ export class PackageRepository {
   ): Promise<PackageForServerLookup | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findFirst({
-      where: { name, ...NOT_TAKEN_DOWN },
+      where: { name, ...SERVABLE },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },
@@ -483,7 +501,8 @@ export class PackageRepository {
   ): Promise<{ packages: PackageForServerLookup[]; total: number }> {
     const client = tx ?? getPrismaClient();
 
-    const conditions: Prisma.PackageWhereInput[] = [];
+    // Servable-only, like every other read path.
+    const conditions: Prisma.PackageWhereInput[] = [SERVABLE];
     if (filters.search) {
       conditions.push({
         OR: [
@@ -684,16 +703,10 @@ export class PackageRepository {
         provenanceSha: data.provenanceSha,
         provenance: data.provenance as Prisma.InputJsonValue,
         serverJson: data.serverJson as Prisma.InputJsonValue,
-        upstreamStatus: data.upstreamStatus,
-        upstreamUpdatedAt: data.upstreamUpdatedAt,
       },
       update: {
         manifest: data.manifest as Prisma.InputJsonValue,
         prerelease: data.prerelease ?? false,
-        // Refreshed every sync: upstream status is the whole point of
-        // re-reading a version we already have.
-        ...(data.upstreamStatus ? { upstreamStatus: data.upstreamStatus } : {}),
-        ...(data.upstreamUpdatedAt ? { upstreamUpdatedAt: data.upstreamUpdatedAt } : {}),
         ...(data.publishMethod ? { publishMethod: data.publishMethod } : {}),
         ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
         ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),
