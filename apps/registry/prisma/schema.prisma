@@ -79,7 +79,6 @@ model Package {
   versions       PackageVersion[]
 
   @@index([name], map: "idx_packages_name")
-  @@index([source], map: "idx_packages_source")
   @@index([createdBy], map: "idx_packages_created_by")
   @@index([claimedBy], map: "idx_packages_claimed_by")
   @@index([serverType], map: "idx_packages_server_type")
@@ -155,13 +154,7 @@ model Artifact {
   sizeBytes       BigInt    @map("size_bytes")
 
   // URLs
-  //
-  // `storagePath` is null for a pointer-only artifact: catalogued and
-  // addressable upstream, but not mirrored. That is the state for bundles we
-  // decline to copy (over `INGEST_MAX_BUNDLE_SIZE_MB`), and it is precisely the
-  // set the scanner cannot reach — the scan pod reads S3, never the network.
-  // A null here therefore means "listed, unscannable", not "pending".
-  storagePath     String?   @map("storage_path") @db.VarChar(512) // Our S3 key
+  storagePath     String    @map("storage_path") @db.VarChar(512) // Our S3 key
   sourceUrl       String    @map("source_url") @db.VarChar(512)   // Original GitHub URL
 
   // Download tracking (per-artifact)
@@ -193,18 +186,6 @@ model SecurityScan {
   startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamp(6)
   completedAt     DateTime? @map("completed_at") @db.Timestamp(6)
 
-  // How much of the bundle the scanner could actually see.
-  //   'full'    — source present; every applicable control ran
-  //   'partial' — some controls skipped for want of an input (no lockfile, etc.)
-  //   'opaque'  — no analyzable source (a compiled `server.type: binary`
-  //               bundle); the source-level controls cannot run at all
-  //
-  // This is deliberately separate from `certificationLevel`. A level of 1 on an
-  // opaque bundle means "we could not look inside", which is a different claim
-  // from a level of 1 on a source bundle that we read and found wanting.
-  // Collapsing the two would let an unreadable blob borrow the credibility of a
-  // real scan.
-  scanability         String?   @db.VarChar(20)
 
   // MTF Certification fields (calculated from scan report)
   certificationLevel  Int?      @map("certification_level") // 0=None, 1=Basic, 2=Standard, 3=Verified, 4=Attested

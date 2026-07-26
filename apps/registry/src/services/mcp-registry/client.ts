@@ -86,10 +86,18 @@ export class McpRegistryClient {
       }
 
       const next = body.metadata?.nextCursor;
-      // Upstream signals the end with an absent or empty cursor. Treating a
-      // repeat of the current cursor as terminal too, so a server-side bug
-      // cannot spin this loop forever.
-      cursor = next && next !== cursor ? next : undefined;
+      // A cursor that repeats itself is upstream malfunctioning, not the end of
+      // the catalog. Ending the walk quietly would truncate the run — and the
+      // caller would then advance its watermark past everything it never read,
+      // turning a transient upstream bug into permanently skipped servers.
+      // Throwing keeps the run failed and the watermark where it was.
+      if (next && next === cursor) {
+        throw new RegistryRequestError(
+          `Upstream repeated pagination cursor ${JSON.stringify(next)}; refusing to continue`,
+        );
+      }
+      // Absent or empty is the real end-of-catalog signal.
+      cursor = next || undefined;
       pages += 1;
     } while (cursor && pages < this.maxPages);
 

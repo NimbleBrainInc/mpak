@@ -122,8 +122,7 @@ export interface CreateArtifactData {
   mimeType?: string;
   digest: string;
   sizeBytes: bigint;
-  /** Null for a pointer-only artifact: catalogued upstream, never mirrored. */
-  storagePath: string | null;
+  storagePath: string;
   sourceUrl: string;
 }
 
@@ -131,6 +130,23 @@ export interface PackageSearchResult {
   packages: Package[];
   total: number;
 }
+
+/**
+ * Excludes packages whose upstream took them down.
+ *
+ * `upstreamStatus` is only ever set on ingested versions, so this is a no-op
+ * for anything published to mpak directly (the column is null there, and null
+ * does not match). Ingest holds exactly one version per upstream server — the
+ * latest — so "some version is deleted" and "the version we serve is deleted"
+ * are the same statement here.
+ *
+ * Without this the field would be decoration: a malware takedown upstream would
+ * leave the bundle listed, downloadable, and MTF-badged on mpak indefinitely,
+ * which is the opposite of what a security-scanning registry is for.
+ */
+const NOT_TAKEN_DOWN: Prisma.PackageWhereInput = {
+  NOT: { versions: { some: { upstreamStatus: 'deleted' } } },
+};
 
 export class PackageRepository {
   /**
@@ -154,6 +170,19 @@ export class PackageRepository {
   }
 
   /**
+   * Name lookup for public read paths: excludes packages upstream took down.
+   *
+   * Deliberately separate from `findByName`, which must keep seeing every row —
+   * the publish path uses it to detect an existing package, and ingest uses it
+   * to detect a name conflict. Hiding a taken-down row from those would let a
+   * second package quietly claim the same name.
+   */
+  async findServableByName(name: string, tx?: TransactionClient): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findFirst({ where: { name, ...NOT_TAKEN_DOWN } });
+  }
+
+  /**
    * Find package with all relations
    */
   async findByNameWithRelations(
@@ -161,8 +190,8 @@ export class PackageRepository {
     tx?: TransactionClient,
   ): Promise<PackageWithRelations | null> {
     const client = tx ?? getPrismaClient();
-    return client.package.findUnique({
-      where: { name },
+    return client.package.findFirst({
+      where: { name, ...NOT_TAKEN_DOWN },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },
@@ -181,7 +210,7 @@ export class PackageRepository {
   ): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
-    const where: Prisma.PackageWhereInput = {};
+    const where: Prisma.PackageWhereInput = { ...NOT_TAKEN_DOWN };
 
     if (filters.query) {
       where.OR = [
@@ -419,8 +448,8 @@ export class PackageRepository {
     tx?: TransactionClient,
   ): Promise<PackageForServerLookup | null> {
     const client = tx ?? getPrismaClient();
-    return client.package.findUnique({
-      where: { name },
+    return client.package.findFirst({
+      where: { name, ...NOT_TAKEN_DOWN },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },

@@ -4,20 +4,19 @@ ALTER TABLE "packages" ADD COLUMN "source" VARCHAR(20) NOT NULL DEFAULT 'mpak';
 ALTER TABLE "packages" ADD COLUMN "upstream_name" VARCHAR(255);
 
 CREATE UNIQUE INDEX "packages_upstream_name_key" ON "packages"("upstream_name");
-CREATE INDEX "idx_packages_source" ON "packages"("source");
 
--- Upstream state per version, so a takedown upstream propagates on next sync.
+-- Upstream state per version, so a takedown upstream stops the package being
+-- served on the next sync (see the ingested-package read filters).
 ALTER TABLE "package_versions" ADD COLUMN "upstream_status" VARCHAR(20);
 ALTER TABLE "package_versions" ADD COLUMN "upstream_updated_at" TIMESTAMP(6);
 
--- A pointer-only artifact is catalogued but not mirrored, and therefore not
--- scannable (the scan pod reads S3, never the network).
-ALTER TABLE "artifacts" ALTER COLUMN "storage_path" DROP NOT NULL;
-
--- How much of the bundle the scanner could actually see. Kept separate from
--- certification_level so "we could not look inside" is not reported as a
--- low score earned by inspection.
-ALTER TABLE "security_scans" ADD COLUMN "scanability" VARCHAR(20);
+-- Partial index over just the taken-down rows. The read paths filter on
+-- `upstream_status IS DISTINCT FROM 'deleted'`, and takedowns are rare, so
+-- indexing the whole low-cardinality column would carry a write cost for a
+-- selectivity Postgres can get from a handful of rows.
+CREATE INDEX "idx_package_versions_upstream_deleted"
+    ON "package_versions"("package_id")
+    WHERE "upstream_status" = 'deleted';
 
 -- One row per ingest run. Holds the incremental watermark transactionally with
 -- the rows the run wrote.

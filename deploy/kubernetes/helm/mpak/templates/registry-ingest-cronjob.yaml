@@ -82,6 +82,8 @@ spec:
                   value: {{ .Values.ingest.maxBundleSizeMB | quote }}
                 - name: INGEST_CONCURRENCY
                   value: {{ .Values.ingest.concurrency | quote }}
+                - name: INGEST_MEMORY_BUDGET_MB
+                  value: {{ .Values.ingest.memoryBudgetMB | quote }}
                 - name: INGEST_OVERLAP_MINUTES
                   value: {{ .Values.ingest.overlapMinutes | quote }}
               resources:

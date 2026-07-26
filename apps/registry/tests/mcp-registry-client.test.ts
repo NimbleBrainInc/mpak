@@ -55,9 +55,11 @@ describe('McpRegistryClient.listServers', () => {
     expect(url.searchParams.get('version')).toBe('latest');
   });
 
-  it('stops when upstream repeats a cursor instead of looping forever', async () => {
-    // A fresh Response per call: a body can only be read once, so reusing one
-    // instance would fail for reasons unrelated to what this asserts.
+  it('throws when upstream repeats a cursor rather than truncating the run', async () => {
+    // A repeated cursor is upstream malfunctioning, not end-of-catalog. Ending
+    // quietly would truncate the walk and let the caller advance its watermark
+    // past servers it never read. A fresh Response per call because a body can
+    // only be read once.
     const fetchImpl = vi
       .fn()
       .mockImplementation(() =>
@@ -67,10 +69,7 @@ describe('McpRegistryClient.listServers', () => {
       );
     const client = new McpRegistryClient({ baseUrl: 'https://reg.test/v0', fetchImpl });
 
-    // First page advances to 'same'; the second returns 'same' again, which is
-    // treated as terminal.
-    expect(await collect(client.listServers())).toEqual(['a/stuck', 'a/stuck']);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await expect(collect(client.listServers())).rejects.toThrow(/repeated pagination cursor/);
   });
 
   it('gives up once maxPages is exhausted rather than paging indefinitely', async () => {

@@ -64,6 +64,11 @@ function buildServerDetail(
       latestVersion: pkg.latestVersion,
       totalDownloads: pkg.totalDownloads,
       githubRepo: pkg.githubRepo,
+      // Ingested servers are published under their upstream identity, never a
+      // derived one. Omitting this silently falls back to the mechanical
+      // `dev.mpak.*` rule and forks the server's canonical name — a composer
+      // test cannot catch that, so servers.test.ts asserts it through inject.
+      upstreamName: pkg.upstreamName,
     },
     version: {
       version: version.version,

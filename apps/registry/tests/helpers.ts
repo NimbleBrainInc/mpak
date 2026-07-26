@@ -20,9 +20,16 @@ export async function createTestApp(): Promise<FastifyInstance> {
  * Create a mock PackageRepository with all methods stubbed.
  */
 export function createMockPackageRepo() {
+  // Public read routes call findServableByName (findByName minus packages
+  // upstream took down); write and conflict paths still call findByName. The
+  // two share one mock so a test stubbing either gets both — no fixture here
+  // exercises a takedown, and the alternative is every existing test having to
+  // know which lookup its route happens to use.
+  const byName = vi.fn();
   return {
     findById: vi.fn(),
-    findByName: vi.fn(),
+    findByName: byName,
+    findServableByName: byName,
     findByUpstreamName: vi.fn(),
     // Defaults to a miss so the reverse-DNS heuristics downstream of it still
     // run in tests that predate ingest.

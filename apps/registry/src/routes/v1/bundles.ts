@@ -35,7 +35,6 @@ import {
   type BundleVersionPathParams,
   BundleVersionPathParamsSchema,
 } from '../../schemas/bundles.js';
-import { resolveArtifactUrl } from '../../services/artifact-download.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
@@ -275,7 +274,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -360,7 +359,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -417,7 +416,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -432,19 +431,14 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       // Build bundles array from artifacts
       const bundleArtifacts = await Promise.all(
         latestVersion.artifacts.map(async (artifact) => {
-          const resolved = await resolveArtifactUrl(fastify.storage, artifact);
+          const url = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
 
           return {
             mimeType: artifact.mimeType,
             digest: artifact.digest,
             size: Number(artifact.sizeBytes),
             platform: { os: artifact.os, arch: artifact.arch },
-            // The index format takes a list, so an unmirrored artifact simply
-            // lists its upstream URL alone rather than a dead signed one.
-            urls: [
-              ...(resolved?.origin === 'mirror' ? [resolved.url] : []),
-              artifact.sourceUrl,
-            ].filter(Boolean),
+            urls: [url, artifact.sourceUrl].filter(Boolean),
           };
         }),
       );
@@ -498,7 +492,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { scope, package: packageName } = request.params as { scope: string; package: string };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -553,7 +547,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       };
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -568,16 +562,13 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       // Build artifacts array with download URLs
       const artifacts = await Promise.all(
         packageVersion.artifacts.map(async (a) => {
-          const resolved = await resolveArtifactUrl(fastify.storage, a);
+          const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(a.storagePath);
 
           return {
             platform: { os: a.os, arch: a.arch },
             digest: a.digest,
             size: Number(a.sizeBytes),
-            download_url: resolved?.url,
-            // Tells a client whether these bytes came through mpak's
-            // verification or straight from the publisher.
-            download_origin: resolved?.origin,
+            download_url: downloadUrl,
             source_url: a.sourceUrl || undefined,
           };
         }),
@@ -622,7 +613,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const { os: queryOs, arch: queryArch } = request.query;
       const name = `@${scope}/${packageName}`;
 
-      const pkg = await packageRepo.findByName(name);
+      const pkg = await packageRepo.findServableByName(name);
 
       if (!pkg) {
         throw new NotFoundError('Bundle not found');
@@ -667,13 +658,8 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const acceptHeader = request.headers.accept ?? '';
       const wantsJson = acceptHeader.includes('application/json');
 
-      // Prefer our verified mirror; fall back to the publisher's own URL for an
-      // artifact that was catalogued but never copied.
-      const resolved = await resolveArtifactUrl(fastify.storage, artifact);
-      if (!resolved) {
-        throw new NotFoundError('Artifact has no retrievable location');
-      }
-      const downloadUrl = resolved.url;
+      // Generate signed download URL using the actual storage path
+      const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
 
       if (wantsJson) {
         // CLI/API mode: Return JSON with download URL and metadata
@@ -695,7 +681,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         };
       } else {
         // Browser mode: Redirect to download URL
-        if (downloadUrl.startsWith('/') && artifact.storagePath) {
+        if (downloadUrl.startsWith('/')) {
           // Local storage - serve file directly
           const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
 

@@ -129,9 +129,15 @@ ingest:
   # on its next release for no reason anyone would think to look for.
   maxBundleSizeMB: 400
 
-  # Concurrent server pipelines. Downloads dominate, so this is network-bound;
-  # raising it mostly buys wall-clock at the cost of upstream politeness.
-  concurrency: 4
+  # Concurrent server pipelines. This is a MEMORY knob before it is a throughput
+  # knob: bundle inspection reads each archive fully into heap, so peak usage is
+  # concurrency × maxBundleSizeMB. The job refuses to start if that product
+  # exceeds memoryBudgetMB, so raise these three together or not at all.
+  concurrency: 2
+
+  # Ceiling for concurrent archive buffers. resources.limits.memory below is
+  # this plus headroom for the Node runtime, zip entry tables, and the S3 SDK.
+  memoryBudgetMB: 1024
 
   # Re-read this far before the last watermark. Ingest is idempotent, so the
   # overlap costs a few cheap "unchanged" decisions, while a gap is silent.
@@ -154,6 +160,8 @@ ingest:
   # Bundles stream through /tmp on the way to S3, one at a time per pipeline.
   scratchSizeLimit: "4Gi"
 
+  # limits.memory = memoryBudgetMB (1Gi of archive buffers) + ~1Gi headroom.
+  # Derived, not guessed — see the concurrency note above.
   resources:
     requests:
       cpu: 250m

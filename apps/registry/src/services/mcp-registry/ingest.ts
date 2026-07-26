@@ -32,6 +32,30 @@ import type { UpstreamServerEntry } from './types.js';
 
 export const INGEST_SOURCE = 'mcp-registry';
 
+/**
+ * A package name was claimed by someone else between the pre-download check and
+ * the write. Thrown from inside the transaction so the write rolls back rather
+ * than half-applying.
+ */
+class NameConflictError extends Error {
+  constructor(readonly packageName: string) {
+    super(`Package ${packageName} is owned by another publisher`);
+    this.name = 'NameConflictError';
+  }
+}
+
+/**
+ * Upstream's own updated_at for an entry, read directly rather than via the
+ * mapper so it is still available when mapping is what failed.
+ */
+function upstreamUpdatedAt(entry: UpstreamServerEntry): Date | undefined {
+  const meta = entry._meta?.['io.modelcontextprotocol.registry/official'];
+  const raw = meta?.updatedAt ?? meta?.publishedAt;
+  if (!raw) return undefined;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 /** Every terminal disposition a single upstream server can reach. */
 export type SkipReason =
   | RejectReason
@@ -92,12 +116,31 @@ export interface IngestResult extends IngestCounters {
   skipReasons: Record<string, number>;
   scanability: Record<string, number>;
   failures: Array<{ server: string; error: string }>;
+  /**
+   * Lower bound for the next run's window.
+   *
+   * The run's start instant, except that a server which failed for a
+   * *retryable* reason pulls it back to that server's own upstream timestamp.
+   * Without that, the next window opens after the failure and the server falls
+   * outside every subsequent window — one transient 503 would drop a bundle
+   * until someone ran --full. `backoffLimit: 0` on the CronJob means there is
+   * no job-level retry to cover it either.
+   */
   watermark: Date;
 }
+
+/**
+ * Failures worth re-reading next run. A bundle that is not an archive, is
+ * oversized, or whose digest does not match will fail identically forever —
+ * holding the watermark for those would freeze it permanently.
+ */
+const RETRYABLE_SKIPS: ReadonlySet<string> = new Set(['download-failed', 'name-conflict']);
 
 interface ServerOutcome {
   matched: boolean;
   skipReason?: SkipReason;
+  /** Upstream's timestamp, retained so a retryable failure can hold the watermark. */
+  upstreamUpdatedAt?: Date;
   packageCreated?: boolean;
   versionCreated?: boolean;
   artifactsStored?: number;
@@ -118,7 +161,7 @@ interface ServerOutcome {
  */
 export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   const { client, since, limit, maxBundles, logger } = options;
-  const watermark = new Date();
+  const runStarted = new Date();
 
   const counters: IngestCounters = {
     serversSeen: 0,
@@ -134,6 +177,12 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   const skipReasons: Record<string, number> = {};
   const scanability: Record<string, number> = {};
   const failures: Array<{ server: string; error: string }> = [];
+  let oldestRetryableFailure: Date | undefined;
+
+  const holdWatermark = (at?: Date) => {
+    if (!at) return;
+    if (!oldestRetryableFailure || at < oldestRetryableFailure) oldestRetryableFailure = at;
+  };
 
   const record = (name: string, outcome: ServerOutcome) => {
     counters.serversSeen += 1;
@@ -145,10 +194,14 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
       // should mean "an MCPB bundle we declined", not "an npm server".
       if (outcome.skipReason !== 'no-mcpb-package') counters.skipped += 1;
       skipReasons[outcome.skipReason] = (skipReasons[outcome.skipReason] ?? 0) + 1;
+      if (RETRYABLE_SKIPS.has(outcome.skipReason)) holdWatermark(outcome.upstreamUpdatedAt);
     }
     if (outcome.error) {
       counters.failed += 1;
       failures.push({ server: name, error: outcome.error });
+      // A thrown error is always retryable: it is by definition a case the
+      // pipeline did not classify, so assuming it is permanent would lose data.
+      holdWatermark(outcome.upstreamUpdatedAt ?? runStarted);
     }
     if (outcome.packageCreated) counters.packagesCreated += 1;
     if (outcome.versionCreated) counters.versionsCreated += 1;
@@ -180,6 +233,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
         record(name, {
           matched: true,
           error: err instanceof Error ? err.message : String(err),
+          upstreamUpdatedAt: upstreamUpdatedAt(entry),
         });
         logger.warn('Server ingest failed', { server: name, err: String(err) });
       }
@@ -210,7 +264,18 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
 
   await Promise.all(inFlight);
 
-  logger.info('Ingest complete', { ...counters, skipReasons, scanability });
+  const watermark =
+    oldestRetryableFailure && oldestRetryableFailure < runStarted
+      ? oldestRetryableFailure
+      : runStarted;
+
+  logger.info('Ingest complete', {
+    ...counters,
+    skipReasons,
+    scanability,
+    watermark: watermark.toISOString(),
+    watermarkHeldBack: watermark < runStarted,
+  });
 
   return { ...counters, skipReasons, scanability, failures, watermark };
 }
@@ -236,9 +301,14 @@ async function ingestServer(
   const { storage, prisma, logger, dryRun, maxBundleBytes } = options;
   const repo = new PackageRepository();
 
+  const at = upstreamUpdatedAt(entry);
   const mapped = mapServer(entry);
   if (!mapped.server) {
-    return { matched: mapped.reason !== 'no-mcpb-package', skipReason: mapped.reason };
+    return {
+      matched: mapped.reason !== 'no-mcpb-package',
+      skipReason: mapped.reason,
+      upstreamUpdatedAt: at,
+    };
   }
   const server = mapped.server;
 
@@ -247,7 +317,7 @@ async function ingestServer(
   // which is exactly how a takedown reaches us.
   if (server.status === 'deleted') {
     if (!dryRun) await markUpstreamStatus(prisma, server, 'deleted');
-    return { matched: true, skipReason: 'upstream-deleted' };
+    return { matched: true, skipReason: 'upstream-deleted', upstreamUpdatedAt: at };
   }
 
   const existing = await repo.findByUpstreamName(server.upstreamName);
@@ -256,15 +326,15 @@ async function ingestServer(
   // every digest upstream declares, cannot have changed. Skip before the wire.
   if (existing && (await versionIsCurrent(prisma, existing.id, server))) {
     if (!dryRun) await markUpstreamStatus(prisma, server, server.status);
-    return { matched: true, skipReason: 'unchanged' };
+    return { matched: true, skipReason: 'unchanged', upstreamUpdatedAt: at };
   }
 
   const name = await resolveName(repo, server);
-  if (!name) return { matched: true, skipReason: 'name-conflict' };
+  if (!name) return { matched: true, skipReason: 'name-conflict', upstreamUpdatedAt: at };
 
   const downloads: Array<{
     artifact: MappedArtifact;
-    storagePath: string | null;
+    storagePath: string;
     sha256: string;
     size: number;
     scanability: string;
@@ -282,7 +352,7 @@ async function ingestServer(
           maxBytes: maxBundleBytes,
         });
 
-        let storagePath: string | null = null;
+        let storagePath = '';
         if (!dryRun) {
           const { scope, packageName } = splitName(name);
           const platform =
@@ -327,14 +397,15 @@ async function ingestServer(
         // A per-artifact failure fails the whole server rather than storing a
         // partial platform set: a half-mirrored server would advertise a
         // platform matrix it cannot actually serve.
-        if (err instanceof BundleTooLargeError) return { matched: true, skipReason: 'too-large' };
+        if (err instanceof BundleTooLargeError)
+          return { matched: true, skipReason: 'too-large', upstreamUpdatedAt: at };
         if (err instanceof NotABundleError) {
           logger.warn('Upstream mcpb package is not a bundle', {
             server: server.upstreamName,
             url: artifact.sourceUrl,
             err: err.message,
           });
-          return { matched: true, skipReason: 'not-a-bundle' };
+          return { matched: true, skipReason: 'not-a-bundle', upstreamUpdatedAt: at };
         }
         if (err instanceof BundleVerificationError) {
           // Loud on purpose. Upstream declared a digest and served different
@@ -346,16 +417,17 @@ async function ingestServer(
             url: artifact.sourceUrl,
             err: err.message,
           });
-          return { matched: true, skipReason: 'sha-mismatch' };
+          return { matched: true, skipReason: 'sha-mismatch', upstreamUpdatedAt: at };
         }
         if (err instanceof BundleDownloadError) {
-          return { matched: true, skipReason: 'download-failed' };
+          return { matched: true, skipReason: 'download-failed', upstreamUpdatedAt: at };
         }
-        return { matched: true, skipReason: 'download-failed' };
+        return { matched: true, skipReason: 'download-failed', upstreamUpdatedAt: at };
       }
     }
 
-    if (downloads.length === 0) return { matched: true, skipReason: 'bad-identifier' };
+    if (downloads.length === 0)
+      return { matched: true, skipReason: 'bad-identifier', upstreamUpdatedAt: at };
     if (dryRun) {
       return {
         matched: true,
@@ -366,82 +438,104 @@ async function ingestServer(
     }
 
     const primary = downloads[0];
-    if (!primary) return { matched: true, skipReason: 'bad-identifier' };
+    if (!primary) return { matched: true, skipReason: 'bad-identifier', upstreamUpdatedAt: at };
 
-    const written = await runInTransaction(async (tx) => {
-      const { package: pkg, created: packageCreated } = await repo.upsertPackage(
-        {
-          name,
-          displayName: server.title ?? (primary.manifest.display_name as string) ?? undefined,
-          description: server.description ?? (primary.manifest.description as string) ?? undefined,
-          authorName:
-            ((primary.manifest.author as Record<string, unknown>)?.name as string) ?? undefined,
-          authorUrl: server.websiteUrl ?? undefined,
-          homepage: server.websiteUrl ?? undefined,
-          license: (primary.manifest.license as string) ?? undefined,
-          iconUrl: (primary.manifest.icon as string) ?? undefined,
-          serverType: primary.serverType,
-          // Ingested packages are unowned and unverified by definition. They
-          // remain claimable, so the real publisher can prove control of the
-          // GitHub repo and take the entry over.
-          verified: false,
-          latestVersion: server.version,
-          githubRepo: server.githubRepo,
-          source: INGEST_SOURCE,
-          upstreamName: server.upstreamName,
-        },
-        tx,
-      );
+    let written: { packageCreated: boolean; versionCreated: boolean; versionId: string };
+    try {
+      written = await runInTransaction(async (tx) => {
+        // resolveName ran before a download that can take minutes. If a real
+        // publisher claimed this name in the meantime, upsertPackage's update
+        // clause would overwrite their display name, description, author,
+        // homepage, license, icon, and repo with third-party content — the
+        // provenance columns are creation-only, but everything a user actually
+        // sees is not. Re-checking inside the transaction is what makes the
+        // guard at resolveName mean anything.
+        const holder = await repo.findByName(name, tx);
+        if (holder && holder.upstreamName !== server.upstreamName) {
+          throw new NameConflictError(name);
+        }
 
-      const { version, created: versionCreated } = await repo.upsertVersion(
-        pkg.id,
-        {
-          packageId: pkg.id,
-          version: server.version,
-          manifest: primary.manifest,
-          publishedBy: null,
-          publishedByEmail: null,
-          publishMethod: 'ingest',
-          provenanceRepository: server.githubRepo,
-          serverJson: entry.server,
-          upstreamStatus: server.status,
-          upstreamUpdatedAt: server.upstreamUpdatedAt,
-        },
-        tx,
-      );
-
-      if (versionCreated) {
-        await repo.updateLatestVersion(pkg.id, server.version, tx);
-      }
-
-      for (const d of downloads) {
-        await repo.upsertArtifact(
+        const { package: pkg, created: packageCreated } = await repo.upsertPackage(
           {
-            versionId: version.id,
-            os: d.artifact.os,
-            arch: d.artifact.arch,
-            digest: `sha256:${d.sha256}`,
-            sizeBytes: BigInt(d.size),
-            storagePath: d.storagePath,
-            sourceUrl: d.artifact.sourceUrl,
+            name,
+            displayName: server.title ?? (primary.manifest.display_name as string) ?? undefined,
+            description:
+              server.description ?? (primary.manifest.description as string) ?? undefined,
+            authorName:
+              ((primary.manifest.author as Record<string, unknown>)?.name as string) ?? undefined,
+            authorUrl: server.websiteUrl ?? undefined,
+            homepage: server.websiteUrl ?? undefined,
+            license: (primary.manifest.license as string) ?? undefined,
+            iconUrl: (primary.manifest.icon as string) ?? undefined,
+            serverType: primary.serverType,
+            // Ingested packages are unowned and unverified by definition. They
+            // remain claimable, so the real publisher can prove control of the
+            // GitHub repo and take the entry over.
+            verified: false,
+            latestVersion: server.version,
+            githubRepo: server.githubRepo,
+            source: INGEST_SOURCE,
+            upstreamName: server.upstreamName,
           },
           tx,
         );
-      }
 
-      return { packageCreated, versionCreated, versionId: version.id };
-    });
+        const { version, created: versionCreated } = await repo.upsertVersion(
+          pkg.id,
+          {
+            packageId: pkg.id,
+            version: server.version,
+            manifest: primary.manifest,
+            publishedBy: null,
+            publishedByEmail: null,
+            publishMethod: 'ingest',
+            provenanceRepository: server.githubRepo,
+            serverJson: entry.server,
+            upstreamStatus: server.status,
+            upstreamUpdatedAt: server.upstreamUpdatedAt,
+          },
+          tx,
+        );
+
+        if (versionCreated) {
+          await repo.updateLatestVersion(pkg.id, server.version, tx);
+        }
+
+        for (const d of downloads) {
+          await repo.upsertArtifact(
+            {
+              versionId: version.id,
+              os: d.artifact.os,
+              arch: d.artifact.arch,
+              digest: `sha256:${d.sha256}`,
+              sizeBytes: BigInt(d.size),
+              storagePath: d.storagePath,
+              sourceUrl: d.artifact.sourceUrl,
+            },
+            tx,
+          );
+        }
+
+        return { packageCreated, versionCreated, versionId: version.id };
+      });
+    } catch (err) {
+      // The name was taken between the pre-download check and the write. The
+      // transaction rolled back, so nothing partial landed; report it the same
+      // way the pre-check does.
+      if (err instanceof NameConflictError) {
+        return { matched: true, skipReason: 'name-conflict', upstreamUpdatedAt: at };
+      }
+      throw err;
+    }
 
     let scanTriggered = false;
-    // Scan only what we mirrored: the scan pod reads S3 and has no network
-    // reach, so an unmirrored artifact has nothing to scan.
-    if (options.scanEnabled && written.versionCreated && primary.storagePath) {
+
+    if (options.scanEnabled && written.versionCreated) {
       await triggerSecurityScan(prisma, {
         versionId: written.versionId,
         bundleStoragePath: primary.storagePath,
         packageName: name,
         version: server.version,
-        scanability: primary.scanability,
       });
       scanTriggered = true;
     }

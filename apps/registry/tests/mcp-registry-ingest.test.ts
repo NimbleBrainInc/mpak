@@ -218,6 +218,7 @@ describe('runIngest', () => {
     expect(result.packagesCreated).toBe(1);
     expect(result.versionsCreated).toBe(1);
     expect(result.artifactsStored).toBe(1);
+    // The histogram is kept for the run report; nothing persists it per-bundle.
     expect(result.scanability).toEqual({ full: 1 });
 
     // Ingested packages are unowned and unverified, and keep upstream identity.
@@ -397,6 +398,57 @@ describe('runIngest', () => {
     expect(result.serversSeen).toBe(4);
     expect(result.serversMatched).toBe(1);
     expect(result.packagesCreated).toBe(1);
+  });
+
+  it('holds the watermark back to a server it failed to download', async () => {
+    // Without this the next window opens after the failure, so the server falls
+    // outside every later window — one transient 503 drops a bundle until
+    // someone runs --full. backoffLimit: 0 means no job retry covers it.
+    const { client } = fakeUpstream([upstreamEntry()], null);
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.skipReasons['download-failed']).toBe(1);
+    expect(result.watermark.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+  });
+
+  it('does not hold the watermark for a permanently broken bundle', async () => {
+    // Not-a-bundle fails identically forever; holding for it would freeze the
+    // watermark and make every run re-read the whole catalog.
+    const notABundle = Buffer.from('MZ\x90\x00 windows executable');
+    const sha = createHash('sha256').update(notABundle).digest('hex');
+    const { client } = fakeUpstream(
+      [
+        upstreamEntry({
+          packages: [{ registryType: 'mcpb', identifier: BUNDLE_URL, fileSha256: sha }],
+        }),
+      ],
+      notABundle,
+    );
+
+    const before = new Date();
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.skipReasons['not-a-bundle']).toBe(1);
+    expect(result.watermark.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
+  it('refuses to overwrite a package claimed during the download window', async () => {
+    // resolveName sees the name free, then a real publisher claims it while the
+    // bundle downloads. Without the in-transaction re-check, upsertPackage's
+    // update clause would rewrite their display name, description, author, and
+    // repo with third-party content.
+    repoMocks.findByName.mockResolvedValueOnce(null); // pre-download check: free
+    repoMocks.findByName.mockResolvedValue({
+      id: 'other',
+      name: '@acme/widget',
+      upstreamName: null,
+    });
+
+    const { client } = fakeUpstream([upstreamEntry()]);
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.skipReasons['name-conflict']).toBe(1);
+    expect(repoMocks.upsertPackage).not.toHaveBeenCalled();
   });
 
   it('writes nothing in dry-run mode', async () => {

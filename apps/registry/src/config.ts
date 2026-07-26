@@ -53,7 +53,15 @@ export const config = {
     // routinely an order of magnitude bigger than interpreted ones. Sized for
     // headroom over the largest bundle upstream (248MB), not to fit it exactly.
     maxBundleSizeMB: parseInt(process.env.INGEST_MAX_BUNDLE_SIZE_MB || '400', 10),
-    concurrency: parseInt(process.env.INGEST_CONCURRENCY || '4', 10),
+    // Kept low because it multiplies against maxBundleSizeMB, not because the
+    // network wants it low — see validateConfig. Inspection reads a whole
+    // archive into memory, so concurrency is a memory knob first and a
+    // throughput knob second.
+    concurrency: parseInt(process.env.INGEST_CONCURRENCY || '2', 10),
+    // Ceiling the two above must fit inside, and the number the CronJob's
+    // memory limit is set from. Not enforced by the runtime — declared here so
+    // validateConfig can refuse a combination that would OOM.
+    memoryBudgetMB: parseInt(process.env.INGEST_MEMORY_BUDGET_MB || '1024', 10),
     // Re-read a little before the last watermark. Ingest is idempotent, so
     // overlap costs a few cheap "unchanged" decisions, while a gap is silent.
     overlapMinutes: parseInt(process.env.INGEST_OVERLAP_MINUTES || '60', 10),
@@ -91,6 +99,21 @@ export function validateConfig() {
 
   if (config.scanner.enabled && !config.scanner.callbackSecret) {
     errors.push('SCANNER_CALLBACK_SECRET is required when SCANNER_ENABLED=true');
+  }
+
+  // Bundle inspection reads the whole archive into a Buffer (adm-zip has no
+  // streaming read), so peak heap scales with concurrency × maxBundleSizeMB.
+  // Left unchecked the three knobs drift apart silently and the first oversized
+  // batch OOMKills the run — and the CronJob sets backoffLimit: 0, so that
+  // costs the entire night. Failing at startup instead surfaces it on deploy.
+  const peakBundleMB = config.ingest.concurrency * config.ingest.maxBundleSizeMB;
+  if (peakBundleMB > config.ingest.memoryBudgetMB) {
+    errors.push(
+      `INGEST_CONCURRENCY (${config.ingest.concurrency}) × INGEST_MAX_BUNDLE_SIZE_MB ` +
+        `(${config.ingest.maxBundleSizeMB}) = ${peakBundleMB}MB of concurrent archive buffers, ` +
+        `over INGEST_MEMORY_BUDGET_MB (${config.ingest.memoryBudgetMB}). Lower concurrency or ` +
+        `the size cap, or raise the budget and the CronJob's memory limit together.`,
+    );
   }
 
   if (!config.clerk.secretKey) {

@@ -250,6 +250,41 @@ describe('MCP Registry routes', () => {
       expect(packageRepo.findPackageForServerLookup).toHaveBeenCalledTimes(2);
     });
 
+    it('publishes an ingested server under its upstream name, through the real route', async () => {
+      // Regression guard with teeth. The composer takes upstreamName, but the
+      // route builds its `pkg` argument as an explicit literal — so the composer
+      // unit test passed while every ingested server was still served under a
+      // minted dev.mpak.* identity. Only an inject-level assertion catches a
+      // field the route forgets to forward.
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(
+        lookupRow({
+          pkg: { name: '@blackduck/mcp-server', upstreamName: 'com.blackduck/mcp-server' },
+        }),
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${encodeURIComponent('@blackduck/mcp-server')}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().name).toBe('com.blackduck/mcp-server');
+    });
+
+    it('still mints a reverse-DNS name for packages published here', async () => {
+      packageRepo.findPackageForServerLookup.mockResolvedValueOnce(
+        lookupRow({ pkg: { name: '@nimblebraininc/echo', upstreamName: null } }),
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/servers/${encodeURIComponent('@nimblebraininc/echo')}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().name).toBe('ai.nimblebrain/echo');
+    });
+
     it('returns 404 with the requested name in the message when the package is missing', async () => {
       packageRepo.findPackageForServerLookup.mockResolvedValue(null);
 
