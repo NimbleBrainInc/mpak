@@ -146,6 +146,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       prisma,
       since,
       maxBundleBytes: config.ingest.maxBundleSizeMB * 1024 * 1024,
+      maxUncompressedBytes: config.ingest.memoryBudgetMB * 1024 * 1024,
+      maxHoldbackMs: config.ingest.maxHoldbackHours * 60 * 60 * 1000,
       concurrency,
       downloadTimeoutMs: config.ingest.downloadTimeoutMs,
       dryRun: args.dryRun,
@@ -159,9 +161,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       await prisma.registrySync.update({
         where: { id: run.id },
         data: {
-          status: 'completed',
+          // A run with unclassified failures does not advance the window. Those
+          // are the servers the pipeline could not even categorise, so there is
+          // no per-server timestamp to hold back to — the only safe move is to
+          // leave the watermark where it was and let the next run re-read.
+          status: result.failed > 0 ? 'failed' : 'completed',
           completedAt: new Date(),
-          watermark: result.watermark,
+          watermark: result.failed > 0 ? null : result.watermark,
           serversSeen: result.serversSeen,
           serversMatched: result.serversMatched,
           packagesCreated: result.packagesCreated,

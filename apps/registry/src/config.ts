@@ -65,6 +65,10 @@ export const config = {
     // Re-read a little before the last watermark. Ingest is idempotent, so
     // overlap costs a few cheap "unchanged" decisions, while a gap is silent.
     overlapMinutes: parseInt(process.env.INGEST_OVERLAP_MINUTES || '60', 10),
+    // Furthest back a retryable failure may drag the next window. 21 of the
+    // 388 upstream MCPB URLs do not resolve, so without a bound the first
+    // backfill would pin the watermark permanently.
+    maxHoldbackHours: parseInt(process.env.INGEST_MAX_HOLDBACK_HOURS || '72', 10),
     requestTimeoutMs: parseInt(process.env.INGEST_REQUEST_TIMEOUT_MS || '30000', 10),
     downloadTimeoutMs: parseInt(process.env.INGEST_DOWNLOAD_TIMEOUT_MS || '120000', 10),
   },

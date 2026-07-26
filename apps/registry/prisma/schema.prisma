@@ -40,6 +40,10 @@ model Package {
   // Provenance of the catalog entry itself.
   //   'mpak'         — published to mpak directly (OIDC, CLI, or upload)
   //   'mcp-registry' — ingested from registry.modelcontextprotocol.io
+  //
+  // Load-bearing, not descriptive: it is what scopes the ingest job's takedown
+  // delete, so a mirror can be removed without a natively published package
+  // ever being reachable by that code path.
   source         String           @default("mpak") @db.VarChar(20)
   // Canonical upstream identity, verbatim (e.g. "io.github.acme/widget-mcp").
   // `name` is mpak's npm-style handle and is lossy: it drops the reverse-DNS
@@ -47,14 +51,6 @@ model Package {
   // here is what lets a nightly sync re-find its own rows, and keeps mpak a
   // faithful subregistry rather than a renaming fork.
   upstreamName   String?          @unique @map("upstream_name") @db.VarChar(255)
-  // Upstream's lifecycle state for this server, and when upstream last changed
-  // it. Package-level rather than per-version because "should mpak serve this"
-  // is a decision about the package, and the read filter has to be expressible
-  // as a plain column predicate — a relation filter cannot reference
-  // `latestVersion`, and `some(version deleted)` would hide a package forever
-  // once any historical version had been taken down.
-  upstreamStatus    String?       @map("upstream_status") @db.VarChar(20) // 'active' | 'deprecated' | 'deleted'
-  upstreamUpdatedAt DateTime?     @map("upstream_updated_at") @db.Timestamp(6)
   displayName    String?          @map("display_name") @db.VarChar(255)
   description    String?
   authorName     String?          @map("author_name") @db.VarChar(255)
@@ -87,8 +83,6 @@ model Package {
   versions       PackageVersion[]
 
   @@index([name], map: "idx_packages_name")
-  // Partial: takedowns are rare, and every read filters on NOT deleted.
-  @@index([upstreamStatus], map: "idx_packages_upstream_deleted")
   @@index([createdBy], map: "idx_packages_created_by")
   @@index([claimedBy], map: "idx_packages_claimed_by")
   @@index([serverType], map: "idx_packages_server_type")

@@ -74,6 +74,17 @@ export interface IngestOptions {
   /** Only consider servers updated at or after this instant. */
   since?: Date;
   maxBundleBytes: number;
+  /** Bound on declared uncompressed size, so a zip bomb cannot OOM the run. */
+  maxUncompressedBytes?: number;
+  /**
+   * Furthest back a retryable failure may drag the watermark.
+   *
+   * Without a bound, one permanently dead release asset pins the window at its
+   * timestamp on every run forever — and 21 of the 388 upstream MCPB URLs do
+   * not resolve, so that is the expected case, not a corner. Past this age a
+   * failure is treated as permanent and the window is allowed to move on.
+   */
+  maxHoldbackMs?: number;
   /** Per-artifact download timeout. Wired from INGEST_DOWNLOAD_TIMEOUT_MS. */
   downloadTimeoutMs?: number;
   /** Concurrent server pipelines. Downloads dominate, so this is network-bound. */
@@ -110,6 +121,8 @@ export interface IngestCounters {
   artifactsStored: number;
   bytesStored: number;
   scansTriggered: number;
+  /** Mirrors removed because upstream took the server down. */
+  mirrorsRemoved: number;
   skipped: number;
   failed: number;
 }
@@ -138,6 +151,15 @@ export interface IngestResult extends IngestCounters {
  */
 const RETRYABLE_SKIPS: ReadonlySet<string> = new Set(['download-failed', 'name-conflict']);
 
+/**
+ * Default bound on how far a retryable failure may drag the next window.
+ *
+ * Defaulted rather than left open-ended: an unbounded holdback is the failure
+ * mode this exists to prevent, so a caller that forgets to pass one should get
+ * the safe behaviour, not the broken one.
+ */
+const DEFAULT_MAX_HOLDBACK_MS = 72 * 60 * 60 * 1000;
+
 interface ServerOutcome {
   matched: boolean;
   skipReason?: SkipReason;
@@ -149,6 +171,7 @@ interface ServerOutcome {
   bytesStored?: number;
   scanTriggered?: boolean;
   scanability?: string;
+  mirrorsRemoved?: number;
   error?: string;
 }
 
@@ -173,6 +196,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
     artifactsStored: 0,
     bytesStored: 0,
     scansTriggered: 0,
+    mirrorsRemoved: 0,
     skipped: 0,
     failed: 0,
   };
@@ -203,9 +227,9 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
       failures.push({ server: name, error: outcome.error });
       // A thrown error is always retryable: it is by definition a case the
       // pipeline did not classify, so assuming it is permanent would lose data.
-      // An entry with no upstream timestamp cannot be held for individually —
-      // the watermark is already floored at runStarted — so the run is marked
-      // failed instead, which stops the job advancing anything at all.
+      // An entry carrying no upstream timestamp cannot be held for
+      // individually; `failed > 0` is what covers it, by stopping the job
+      // advancing the watermark at all (see the job entrypoint).
       holdWatermark(outcome.upstreamUpdatedAt);
     }
     if (outcome.packageCreated) counters.packagesCreated += 1;
@@ -213,6 +237,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
     if (outcome.artifactsStored) counters.artifactsStored += outcome.artifactsStored;
     if (outcome.bytesStored) counters.bytesStored += outcome.bytesStored;
     if (outcome.scanTriggered) counters.scansTriggered += 1;
+    if (outcome.mirrorsRemoved) counters.mirrorsRemoved += outcome.mirrorsRemoved;
     if (outcome.scanability) {
       scanability[outcome.scanability] = (scanability[outcome.scanability] ?? 0) + 1;
     }
@@ -269,10 +294,20 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
 
   await Promise.all(inFlight);
 
-  const watermark =
-    oldestRetryableFailure && oldestRetryableFailure < runStarted
+  // Floor the holdback. A retryable failure pulls the next window back to its
+  // own timestamp so it gets another attempt, but a permanently dead asset
+  // would otherwise pin the window there forever and every subsequent run would
+  // re-read an ever-widening span until activeDeadlineSeconds truncated it.
+  const holdbackFloor = new Date(
+    runStarted.getTime() - (options.maxHoldbackMs ?? DEFAULT_MAX_HOLDBACK_MS),
+  );
+  const heldAt =
+    oldestRetryableFailure && oldestRetryableFailure > holdbackFloor
       ? oldestRetryableFailure
-      : runStarted;
+      : oldestRetryableFailure
+        ? holdbackFloor
+        : runStarted;
+  const watermark = heldAt < runStarted ? heldAt : runStarted;
 
   logger.info('Ingest complete', {
     ...counters,
@@ -321,8 +356,18 @@ async function ingestServer(
   // because upstream flips include_deleted on whenever updated_since is set,
   // which is exactly how a takedown reaches us.
   if (server.status === 'deleted') {
-    if (!dryRun) await markUpstreamStatus(prisma, server, 'deleted');
-    return { matched: true, skipReason: 'upstream-deleted', upstreamUpdatedAt: at };
+    const removed = dryRun ? 0 : await deleteMirror(repo, server.upstreamName);
+    if (removed > 0) {
+      logger.info('Removed mirror after upstream takedown', {
+        server: server.upstreamName,
+      });
+    }
+    return {
+      matched: true,
+      skipReason: 'upstream-deleted',
+      upstreamUpdatedAt: at,
+      mirrorsRemoved: removed,
+    };
   }
 
   const existing = await repo.findByUpstreamName(server.upstreamName);
@@ -330,7 +375,6 @@ async function ingestServer(
   // Layer 3: a version we already hold, whose stored artifact digests match
   // every digest upstream declares, cannot have changed. Skip before the wire.
   if (existing && (await versionIsCurrent(prisma, existing.id, server))) {
-    if (!dryRun) await markUpstreamStatus(prisma, server, server.status);
     return { matched: true, skipReason: 'unchanged', upstreamUpdatedAt: at };
   }
 
@@ -355,6 +399,7 @@ async function ingestServer(
           url: artifact.sourceUrl,
           expectedSha256: artifact.sha256,
           maxBytes: maxBundleBytes,
+          maxUncompressedBytes: options.maxUncompressedBytes,
           timeoutMs: options.downloadTimeoutMs,
         });
 
@@ -400,9 +445,11 @@ async function ingestServer(
           cleanup: bundle.cleanup,
         });
       } catch (err) {
-        // A per-artifact failure fails the whole server rather than storing a
-        // partial platform set: a half-mirrored server would advertise a
-        // platform matrix it cannot actually serve.
+        // A per-artifact failure abandons the whole server rather than
+        // recording a partial platform set — a half-mirrored server would
+        // advertise a matrix it cannot serve. Earlier artifacts may already be
+        // in S3; only the rows are avoided. Keys are deterministic, so a retry
+        // overwrites rather than accumulating.
         if (err instanceof BundleTooLargeError)
           return { matched: true, skipReason: 'too-large', upstreamUpdatedAt: at };
         if (err instanceof NotABundleError) {
@@ -459,7 +506,7 @@ async function ingestServer(
         // provenance columns are creation-only, but everything a user actually
         // sees is not. Re-checking inside the transaction is what makes the
         // guard at resolveName mean anything.
-        const holder = await repo.findByNameIncludingTakenDown(name, tx);
+        const holder = await repo.findByName(name, tx);
         if (holder && holder.upstreamName !== server.upstreamName) {
           throw new NameConflictError(name);
         }
@@ -485,11 +532,6 @@ async function ingestServer(
             githubRepo: server.githubRepo,
             source: INGEST_SOURCE,
             upstreamName: server.upstreamName,
-            // Refreshed every sync, unlike source/upstreamName which are
-            // creation-only: a takedown or deprecation upstream is a
-            // metadata-only event that still has to land here.
-            upstreamStatus: server.status,
-            upstreamUpdatedAt: server.upstreamUpdatedAt,
           },
           tx,
         );
@@ -601,7 +643,7 @@ async function hasScan(prisma: PrismaClient, versionId: string): Promise<boolean
  */
 async function resolveName(repo: PackageRepository, server: MappedServer): Promise<string | null> {
   for (const candidate of [server.preferredName, server.qualifiedName]) {
-    const holder = await repo.findByNameIncludingTakenDown(candidate);
+    const holder = await repo.findByName(candidate);
     if (!holder || holder.upstreamName === server.upstreamName) return candidate;
   }
   return null;
@@ -628,19 +670,19 @@ async function versionIsCurrent(
 }
 
 /**
- * Refresh upstream lifecycle state on a version we already hold.
+ * Remove a mirror because upstream took the server down.
  *
- * Cheap, and the reason an incremental run still visits servers whose bytes
- * have not changed: a deprecation or takedown upstream is a metadata-only
- * event that must still reach the catalog.
+ * Deleting rather than flagging is deliberate. A flag has to be honoured by
+ * every read path, and three review rounds running found one that did not —
+ * search, the unclaimed listing, the download route. Removing the row instead
+ * means a route added next year cannot serve a taken-down bundle, because
+ * there is nothing to serve.
+ *
+ * The S3 object is intentionally left in place: it is content-addressed by
+ * digest, nothing links to it once the rows are gone, and keeping it means a
+ * takedown reversed upstream costs a re-download rather than being
+ * unrecoverable.
  */
-async function markUpstreamStatus(
-  prisma: PrismaClient,
-  server: MappedServer,
-  status: string,
-): Promise<void> {
-  await prisma.package.updateMany({
-    where: { upstreamName: server.upstreamName },
-    data: { upstreamStatus: status, upstreamUpdatedAt: server.upstreamUpdatedAt },
-  });
+async function deleteMirror(repo: PackageRepository, upstreamName: string): Promise<number> {
+  return repo.deleteMirror(upstreamName);
 }

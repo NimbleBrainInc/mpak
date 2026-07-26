@@ -40,7 +40,11 @@ const BUNDLE = bundleBuffer();
 const BUNDLE_SHA = createHash('sha256').update(BUNDLE).digest('hex');
 const BUNDLE_URL = 'https://github.com/acme/widget/releases/download/v1.0.0/widget.mcpb';
 
-function upstreamEntry(over: Record<string, unknown> = {}, status = 'active') {
+function upstreamEntry(
+  over: Record<string, unknown> = {},
+  status = 'active',
+  updatedAt = '2026-07-01T00:00:00Z',
+) {
   return {
     server: {
       name: 'io.github.acme/widget',
@@ -51,10 +55,7 @@ function upstreamEntry(over: Record<string, unknown> = {}, status = 'active') {
       ...over,
     },
     _meta: {
-      'io.modelcontextprotocol.registry/official': {
-        status,
-        updatedAt: '2026-07-01T00:00:00Z',
-      },
+      'io.modelcontextprotocol.registry/official': { status, updatedAt },
     },
   };
 }
@@ -160,7 +161,8 @@ function fakeStorage() {
 
 const repoMocks = vi.hoisted(() => ({
   findByUpstreamName: vi.fn(),
-  findByNameIncludingTakenDown: vi.fn(),
+  findByName: vi.fn(),
+  deleteMirror: vi.fn(),
   upsertPackage: vi.fn(),
   upsertVersion: vi.fn(),
   upsertArtifact: vi.fn(),
@@ -170,7 +172,8 @@ const repoMocks = vi.hoisted(() => ({
 vi.mock('../src/db/repositories/package.repository.js', () => ({
   PackageRepository: class {
     findByUpstreamName = repoMocks.findByUpstreamName;
-    findByNameIncludingTakenDown = repoMocks.findByNameIncludingTakenDown;
+    findByName = repoMocks.findByName;
+    deleteMirror = repoMocks.deleteMirror;
     upsertPackage = repoMocks.upsertPackage;
     upsertVersion = repoMocks.upsertVersion;
     upsertArtifact = repoMocks.upsertArtifact;
@@ -203,7 +206,7 @@ describe('runIngest', () => {
     state = { packages: new Map(), versions: new Map() };
 
     repoMocks.findByUpstreamName.mockResolvedValue(null);
-    repoMocks.findByNameIncludingTakenDown.mockResolvedValue(null);
+    repoMocks.findByName.mockResolvedValue(null);
     repoMocks.upsertPackage.mockResolvedValue({
       package: { id: 'pkg-1', name: '@acme/widget' },
       created: true,
@@ -240,10 +243,7 @@ describe('runIngest', () => {
     expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
       publishMethod: 'ingest',
     });
-    // Upstream lifecycle state lives on the package: "should mpak serve this"
-    // is a package-level decision, and the read filter has to be a plain
-    // column predicate.
-    expect(pkgArg).toMatchObject({ upstreamStatus: 'active' });
+    expect(pkgArg.upstreamStatus).toBeUndefined();
   });
 
   it('skips a server it already holds without downloading anything', async () => {
@@ -295,30 +295,37 @@ describe('runIngest', () => {
     expect(result.artifactsStored).toBe(1);
   });
 
-  it('propagates an upstream takedown without downloading', async () => {
-    state.packages.set('pkg-1', {
-      id: 'pkg-1',
-      name: '@acme/widget',
-      upstreamName: 'io.github.acme/widget',
-    });
-    const prisma = fakePrisma(state);
+  it('deletes the mirror when upstream takes a server down', async () => {
+    // Deleting rather than flagging is the whole point: a route added later
+    // cannot serve a taken-down bundle if the row is gone. Scoped to the
+    // mirror, so a natively published package is unreachable from here.
+    repoMocks.deleteMirror.mockResolvedValue(1);
 
     const { client, calls } = fakeUpstream([upstreamEntry({}, 'deleted')]);
-    const result = await runIngest(baseOptions(client, prisma));
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
 
     expect(calls.download).toBe(0);
     expect(result.skipReasons['upstream-deleted']).toBe(1);
-    expect(
-      (prisma as unknown as { package: { updateMany: ReturnType<typeof vi.fn> } }).package
-        .updateMany,
-    ).toHaveBeenCalled();
+    expect(result.mirrorsRemoved).toBe(1);
+    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget');
+  });
+
+  it('does not delete anything on a dry run', async () => {
+    const { client } = fakeUpstream([upstreamEntry({}, 'deleted')]);
+    const result = await runIngest({
+      ...baseOptions(client, fakePrisma(state)),
+      dryRun: true,
+    });
+
+    expect(result.skipReasons['upstream-deleted']).toBe(1);
+    expect(repoMocks.deleteMirror).not.toHaveBeenCalled();
   });
 
   it('refuses to overwrite a package another publisher already owns', async () => {
     // Both the short and the qualified handle are taken by rows that are not
     // this upstream server. Claiming one would silently hijack someone's
     // package, so the server is skipped and counted instead.
-    repoMocks.findByNameIncludingTakenDown.mockResolvedValue({
+    repoMocks.findByName.mockResolvedValue({
       id: 'other',
       name: '@acme/widget',
       upstreamName: null,
@@ -408,15 +415,36 @@ describe('runIngest', () => {
     expect(result.packagesCreated).toBe(1);
   });
 
-  it('holds the watermark back to a server it failed to download', async () => {
+  it('holds the watermark back to a recent failure so it is retried', async () => {
     // Without this the next window opens after the failure, so the server falls
     // outside every later window — one transient 503 drops a bundle until
     // someone runs --full. backoffLimit: 0 means no job retry covers it.
-    const { client } = fakeUpstream([upstreamEntry()], null);
+    const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { client } = fakeUpstream([upstreamEntry({}, 'active', recent)], null);
+
     const result = await runIngest(baseOptions(client, fakePrisma(state)));
 
     expect(result.skipReasons['download-failed']).toBe(1);
-    expect(result.watermark.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+    expect(result.watermark.toISOString()).toBe(recent);
+  });
+
+  it('stops holding once the failure is older than the bound', async () => {
+    // The other half. 21 of the 388 upstream MCPB URLs do not resolve, so
+    // without a floor the first backfill pins the window at a dead asset's
+    // timestamp and every later run re-reads an ever-widening span.
+    const ancient = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { client } = fakeUpstream([upstreamEntry({}, 'active', ancient)], null);
+
+    const before = Date.now();
+    const result = await runIngest({
+      ...baseOptions(client, fakePrisma(state)),
+      maxHoldbackMs: 72 * 60 * 60 * 1000,
+    });
+
+    expect(result.skipReasons['download-failed']).toBe(1);
+    // Clamped to the floor, not pinned at the failure's own timestamp.
+    expect(result.watermark.getTime()).toBeGreaterThan(before - 73 * 60 * 60 * 1000);
+    expect(result.watermark.toISOString()).not.toBe(ancient);
   });
 
   it('does not hold the watermark for a permanently broken bundle', async () => {
@@ -445,8 +473,8 @@ describe('runIngest', () => {
     // bundle downloads. Without the in-transaction re-check, upsertPackage's
     // update clause would rewrite their display name, description, author, and
     // repo with third-party content.
-    repoMocks.findByNameIncludingTakenDown.mockResolvedValueOnce(null); // pre-download check: free
-    repoMocks.findByNameIncludingTakenDown.mockResolvedValue({
+    repoMocks.findByName.mockResolvedValueOnce(null); // pre-download check: free
+    repoMocks.findByName.mockResolvedValue({
       id: 'other',
       name: '@acme/widget',
       upstreamName: null,

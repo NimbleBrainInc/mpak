@@ -22,14 +22,9 @@ export async function createTestApp(): Promise<FastifyInstance> {
 export function createMockPackageRepo() {
   return {
     findById: vi.fn(),
-    // Serving lookup — excludes packages upstream took down.
     findByName: vi.fn(),
-    // Name-is-taken lookup, deliberately a *separate* mock. An earlier revision
-    // aliased the two, which made a route that used the wrong one
-    // indistinguishable from one that used the right one — and that is exactly
-    // how an unfiltered download path shipped.
-    findByNameIncludingTakenDown: vi.fn(),
     findByUpstreamName: vi.fn(),
+    deleteMirror: vi.fn(),
     // Defaults to a miss so the reverse-DNS heuristics downstream of it still
     // run in tests that predate ingest.
     findByUpstreamNameInsensitive: vi.fn().mockResolvedValue(null),

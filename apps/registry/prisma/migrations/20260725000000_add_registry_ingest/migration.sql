@@ -5,19 +5,6 @@ ALTER TABLE "packages" ADD COLUMN "upstream_name" VARCHAR(255);
 
 CREATE UNIQUE INDEX "packages_upstream_name_key" ON "packages"("upstream_name");
 
--- Upstream lifecycle state, so a takedown upstream stops the package being
--- served on the next sync. Package-level: "should mpak serve this" is a
--- decision about the package, and it has to be a plain column predicate so
--- every read path gets it without a correlated subquery.
-ALTER TABLE "packages" ADD COLUMN "upstream_status" VARCHAR(20);
-ALTER TABLE "packages" ADD COLUMN "upstream_updated_at" TIMESTAMP(6);
-
--- Partial: takedowns are rare, so indexing only the rows the read filter
--- excludes keeps the write cost off every other publish.
-CREATE INDEX "idx_packages_upstream_deleted"
-    ON "packages"("id")
-    WHERE "upstream_status" = 'deleted';
-
 -- One row per ingest run. Holds the incremental watermark transactionally with
 -- the rows the run wrote.
 CREATE TABLE "registry_syncs" (

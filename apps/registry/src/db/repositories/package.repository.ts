@@ -92,9 +92,6 @@ export interface CreatePackageData {
   source?: string;
   /** Canonical upstream identity. Creation-only; it is the row's identity. */
   upstreamName?: string;
-  /** Upstream lifecycle state; refreshed on every sync so takedowns land. */
-  upstreamStatus?: string;
-  upstreamUpdatedAt?: Date;
 }
 
 export interface CreatePackageVersionData {
@@ -131,21 +128,6 @@ export interface PackageSearchResult {
   total: number;
 }
 
-/**
- * Excludes packages upstream took down.
- *
- * Null passes: `upstreamStatus` is only ever set on ingested packages, so
- * anything published to mpak directly is unaffected. Written as an explicit OR
- * because `not: 'deleted'` compiles to `<> 'deleted'`, which is null-unsafe in
- * SQL and would silently drop every natively published package.
- *
- * Without this a malware takedown upstream would leave the bundle listed,
- * downloadable, and MTF-badged on mpak indefinitely.
- */
-const SERVABLE: Prisma.PackageWhereInput = {
-  OR: [{ upstreamStatus: null }, { upstreamStatus: { not: 'deleted' } }],
-};
-
 export class PackageRepository {
   /**
    * Find package by ID
@@ -161,33 +143,9 @@ export class PackageRepository {
    * Find package by name
    */
   /**
-   * Name lookup for serving. Excludes packages upstream took down.
-   *
-   * This is the default deliberately. Three review rounds running, a read path
-   * was added or missed and silently served content it should not have,
-   * because the filtered lookup was the one you had to remember. Now the plain
-   * name is the safe one and seeing every row requires asking for it out loud
-   * via {@link findByNameIncludingTakenDown} — so the failure mode of
-   * forgetting is over-filtering, which surfaces as a visible 404 rather than
-   * as a takedown that quietly did nothing.
+   * Find a package by name.
    */
   async findByName(name: string, tx?: TransactionClient): Promise<Package | null> {
-    const client = tx ?? getPrismaClient();
-    return client.package.findFirst({ where: { name, ...SERVABLE } });
-  }
-
-  /**
-   * Unfiltered name lookup, including packages upstream took down.
-   *
-   * Only for paths deciding whether a name is *taken*, never for serving: the
-   * publish path detecting an existing package, the claim flow, and ingest's
-   * conflict check. Hiding a taken-down row from those would let a second
-   * package quietly claim a name that is still occupied.
-   */
-  async findByNameIncludingTakenDown(
-    name: string,
-    tx?: TransactionClient,
-  ): Promise<Package | null> {
     const client = tx ?? getPrismaClient();
     return client.package.findUnique({
       where: { name },
@@ -202,8 +160,8 @@ export class PackageRepository {
     tx?: TransactionClient,
   ): Promise<PackageWithRelations | null> {
     const client = tx ?? getPrismaClient();
-    return client.package.findFirst({
-      where: { name, ...SERVABLE },
+    return client.package.findUnique({
+      where: { name },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },
@@ -222,7 +180,7 @@ export class PackageRepository {
   ): Promise<PackageSearchResult> {
     const client = tx ?? getPrismaClient();
 
-    const where: Prisma.PackageWhereInput = { ...SERVABLE };
+    const where: Prisma.PackageWhereInput = {};
 
     if (filters.query) {
       where.OR = [
@@ -371,20 +329,19 @@ export class PackageRepository {
       license: data.license,
       iconUrl: data.iconUrl,
       serverType: data.serverType,
-      githubRepo: data.githubRepo,
-      // Refreshed every sync — a takedown is a metadata-only event, so it has
-      // to land on a package whose bytes did not change.
-      ...(data.upstreamStatus !== undefined ? { upstreamStatus: data.upstreamStatus } : {}),
-      ...(data.upstreamUpdatedAt !== undefined
-        ? { upstreamUpdatedAt: data.upstreamUpdatedAt }
-        : {}),
     };
+
+    // githubRepo is deliberately absent above. Once a package is claimed, that
+    // value is what the claimer proved control of — letting a nightly sync move
+    // it would let upstream metadata redirect an existing claim's verification
+    // target. Set at creation, and thereafter only while still unclaimed.
 
     const pkg = await client.package.upsert({
       where: { name: data.name },
       create: {
         name: data.name,
         ...manifestMetadata,
+        githubRepo: data.githubRepo,
         // Ownership/trust and version ordering are set only at creation.
         // On update they are owned elsewhere: `latestVersion` by
         // updateLatestVersion, `verified`/`claimedBy`/`claimedAt` by the
@@ -401,10 +358,35 @@ export class PackageRepository {
         ...(data.source ? { source: data.source } : {}),
         ...(data.upstreamName ? { upstreamName: data.upstreamName } : {}),
       },
-      update: manifestMetadata,
+      update: {
+        ...manifestMetadata,
+        ...(existing?.claimedBy ? {} : { githubRepo: data.githubRepo }),
+      },
     });
 
     return { package: pkg, created: !existing };
+  }
+
+  /**
+   * Remove a mirrored package because upstream took it down.
+   *
+   * This is the whole takedown mechanism. Handling it here — one write path —
+   * rather than as a predicate every read path has to remember is what makes
+   * it correct by construction: a route added later cannot serve a taken-down
+   * bundle, because the row is gone.
+   *
+   * Scoped to `source` as well as `upstreamName` so this can only ever reach a
+   * mirror. A natively published package is unreachable from here even if it
+   * somehow carried a matching upstream name. Versions and artifacts cascade.
+   *
+   * Returns how many packages were removed, for the run report.
+   */
+  async deleteMirror(upstreamName: string, tx?: TransactionClient): Promise<number> {
+    const client = tx ?? getPrismaClient();
+    const { count } = await client.package.deleteMany({
+      where: { upstreamName, source: 'mcp-registry' },
+    });
+    return count;
   }
 
   /**
@@ -466,8 +448,8 @@ export class PackageRepository {
     tx?: TransactionClient,
   ): Promise<PackageForServerLookup | null> {
     const client = tx ?? getPrismaClient();
-    return client.package.findFirst({
-      where: { name, ...SERVABLE },
+    return client.package.findUnique({
+      where: { name },
       include: {
         versions: {
           orderBy: { publishedAt: 'desc' },
@@ -501,8 +483,7 @@ export class PackageRepository {
   ): Promise<{ packages: PackageForServerLookup[]; total: number }> {
     const client = tx ?? getPrismaClient();
 
-    // Servable-only, like every other read path.
-    const conditions: Prisma.PackageWhereInput[] = [SERVABLE];
+    const conditions: Prisma.PackageWhereInput[] = [];
     if (filters.search) {
       conditions.push({
         OR: [

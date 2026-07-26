@@ -118,6 +118,35 @@ describe('inspectBundle', () => {
     expect(() => inspectBundle(p)).toThrow(NotABundleError);
   });
 
+  it('refuses a manifest that declares an enormous uncompressed size', () => {
+    // The download cap bounds *compressed* bytes; this bounds what decompressing
+    // would allocate, and an attacker picks the ratio. Measured: a 398KB archive
+    // declaring a 400MB manifest costs ~1.7GB RSS on readAsText, and because
+    // that is a Buffer it is external memory — --max-old-space-size does not
+    // bound it, only the cgroup limit does, which means an OOMKill of a job
+    // running with backoffLimit: 0. Anyone can publish to the upstream registry.
+    const zip = new AdmZip();
+    zip.addFile('manifest.json', Buffer.alloc(8 * 1024 * 1024, 0x20));
+    const p = writeTemp(zip.toBuffer());
+
+    // Throws on the declared header size, before anything is decompressed.
+    expect(() => inspectBundle(p)).toThrow(/declares \d+ bytes uncompressed/);
+  });
+
+  it('refuses an archive whose total declared size exceeds the budget', () => {
+    const zip = new AdmZip();
+    zip.addFile(
+      'manifest.json',
+      Buffer.from(JSON.stringify({ manifest_version: '0.3', server: { type: 'python' } })),
+    );
+    zip.addFile('payload.py', Buffer.alloc(4 * 1024 * 1024, 0x41));
+    const p = writeTemp(zip.toBuffer());
+
+    expect(() => inspectBundle(p, 1024 * 1024)).toThrow(/over the \d+ budget/);
+    // Same archive passes when the budget accommodates it.
+    expect(() => inspectBundle(p, 64 * 1024 * 1024)).not.toThrow();
+  });
+
   it('rejects a manifest that is not valid JSON', () => {
     const zip = new AdmZip();
     zip.addFile('manifest.json', Buffer.from('{ not json'));
