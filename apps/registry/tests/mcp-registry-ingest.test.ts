@@ -130,11 +130,20 @@ function fakePrisma(state: FakeState) {
 
 function fakeStorage() {
   return {
-    saveBundleFromStream: vi.fn(async () => ({
-      path: 'acme/widget/1.0.0/widget.mcpb',
-      sha256: BUNDLE_SHA,
-      size: BUNDLE.length,
-    })),
+    // Drains the stream, like every real implementation does. A fake that
+    // accepts the stream and ignores it is not a cheaper stand-in, it is a
+    // different contract — the read would open after the temp file is gone and
+    // surface as an unhandled error unrelated to what the test asserts.
+    saveBundleFromStream: vi.fn(async (_s, _p, _v, stream: NodeJS.ReadableStream) => {
+      for await (const _chunk of stream) {
+        // discard
+      }
+      return {
+        path: 'acme/widget/1.0.0/widget.mcpb',
+        sha256: BUNDLE_SHA,
+        size: BUNDLE.length,
+      };
+    }),
     saveBundle: vi.fn(),
     getBundle: vi.fn(),
     getBundleUrl: vi.fn(),

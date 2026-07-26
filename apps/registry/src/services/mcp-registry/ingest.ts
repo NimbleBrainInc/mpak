@@ -290,16 +290,27 @@ async function ingestServer(
               ? undefined
               : `${artifact.os}-${artifact.arch}`;
 
-          const stored = await storage.saveBundleFromStream(
-            scope,
-            packageName,
-            server.version,
-            createReadStream(bundle.tempPath),
-            bundle.sha256,
-            bundle.size,
-            platform,
-          );
-          storagePath = stored.path;
+          // createReadStream opens lazily, on first read. If the save rejects
+          // before consuming it — or never consumes it — the open lands after
+          // this server's cleanup has already unlinked the temp file, and the
+          // resulting 'error' event has no listener. An unhandled stream error
+          // takes the whole process down, which on a nightly batch job means one
+          // bad artifact ends the run.
+          const body = createReadStream(bundle.tempPath);
+          try {
+            const stored = await storage.saveBundleFromStream(
+              scope,
+              packageName,
+              server.version,
+              body,
+              bundle.sha256,
+              bundle.size,
+              platform,
+            );
+            storagePath = stored.path;
+          } finally {
+            body.destroy();
+          }
         }
 
         downloads.push({
