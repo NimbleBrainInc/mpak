@@ -19,6 +19,7 @@ import { PackageRepository } from '../../db/repositories/package.repository.js';
 import type { StorageService } from '../../plugins/storage.js';
 import { triggerSecurityScan } from '../scanner.js';
 import {
+  BundleDownloadError,
   BundleTooLargeError,
   BundleVerificationError,
   downloadAndVerify,
@@ -26,7 +27,7 @@ import {
 } from './bundle.js';
 import type { McpRegistryClient } from './client.js';
 import type { MappedArtifact, MappedServer, RejectReason } from './mapper.js';
-import { mapServer } from './mapper.js';
+import { mapServer, mcpbPackages } from './mapper.js';
 import type { UpstreamServerEntry } from './types.js';
 
 export const INGEST_SOURCE = 'mcp-registry';
@@ -53,8 +54,18 @@ export interface IngestOptions {
   concurrency: number;
   /** Map and verify without writing or storing anything. */
   dryRun?: boolean;
-  /** Hard cap on servers processed in one run; undefined means no cap. */
+  /** Hard cap on servers *read* from upstream; undefined means no cap. */
   limit?: number;
+  /**
+   * Stop after this many servers carrying an MCPB bundle have been picked up.
+   *
+   * Distinct from `limit` because the two answer different questions. Only
+   * about 2% of upstream ships an MCPB bundle, and they are not evenly spread
+   * through the catalog's name ordering — so "read 10 servers" and "try 10
+   * bundles" can differ by three orders of magnitude. This is the bound you
+   * want for a trial run.
+   */
+  maxBundles?: number;
   scanEnabled: boolean;
   logger: IngestLogger;
 }
@@ -106,7 +117,7 @@ interface ServerOutcome {
  * idempotent, whereas a gap is silent and permanent.
  */
 export async function runIngest(options: IngestOptions): Promise<IngestResult> {
-  const { client, since, limit, logger } = options;
+  const { client, since, limit, maxBundles, logger } = options;
   const watermark = new Date();
 
   const counters: IngestCounters = {
@@ -179,9 +190,19 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
     return tracked;
   };
 
+  let bundlesTaken = 0;
+
   for await (const entry of client.listServers({ updatedSince: since, version: 'latest' })) {
     if (limit !== undefined && processed >= limit) break;
     processed += 1;
+
+    // Whether a server carries an MCPB bundle is a pure check over metadata
+    // already in hand, so the bundle budget can be spent before any work is
+    // launched — no download is started that the budget would not have allowed.
+    if (maxBundles !== undefined && mcpbPackages(entry).length > 0) {
+      if (bundlesTaken >= maxBundles) break;
+      bundlesTaken += 1;
+    }
 
     launch(entry);
     if (inFlight.size >= options.concurrency) await Promise.race(inFlight);
@@ -305,7 +326,19 @@ async function ingestServer(
           return { matched: true, skipReason: 'not-a-bundle' };
         }
         if (err instanceof BundleVerificationError) {
+          // Loud on purpose. Upstream declared a digest and served different
+          // bytes, which means the artifact changed after it was published.
+          // That is the one failure here worth a human looking at it, and it
+          // must not sit silently in a counter alongside dead links.
+          logger.error('Upstream artifact does not match its declared digest', {
+            server: server.upstreamName,
+            url: artifact.sourceUrl,
+            err: err.message,
+          });
           return { matched: true, skipReason: 'sha-mismatch' };
+        }
+        if (err instanceof BundleDownloadError) {
+          return { matched: true, skipReason: 'download-failed' };
         }
         return { matched: true, skipReason: 'download-failed' };
       }

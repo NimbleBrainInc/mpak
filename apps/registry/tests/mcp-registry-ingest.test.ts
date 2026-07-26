@@ -359,6 +359,37 @@ describe('runIngest', () => {
     expect(result.packagesCreated).toBe(1);
   });
 
+  it('spends the bundle budget before starting work, not after', async () => {
+    // `--max-bundles 2` must mean two downloads, not "two, plus whatever the
+    // concurrency window had already started". The check is pure metadata, so
+    // the budget is spent before any I/O is launched.
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      ...upstreamEntry(),
+      server: { ...upstreamEntry().server, name: `io.github.acme/widget-${i}` },
+    }));
+
+    const { client, calls } = fakeUpstream(entries);
+    const result = await runIngest({ ...baseOptions(client, fakePrisma(state)), maxBundles: 2 });
+
+    expect(calls.download).toBe(2);
+    expect(result.serversMatched).toBe(2);
+  });
+
+  it('does not let a bundle budget stop a catalog with no bundles in it', async () => {
+    // Servers without an MCPB package never touch the budget, so a trial run
+    // walks past them rather than terminating on the first page of npm servers.
+    const npmOnly = upstreamEntry({
+      packages: [{ registryType: 'npm', identifier: 'widget-mcp' }],
+    });
+
+    const { client } = fakeUpstream([npmOnly, npmOnly, npmOnly, upstreamEntry()]);
+    const result = await runIngest({ ...baseOptions(client, fakePrisma(state)), maxBundles: 1 });
+
+    expect(result.serversSeen).toBe(4);
+    expect(result.serversMatched).toBe(1);
+    expect(result.packagesCreated).toBe(1);
+  });
+
   it('writes nothing in dry-run mode', async () => {
     const { client, calls } = fakeUpstream([upstreamEntry()]);
     const options = { ...baseOptions(client, fakePrisma(state)), dryRun: true };

@@ -46,6 +46,25 @@ export class BundleTooLargeError extends Error {
   }
 }
 
+/**
+ * The artifact could not be retrieved: HTTP error, timeout, connection reset.
+ *
+ * Deliberately distinct from `BundleVerificationError`. A dead release asset is
+ * routine upstream churn; a digest that does not match is a claim that the
+ * bytes changed after publication. Reporting both as one reason buries the
+ * second in a pile of the first, which is the opposite of what either is for.
+ */
+export class BundleDownloadError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'BundleDownloadError';
+  }
+}
+
+/** The bytes arrived but do not hash to the digest upstream declared. */
 export class BundleVerificationError extends Error {
   constructor(message: string) {
     super(message);
@@ -184,8 +203,9 @@ export async function downloadAndVerify(options: {
     });
 
     if (!response.ok || !response.body) {
-      throw new BundleVerificationError(
+      throw new BundleDownloadError(
         `Download failed: ${response.status} ${response.statusText}`,
+        response.status,
       );
     }
 

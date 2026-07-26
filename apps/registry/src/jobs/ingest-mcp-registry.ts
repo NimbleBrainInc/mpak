@@ -19,6 +19,7 @@ interface CliArgs {
   dryRun: boolean;
   full: boolean;
   limit?: number;
+  maxBundles?: number;
   concurrency?: number;
 }
 
@@ -43,6 +44,17 @@ export function parseArgs(argv: string[]): CliArgs {
           throw new Error('--limit requires a positive integer');
         }
         args.limit = value;
+        break;
+      }
+      // The bound you want for a trial run. `--limit` counts servers read from
+      // upstream, of which only ~2% carry a bundle, so `--limit 10` reliably
+      // finds none.
+      case '--max-bundles': {
+        const value = Number(argv[++i]);
+        if (!Number.isInteger(value) || value <= 0) {
+          throw new Error('--max-bundles requires a positive integer');
+        }
+        args.maxBundles = value;
         break;
       }
       case '--concurrency': {
@@ -122,6 +134,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       concurrency: args.concurrency ?? config.ingest.concurrency,
       dryRun: args.dryRun,
       limit: args.limit,
+      maxBundles: args.maxBundles,
       scanEnabled: config.scanner.enabled,
       logger,
     });

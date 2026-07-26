@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BundleDownloadError,
   BundleTooLargeError,
   BundleVerificationError,
   downloadAndVerify,
@@ -189,17 +190,23 @@ describe('downloadAndVerify', () => {
     ).rejects.toThrow(BundleTooLargeError);
   });
 
-  it('surfaces a failed download', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response('gone', { status: 404 }));
+  it('reports a dead release asset as a download failure, not a digest mismatch', async () => {
+    // Observed live: an upstream mcpb package pointing at a deleted GitHub
+    // release asset. GitHub answers 404 with a 9-byte "Not Found" body. Calling
+    // that a digest mismatch would bury real tampering signal under routine
+    // upstream churn.
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('Not Found', { status: 404 }));
 
-    await expect(
-      downloadAndVerify({
-        url: 'https://example.com/widget.mcpb',
-        expectedSha256: 'a'.repeat(64),
-        maxBytes: 10_000_000,
-        fetchImpl,
-      }),
-    ).rejects.toThrow(BundleVerificationError);
+    const err = await downloadAndVerify({
+      url: 'https://example.com/widget.mcpb',
+      expectedSha256: 'a'.repeat(64),
+      maxBytes: 10_000_000,
+      fetchImpl,
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BundleDownloadError);
+    expect(err).not.toBeInstanceOf(BundleVerificationError);
+    expect((err as BundleDownloadError).status).toBe(404);
   });
 
   it('rejects a verified download that is not a bundle', async () => {
