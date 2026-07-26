@@ -16,6 +16,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e .env -- prisma migrate dev",
     "db:seed": "dotenv -e .env -- tsx prisma/seed.ts",
+    "ingest:mcp-registry": "node dist/jobs/ingest-mcp-registry.js",
+    "ingest:mcp-registry:dev": "dotenv -e .env -- tsx src/jobs/ingest-mcp-registry.ts",
     "clean": "rm -rf dist"
   },
   "license": "Apache-2.0",

@@ -480,6 +480,15 @@ export const scannerRoutes: FastifyPluginAsync = async (fastify) => {
           };
         }
 
+        // The scan pod reads the bundle from S3 and has no network reach, so an
+        // artifact that was catalogued but never mirrored has nothing to scan.
+        if (!artifact.storagePath) {
+          return {
+            success: false,
+            message: 'Artifact is not mirrored by mpak and cannot be scanned',
+          };
+        }
+
         // Trigger the scan
         await triggerSecurityScan(fastify.prisma, {
           versionId: pkgVersion.id,

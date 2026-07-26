@@ -102,6 +102,17 @@ async function resolveByName(
   const direct = await packageRepo.findPackageForServerLookup(decodedName);
   if (direct) return direct;
 
+  // Exact upstream identity. Authoritative for anything ingested, and checked
+  // before the heuristics below because those derive a name from the namespace
+  // and cannot distinguish `io.github.acme/x` from `com.acme/x`.
+  if (decodedName.includes('/') && !decodedName.startsWith('@')) {
+    const byUpstream = await packageRepo.findByUpstreamNameInsensitive(decodedName);
+    if (byUpstream) {
+      const hit = await packageRepo.findPackageForServerLookup(byUpstream.name);
+      if (hit) return hit;
+    }
+  }
+
   // Reverse-DNS form: derive candidate npm names and try each.
   if (decodedName.includes('/') && !decodedName.startsWith('@')) {
     for (const candidate of reverseDnsToNpmCandidates(decodedName)) {

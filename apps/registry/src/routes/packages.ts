@@ -23,6 +23,7 @@ import {
 } from '../errors/index.js';
 import { toJsonSchema } from '../lib/zod-schema.js';
 import { generateMpakJsonExample } from '../schemas/mpak-schema.js';
+import { resolveArtifactUrl } from '../services/artifact-download.js';
 import {
   fetchGitHubRepoStats,
   parseGitHubRepo,
@@ -916,9 +917,14 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
       const acceptHeader = request.headers.accept ?? '';
       const wantsJson = acceptHeader.includes('application/json');
 
-      // Generate signed download URL using the actual storage path
-      // This ensures the URL matches where the file was actually stored
-      const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
+      // Prefer our verified mirror, whose signed URL matches where the file was
+      // actually stored; fall back to the publisher's own URL for an artifact
+      // that was catalogued but never copied.
+      const resolved = await resolveArtifactUrl(fastify.storage, artifact);
+      if (!resolved) {
+        throw new NotFoundError('Artifact has no retrievable location');
+      }
+      const downloadUrl = resolved.url;
 
       if (wantsJson) {
         // CLI/API mode: Return JSON with download URL and metadata
@@ -943,7 +949,7 @@ export const packageRoutes: FastifyPluginAsync = async (fastify) => {
         // For S3/CloudFront, this will be a signed CDN URL
 
         // Check if this is a local storage URL (starts with /)
-        if (downloadUrl.startsWith('/')) {
+        if (downloadUrl.startsWith('/') && artifact.storagePath) {
           // Local storage - serve file directly
           const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
 

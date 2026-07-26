@@ -35,6 +35,7 @@ import {
   type BundleVersionPathParams,
   BundleVersionPathParamsSchema,
 } from '../../schemas/bundles.js';
+import { resolveArtifactUrl } from '../../services/artifact-download.js';
 import { triggerSecurityScan } from '../../services/scanner.js';
 import { generateBadge } from '../../utils/badge.js';
 import { notifyDiscordAnnounce } from '../../utils/discord.js';
@@ -431,14 +432,19 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       // Build bundles array from artifacts
       const bundleArtifacts = await Promise.all(
         latestVersion.artifacts.map(async (artifact) => {
-          const url = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
+          const resolved = await resolveArtifactUrl(fastify.storage, artifact);
 
           return {
             mimeType: artifact.mimeType,
             digest: artifact.digest,
             size: Number(artifact.sizeBytes),
             platform: { os: artifact.os, arch: artifact.arch },
-            urls: [url, artifact.sourceUrl].filter(Boolean),
+            // The index format takes a list, so an unmirrored artifact simply
+            // lists its upstream URL alone rather than a dead signed one.
+            urls: [
+              ...(resolved?.origin === 'mirror' ? [resolved.url] : []),
+              artifact.sourceUrl,
+            ].filter(Boolean),
           };
         }),
       );
@@ -562,13 +568,16 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       // Build artifacts array with download URLs
       const artifacts = await Promise.all(
         packageVersion.artifacts.map(async (a) => {
-          const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(a.storagePath);
+          const resolved = await resolveArtifactUrl(fastify.storage, a);
 
           return {
             platform: { os: a.os, arch: a.arch },
             digest: a.digest,
             size: Number(a.sizeBytes),
-            download_url: downloadUrl,
+            download_url: resolved?.url,
+            // Tells a client whether these bytes came through mpak's
+            // verification or straight from the publisher.
+            download_origin: resolved?.origin,
             source_url: a.sourceUrl || undefined,
           };
         }),
@@ -658,8 +667,13 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
       const acceptHeader = request.headers.accept ?? '';
       const wantsJson = acceptHeader.includes('application/json');
 
-      // Generate signed download URL using the actual storage path
-      const downloadUrl = await fastify.storage.getSignedDownloadUrlFromPath(artifact.storagePath);
+      // Prefer our verified mirror; fall back to the publisher's own URL for an
+      // artifact that was catalogued but never copied.
+      const resolved = await resolveArtifactUrl(fastify.storage, artifact);
+      if (!resolved) {
+        throw new NotFoundError('Artifact has no retrievable location');
+      }
+      const downloadUrl = resolved.url;
 
       if (wantsJson) {
         // CLI/API mode: Return JSON with download URL and metadata
@@ -681,7 +695,7 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
         };
       } else {
         // Browser mode: Redirect to download URL
-        if (downloadUrl.startsWith('/')) {
+        if (downloadUrl.startsWith('/') && artifact.storagePath) {
           // Local storage - serve file directly
           const fileBuffer = await fastify.storage.getBundle(artifact.storagePath);
 

@@ -44,6 +44,21 @@ export const config = {
   limits: {
     maxBundleSizeMB: parseInt(process.env.MAX_BUNDLE_SIZE_MB || '50', 10),
   },
+  ingest: {
+    // Upstream MCP Registry to mirror MCPB bundles from.
+    registryUrl: process.env.INGEST_REGISTRY_URL || 'https://registry.modelcontextprotocol.io/v0',
+    // Larger than the publish limit on purpose. A publisher pushing 50MB to
+    // mpak is a choice we can push back on; third-party bundles are whatever
+    // upstream already accepted, and compiled multi-platform servers are
+    // routinely an order of magnitude bigger than interpreted ones.
+    maxBundleSizeMB: parseInt(process.env.INGEST_MAX_BUNDLE_SIZE_MB || '250', 10),
+    concurrency: parseInt(process.env.INGEST_CONCURRENCY || '4', 10),
+    // Re-read a little before the last watermark. Ingest is idempotent, so
+    // overlap costs a few cheap "unchanged" decisions, while a gap is silent.
+    overlapMinutes: parseInt(process.env.INGEST_OVERLAP_MINUTES || '60', 10),
+    requestTimeoutMs: parseInt(process.env.INGEST_REQUEST_TIMEOUT_MS || '30000', 10),
+    downloadTimeoutMs: parseInt(process.env.INGEST_DOWNLOAD_TIMEOUT_MS || '120000', 10),
+  },
   scanner: {
     enabled: process.env.SCANNER_ENABLED === 'true',
     image: process.env.SCANNER_IMAGE || '',

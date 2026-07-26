@@ -88,6 +88,10 @@ export interface CreatePackageData {
   githubRepo?: string;
   claimedBy?: string;
   claimedAt?: Date;
+  /** 'mpak' (published here) or 'mcp-registry' (ingested). Creation-only. */
+  source?: string;
+  /** Canonical upstream identity. Creation-only; it is the row's identity. */
+  upstreamName?: string;
 }
 
 export interface CreatePackageVersionData {
@@ -106,6 +110,9 @@ export interface CreatePackageVersionData {
   provenanceSha?: string;
   provenance?: unknown;
   serverJson?: unknown;
+  /** Upstream lifecycle state, so a takedown there propagates on next sync. */
+  upstreamStatus?: string;
+  upstreamUpdatedAt?: Date;
 }
 
 export interface CreateArtifactData {
@@ -115,7 +122,8 @@ export interface CreateArtifactData {
   mimeType?: string;
   digest: string;
   sizeBytes: bigint;
-  storagePath: string;
+  /** Null for a pointer-only artifact: catalogued upstream, never mirrored. */
+  storagePath: string | null;
   sourceUrl: string;
 }
 
@@ -339,11 +347,48 @@ export class PackageRepository {
         createdBy: data.createdBy,
         claimedBy: data.claimedBy,
         claimedAt: data.claimedAt,
+        // Catalog provenance is identity, not metadata: where a row came from
+        // cannot change on a later announce, or an ingested row could be
+        // relabelled as natively published (or the reverse) by whoever writes
+        // next.
+        ...(data.source ? { source: data.source } : {}),
+        ...(data.upstreamName ? { upstreamName: data.upstreamName } : {}),
       },
       update: manifestMetadata,
     });
 
     return { package: pkg, created: !existing };
+  }
+
+  /**
+   * Find a package by its canonical upstream identity.
+   *
+   * The authoritative lookup for anything ingested. `name` is a derived handle
+   * and is not stable against a collision-driven fallback, so a sync must
+   * re-find its own rows by the upstream name it originally recorded.
+   */
+  async findByUpstreamName(upstreamName: string, tx?: TransactionClient): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findUnique({ where: { upstreamName } });
+  }
+
+  /**
+   * Case-insensitive variant, for resolving a name a caller typed.
+   *
+   * Upstream names are stored verbatim because case is significant there —
+   * upstream really does carry pairs differing only in case, and folding them
+   * would merge two distinct servers into one row. But an API caller asking for
+   * a server by name should not have to reproduce that casing, so lookups
+   * (unlike ingest's identity check) are lenient.
+   */
+  async findByUpstreamNameInsensitive(
+    upstreamName: string,
+    tx?: TransactionClient,
+  ): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findFirst({
+      where: { upstreamName: { equals: upstreamName, mode: 'insensitive' } },
+    });
   }
 
   /**
@@ -610,10 +655,16 @@ export class PackageRepository {
         provenanceSha: data.provenanceSha,
         provenance: data.provenance as Prisma.InputJsonValue,
         serverJson: data.serverJson as Prisma.InputJsonValue,
+        upstreamStatus: data.upstreamStatus,
+        upstreamUpdatedAt: data.upstreamUpdatedAt,
       },
       update: {
         manifest: data.manifest as Prisma.InputJsonValue,
         prerelease: data.prerelease ?? false,
+        // Refreshed every sync: upstream status is the whole point of
+        // re-reading a version we already have.
+        ...(data.upstreamStatus ? { upstreamStatus: data.upstreamStatus } : {}),
+        ...(data.upstreamUpdatedAt ? { upstreamUpdatedAt: data.upstreamUpdatedAt } : {}),
         ...(data.publishMethod ? { publishMethod: data.publishMethod } : {}),
         ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
         ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),

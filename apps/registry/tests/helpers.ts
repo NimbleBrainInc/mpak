@@ -23,6 +23,10 @@ export function createMockPackageRepo() {
   return {
     findById: vi.fn(),
     findByName: vi.fn(),
+    findByUpstreamName: vi.fn(),
+    // Defaults to a miss so the reverse-DNS heuristics downstream of it still
+    // run in tests that predate ingest.
+    findByUpstreamNameInsensitive: vi.fn().mockResolvedValue(null),
     findByNameWithRelations: vi.fn(),
     search: vi.fn(),
     create: vi.fn(),

@@ -188,9 +188,15 @@ export async function triggerSecurityScan(
     bundleStoragePath: string;
     packageName: string;
     version: string;
+    /**
+     * How much of the bundle the scanner will be able to read, determined from
+     * its contents before the job starts. Recorded up front so a report on an
+     * opaque bundle is never mistaken for one earned by inspection.
+     */
+    scanability?: string;
   },
 ): Promise<void> {
-  const { versionId, bundleStoragePath, packageName, version } = params;
+  const { versionId, bundleStoragePath, packageName, version, scanability } = params;
 
   const scanId = randomUUID();
 
@@ -199,6 +205,7 @@ export async function triggerSecurityScan(
       versionId,
       scanId,
       status: 'pending',
+      scanability,
     },
   });
 

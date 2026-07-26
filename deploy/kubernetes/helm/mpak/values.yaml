@@ -102,6 +102,62 @@ registry:
     capabilities:
       drop: [ALL]
 
+# -- Registry Ingest -----------------------------------------------------------
+# Nightly mirror of MCPB bundles from an upstream MCP Registry. The upstream
+# registry is a metaregistry that makes no security or quality judgement by
+# design; this job pulls the bytes so mpak can verify and scan them.
+#
+# Off by default. It writes third-party content into the catalog, which is a
+# decision an operator should make deliberately rather than inherit.
+ingest:
+  enabled: false
+
+  # 02:00 daily. Nothing depends on the hour; off-peak keeps the bandwidth and
+  # the scan-job burst away from daytime API traffic.
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+
+  registryUrl: "https://registry.modelcontextprotocol.io/v0"
+
+  # Higher than the publish limit (MAX_BUNDLE_SIZE_MB). Bundles here are
+  # whatever upstream already accepted, and compiled multi-platform servers run
+  # an order of magnitude larger than interpreted ones. Anything above this is
+  # skipped and counted, not silently dropped.
+  maxBundleSizeMB: 250
+
+  # Concurrent server pipelines. Downloads dominate, so this is network-bound;
+  # raising it mostly buys wall-clock at the cost of upstream politeness.
+  concurrency: 4
+
+  # Re-read this far before the last watermark. Ingest is idempotent, so the
+  # overlap costs a few cheap "unchanged" decisions, while a gap is silent.
+  overlapMinutes: 60
+
+  # Extra CLI flags, e.g. ["--full"] to ignore the watermark and re-read the
+  # whole upstream catalog.
+  extraArgs: []
+
+  # A first backfill walks the entire upstream catalog. Six hours is generous
+  # for that; steady-state incremental runs finish in minutes.
+  activeDeadlineSeconds: 21600
+  startingDeadlineSeconds: 3600
+  # No retry. A failed run advances nothing, so the next scheduled run resumes
+  # from the same watermark — retrying immediately just repeats whatever broke.
+  backoffLimit: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  # Bundles stream through /tmp on the way to S3, one at a time per pipeline.
+  scratchSizeLimit: "4Gi"
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
 # -- Web Frontend --------------------------------------------------------------
 web:
   replicaCount: 2
