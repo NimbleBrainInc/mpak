@@ -50,8 +50,9 @@ export const config = {
     // Larger than the publish limit on purpose. A publisher pushing 50MB to
     // mpak is a choice we can push back on; third-party bundles are whatever
     // upstream already accepted, and compiled multi-platform servers are
-    // routinely an order of magnitude bigger than interpreted ones.
-    maxBundleSizeMB: parseInt(process.env.INGEST_MAX_BUNDLE_SIZE_MB || '250', 10),
+    // routinely an order of magnitude bigger than interpreted ones. Sized for
+    // headroom over the largest bundle upstream (248MB), not to fit it exactly.
+    maxBundleSizeMB: parseInt(process.env.INGEST_MAX_BUNDLE_SIZE_MB || '400', 10),
     concurrency: parseInt(process.env.INGEST_CONCURRENCY || '4', 10),
     // Re-read a little before the last watermark. Ingest is idempotent, so
     // overlap costs a few cheap "unchanged" decisions, while a gap is silent.

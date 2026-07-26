@@ -123,7 +123,11 @@ ingest:
   # whatever upstream already accepted, and compiled multi-platform servers run
   # an order of magnitude larger than interpreted ones. Anything above this is
   # skipped and counted, not silently dropped.
-  maxBundleSizeMB: 250
+  #
+  # 400MB is chosen for headroom, not to fit the current corpus exactly: the
+  # largest valid bundle upstream today is 248MB, so a tighter cap would drop it
+  # on its next release for no reason anyone would think to look for.
+  maxBundleSizeMB: 400
 
   # Concurrent server pipelines. Downloads dominate, so this is network-bound;
   # raising it mostly buys wall-clock at the cost of upstream politeness.
