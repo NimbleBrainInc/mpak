@@ -123,10 +123,23 @@ describe('fetchGithubReadme', () => {
     expect(await fetchGithubReadme({ githubRepo: 'acme/widget' })).toBeNull();
   });
 
+  it('tries the lowercase spelling, which the CDN treats as a different path', async () => {
+    // Unlike the in-bundle lookup, which compares case-insensitively, this is a
+    // URL path on a case-sensitive host: `README.md` 404s for a repo whose file
+    // is `readme.md`.
+    mockFetch((url) => (url.endsWith('/readme.md') ? ok('lowercase body') : notFound()));
+    expect(await fetchGithubReadme({ githubRepo: 'acme/widget' })).toBe('lowercase body');
+  });
+
   it('refuses a repo slug that is not owner/repo', async () => {
     const spy = mockFetch(() => ok('# nope'));
     expect(await fetchGithubReadme({ githubRepo: '../../etc/passwd' })).toBeNull();
     expect(await fetchGithubReadme({ githubRepo: 'acme/widget/extra' })).toBeNull();
+    // Two dot segments are a legal *shape* — both sides match the character
+    // class — so the shape check alone lets this through. `githubSlug` builds
+    // the slug by regex-matching an upstream URL rather than parsing it, so
+    // `https://github.com/../..` really does arrive here.
+    expect(await fetchGithubReadme({ githubRepo: '../..' })).toBeNull();
     expect(spy).not.toHaveBeenCalled();
   });
 

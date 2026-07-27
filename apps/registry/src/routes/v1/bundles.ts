@@ -75,11 +75,17 @@ function isValidScopedPackageName(name: string): boolean {
  *
  * The widening from exact-match matters because `arch: 'any'` is a real stored
  * value, not a query convention: an artifact named `server-linux.mcpb` declares
- * an OS and no architecture, and is recorded as `linux/any`. Callers never ask
- * for it by that name — the SDK's `detectPlatform` reports the concrete runtime
- * (`linux`/`x64`) and the query schema admits no `any` — so under exact-match
- * such a build is addressable by nobody, and a package whose every artifact has
- * that shape 404s on every download while still appearing in the catalog.
+ * an OS and no architecture, and is recorded as `linux/any`. A caller on a
+ * supported platform asks for its concrete pair — `linux`/`x64` — so under
+ * exact-match that build is reachable by nobody, and a package whose every
+ * artifact has that shape 404s on every download while still appearing in the
+ * catalog.
+ *
+ * Asking for `arch=any` directly is not the way in either: the query schema
+ * admits only `x64` and `arm64`, so such a request is rejected before this
+ * function runs. That rejection also strands the SDK on any platform outside
+ * those enums, which is a separate defect in the schema, not in this
+ * resolution.
  *
  * Preference order is specificity: an arch-specific build beats one that merely
  * claims to run anywhere on that OS, which in turn beats a fully portable one.

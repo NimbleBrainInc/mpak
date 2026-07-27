@@ -169,6 +169,11 @@ describe('inspectBundle', () => {
     expect(inspectBundle(p).readme).toBeNull();
   });
 
+  it('finds a root README in an archive that prefixes entries with ./', () => {
+    const p = writeTemp(buildBundle({ files: { './README.md': '# Dot-slash' } }));
+    expect(inspectBundle(p).readme).toBe('# Dot-slash');
+  });
+
   it('prefers README.md over other root README spellings', () => {
     const p = writeTemp(
       buildBundle({ files: { 'README.txt': 'plain text', 'README.md': '# markdown' } }),

@@ -186,8 +186,9 @@ export function inspectBundle(bundlePath: string): BundleInspection {
     const ext = path.extname(base).toLowerCase();
     if (SOURCE_EXTENSIONS.includes(ext)) sourceFileCount += 1;
 
-    // Root only: `entryName` is the full path, so a root file has no separator.
-    if (!entry.entryName.includes('/')) {
+    // Root only: `entryName` is the full path, so a root file has no separator
+    // once the `./` some archivers prefix every entry with is removed.
+    if (!entry.entryName.replace(/^\.\//, '').includes('/')) {
       const rank = README_NAMES.findIndex((n) => n.toLowerCase() === base.toLowerCase());
       if (rank !== -1 && rank < readmeRank) {
         readmeRank = rank;

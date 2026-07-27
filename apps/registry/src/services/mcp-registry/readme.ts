@@ -17,16 +17,27 @@
  */
 
 /**
- * Same order of preference as the in-bundle lookup. Kept short on purpose: a
- * repository with no README costs one 404 per name per ref, and every name past
- * these is rare enough that finding it is not worth charging every miss for.
+ * A shorter prefix of the in-bundle preference order, plus the lowercase
+ * spelling. Kept short on purpose: a repository with no README costs one 404
+ * per name per ref, and every name past these is rare enough that finding it is
+ * not worth charging every miss for.
+ *
+ * The lowercase entry is not redundant with the in-bundle lookup's
+ * case-insensitive compare. Here the name is a URL path on a case-sensitive
+ * host — `readme.md` is a 404 against a repository whose file is `README.md`
+ * and vice versa — so each spelling that matters has to be asked for.
  */
-const README_PATHS = ['README.md', 'README.rst', 'README.txt', 'README'];
+const README_PATHS = ['README.md', 'readme.md', 'README.rst', 'README.txt', 'README'];
 
 /** Matches the in-bundle cap; the destination column and page are the same. */
 const MAX_README_BYTES = 512 * 1024;
 
-const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * Not caller-configurable, unlike the artifact download's. That one bounds a
+ * transfer whose size varies by orders of magnitude; this is a single small
+ * file, so one bound fits every call site.
+ */
+const TIMEOUT_MS = 10_000;
 
 /**
  * Recover the git ref an MCPB artifact was published at.
@@ -42,9 +53,9 @@ export function releaseTagFromAssetUrl(assetUrl: string | undefined): string | u
   return m?.[1] ? decodeURIComponent(m[1]) : undefined;
 }
 
-async function fetchOne(url: string, timeoutMs: number): Promise<string | null> {
+async function fetchOne(url: string): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'mpak-registry' },
@@ -77,15 +88,18 @@ async function fetchOne(url: string, timeoutMs: number): Promise<string | null> 
 export async function fetchGithubReadme(options: {
   githubRepo: string;
   ref?: string;
-  timeoutMs?: number;
 }): Promise<string | null> {
   const { githubRepo, ref } = options;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  // `githubRepo` reaches here from the mapper's `githubSlug`, which is already
-  // anchored to github.com and rejects path segments. Re-checking the shape
-  // keeps that guarantee local to the function that builds a URL from it.
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(githubRepo)) return null;
+  // `githubRepo` reaches here from the mapper's `githubSlug`, which regex-matches
+  // an upstream-controlled URL rather than parsing it, so `github.com/../..`
+  // does arrive here as `../..`. A shape check alone admits that — both
+  // segments are legal characters — so `..` is excluded explicitly, the same
+  // way it is for the ref below.
+  const segments = githubRepo.split('/');
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(githubRepo) || segments.includes('..')) {
+    return null;
+  }
 
   // `HEAD` resolves to the default branch whatever it is named. It is the
   // fallback rather than the first choice because it drifts away from the
@@ -99,10 +113,7 @@ export async function fetchGithubReadme(options: {
     // derived from an upstream-controlled artifact URL.
     if (!/^[A-Za-z0-9._/-]+$/.test(r) || r.split('/').includes('..')) continue;
     for (const p of README_PATHS) {
-      const text = await fetchOne(
-        `https://raw.githubusercontent.com/${githubRepo}/${r}/${p}`,
-        timeoutMs,
-      );
+      const text = await fetchOne(`https://raw.githubusercontent.com/${githubRepo}/${r}/${p}`);
       if (text) return text;
     }
   }
