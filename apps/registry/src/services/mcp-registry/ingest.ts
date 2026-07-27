@@ -46,7 +46,7 @@ export const INGEST_SOURCE = 'mcp-registry';
  */
 class NotWritableError extends Error {
   constructor(
-    readonly packageName: string,
+    packageName: string,
     readonly reason: 'name-conflict' | 'claimed',
   ) {
     super(`Package ${packageName} is not ingest's to write: ${reason}`);
