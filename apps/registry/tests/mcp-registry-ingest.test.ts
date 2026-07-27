@@ -575,6 +575,35 @@ describe('runIngest', () => {
     expect(result.watermark.toISOString()).toBe(since.toISOString());
   });
 
+  it('hands the storage layer a stream whose errors are already handled', async () => {
+    // A read stream opens lazily, on the next tick. If the save returns without
+    // consuming it, cleanup can unlink the file before that open lands — and
+    // the resulting ENOENT, having no listener, is raised by Node as an
+    // uncaught exception. Vitest fails the whole run on that even when every
+    // test passes, which is how it reached CI; destroy() does not cover it,
+    // because with no fd yet it defers to the pending open.
+    //
+    // The race is timing-dependent and does not reproduce in-process, so this
+    // asserts the invariant that prevents it rather than pretending to trigger
+    // it: the stream we hand out has its error channel claimed. The save's
+    // rejection remains our real error channel.
+    let handed: NodeJS.ReadableStream | undefined;
+    const options = baseOptions(fakeUpstream([upstreamEntry()]).client, fakePrisma(state));
+    options.storage.saveBundleFromStream = vi.fn(
+      async (_s, _p, _v, stream: NodeJS.ReadableStream) => {
+        handed = stream;
+        return { path: 'acme/widget/1.0.0/widget.mcpb', sha256: BUNDLE_SHA, size: BUNDLE.length };
+      },
+    );
+
+    await runIngest(options);
+
+    expect(handed).toBeDefined();
+    expect(
+      (handed as unknown as { listenerCount(e: string): number }).listenerCount('error'),
+    ).toBeGreaterThan(0);
+  });
+
   it('writes nothing in dry-run mode', async () => {
     const { client, calls } = fakeUpstream([upstreamEntry()]);
     const options = { ...baseOptions(client, fakePrisma(state)), dryRun: true };

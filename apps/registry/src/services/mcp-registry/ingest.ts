@@ -451,13 +451,21 @@ async function ingestServer(
               ? undefined
               : `${artifact.os}-${artifact.arch}`;
 
-          // createReadStream opens lazily, on first read. If the save rejects
-          // before consuming it — or never consumes it — the open lands after
-          // this server's cleanup has already unlinked the temp file, and the
-          // resulting 'error' event has no listener. An unhandled stream error
-          // takes the whole process down, which on a nightly batch job means one
-          // bad artifact ends the run.
+          // createReadStream opens lazily, on the next tick. If the save
+          // returns without consuming it — or rejects first — the open lands
+          // after cleanup has unlinked the temp file and fails with ENOENT.
+          //
+          // destroy() does NOT cover that: with no fd yet it defers to the
+          // pending open, and the failure surfaces through the stream's error
+          // channel regardless. Verified directly — create, don't read,
+          // destroy, unlink, and Node raises an uncaught ENOENT, which on a
+          // nightly job means one artifact ends the whole run.
+          //
+          // The save's rejection is our error channel; the stream's is noise
+          // about a file we already decided to discard. A real mid-read failure
+          // still propagates, because the save rejects on it.
           const body = createReadStream(bundle.tempPath);
+          body.on('error', () => {});
           try {
             const stored = await storage.saveBundleFromStream(
               scope,
