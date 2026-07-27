@@ -102,6 +102,96 @@ registry:
     capabilities:
       drop: [ALL]
 
+# -- Registry Ingest -----------------------------------------------------------
+# Nightly mirror of MCPB bundles from an upstream MCP Registry. The upstream
+# registry is a metaregistry that makes no security or quality judgement by
+# design; this job pulls the bytes so mpak can verify and scan them.
+#
+# Off by default. It writes third-party content into the catalog, which is a
+# decision an operator should make deliberately rather than inherit.
+ingest:
+  enabled: false
+
+  # 02:00 daily. Nothing depends on the hour; off-peak keeps the bandwidth and
+  # the scan-job burst away from daytime API traffic.
+  schedule: "0 2 * * *"
+  timeZone: "Etc/UTC"
+
+  # Any implementation of the MCP Registry API works — the client uses only the
+  # documented surface, nothing specific to the official instance.
+  registryUrl: "https://registry.modelcontextprotocol.io/v0"
+
+  # Identity of that upstream. Partitions state rather than just labelling it:
+  # the sync watermark is keyed on it, ingested packages record it, and the
+  # takedown delete is scoped by it. Change it whenever you point registryUrl at
+  # a different registry, or two upstreams will share one watermark and the
+  # second run will skip everything the first passed.
+  sourceId: "mcp-registry"
+
+  # Higher than the publish limit (MAX_BUNDLE_SIZE_MB). Bundles here are
+  # whatever upstream already accepted, and compiled multi-platform servers run
+  # an order of magnitude larger than interpreted ones. Anything above this is
+  # skipped and counted, not silently dropped.
+  #
+  # 400MB is chosen for headroom, not to fit the current corpus exactly: the
+  # largest valid bundle upstream today is 248MB, so a tighter cap would drop it
+  # on its next release for no reason anyone would think to look for.
+  maxBundleSizeMB: 400
+
+  # Concurrent server pipelines. This is a MEMORY knob before it is a throughput
+  # knob: bundle inspection reads each archive fully into heap, so peak usage is
+  # concurrency × maxBundleSizeMB. The job refuses to start if that product
+  # exceeds memoryBudgetMB, so raise these three together or not at all.
+  concurrency: 2
+
+  # Ceiling for concurrent archive buffers. resources.limits.memory below is
+  # this plus headroom for the Node runtime, zip entry tables, and the S3 SDK.
+  memoryBudgetMB: 1024
+
+  # Re-read this far before the last watermark. Ingest is idempotent, so the
+  # overlap costs a few cheap "unchanged" decisions, while a gap is silent.
+  overlapMinutes: 60
+
+  # Furthest back a retryable failure may drag the next window. 21 of the 388
+  # upstream MCPB URLs do not resolve, so without a bound the first backfill
+  # pins the watermark on a dead asset and every later run re-reads an
+  # ever-widening span.
+  maxHoldbackHours: 72
+
+  # Upstream is a third party on the public internet. The download bound is the
+  # larger of the two because a 400MB bundle over a slow release CDN is a normal
+  # run, not a hang.
+  requestTimeoutMs: 30000
+  downloadTimeoutMs: 120000
+
+  # Extra CLI flags, e.g. ["--full"] to ignore the watermark and re-read the
+  # whole upstream catalog.
+  extraArgs: []
+
+  # A first backfill walks the entire upstream catalog. Six hours is generous
+  # for that; steady-state incremental runs finish in minutes.
+  activeDeadlineSeconds: 21600
+  startingDeadlineSeconds: 3600
+  # No retry. Whatever a run could not read, it holds the watermark back for, so
+  # the next scheduled run picks it up on its own window — an immediate retry
+  # just repeats whatever broke, a night earlier.
+  backoffLimit: 0
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  # Bundles stream through /tmp on the way to S3, one at a time per pipeline.
+  scratchSizeLimit: "4Gi"
+
+  # limits.memory = memoryBudgetMB (1Gi of archive buffers) + ~1Gi headroom.
+  # Derived, not guessed — see the concurrency note above.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
 # -- Web Frontend --------------------------------------------------------------
 web:
   replicaCount: 2

@@ -64,6 +64,11 @@ function buildServerDetail(
       latestVersion: pkg.latestVersion,
       totalDownloads: pkg.totalDownloads,
       githubRepo: pkg.githubRepo,
+      // Ingested servers are published under their upstream identity, never a
+      // derived one. Omitting this silently falls back to the mechanical
+      // `dev.mpak.*` rule and forks the server's canonical name — a composer
+      // test cannot catch that, so servers.test.ts asserts it through inject.
+      upstreamName: pkg.upstreamName,
     },
     version: {
       version: version.version,
@@ -102,8 +107,17 @@ async function resolveByName(
   const direct = await packageRepo.findPackageForServerLookup(decodedName);
   if (direct) return direct;
 
-  // Reverse-DNS form: derive candidate npm names and try each.
+  // Reverse-DNS form. Exact upstream identity first — authoritative for
+  // anything ingested, and checked before the heuristics because those derive a
+  // name from the namespace and cannot tell `io.github.acme/x` from
+  // `com.acme/x`. Then the derived candidates.
   if (decodedName.includes('/') && !decodedName.startsWith('@')) {
+    const byUpstream = await packageRepo.findByUpstreamNameInsensitive(decodedName);
+    if (byUpstream) {
+      const hit = await packageRepo.findPackageForServerLookup(byUpstream.name);
+      if (hit) return hit;
+    }
+
     for (const candidate of reverseDnsToNpmCandidates(decodedName)) {
       const hit = await packageRepo.findPackageForServerLookup(candidate);
       if (hit) {

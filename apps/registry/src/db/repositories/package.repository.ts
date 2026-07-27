@@ -88,6 +88,10 @@ export interface CreatePackageData {
   githubRepo?: string;
   claimedBy?: string;
   claimedAt?: Date;
+  /** 'mpak' (published here) or 'mcp-registry' (ingested). Creation-only. */
+  source?: string;
+  /** Canonical upstream identity. Creation-only; it is the row's identity. */
+  upstreamName?: string;
 }
 
 export interface CreatePackageVersionData {
@@ -136,7 +140,7 @@ export class PackageRepository {
   }
 
   /**
-   * Find package by name
+   * Find a package by name.
    */
   async findByName(name: string, tx?: TransactionClient): Promise<Package | null> {
     const client = tx ?? getPrismaClient();
@@ -322,14 +326,19 @@ export class PackageRepository {
       license: data.license,
       iconUrl: data.iconUrl,
       serverType: data.serverType,
-      githubRepo: data.githubRepo,
     };
+
+    // githubRepo is deliberately absent above. Once a package is claimed, that
+    // value is what the claimer proved control of — letting a nightly sync move
+    // it would let upstream metadata redirect an existing claim's verification
+    // target. Set at creation, and thereafter only while still unclaimed.
 
     const pkg = await client.package.upsert({
       where: { name: data.name },
       create: {
         name: data.name,
         ...manifestMetadata,
+        githubRepo: data.githubRepo,
         // Ownership/trust and version ordering are set only at creation.
         // On update they are owned elsewhere: `latestVersion` by
         // updateLatestVersion, `verified`/`claimedBy`/`claimedAt` by the
@@ -339,11 +348,87 @@ export class PackageRepository {
         createdBy: data.createdBy,
         claimedBy: data.claimedBy,
         claimedAt: data.claimedAt,
+        // Catalog provenance is identity, not metadata: where a row came from
+        // cannot change on a later announce, or an ingested row could be
+        // relabelled as natively published (or the reverse) by whoever writes
+        // next.
+        ...(data.source ? { source: data.source } : {}),
+        ...(data.upstreamName ? { upstreamName: data.upstreamName } : {}),
       },
-      update: manifestMetadata,
+      update: {
+        ...manifestMetadata,
+        ...(existing?.claimedBy ? {} : { githubRepo: data.githubRepo }),
+      },
     });
 
     return { package: pkg, created: !existing };
+  }
+
+  /**
+   * Remove a mirrored package because upstream took it down.
+   *
+   * This is the whole takedown mechanism. Handling it here — one write path —
+   * rather than as a predicate every read path has to remember is what makes
+   * it correct by construction: a route added later cannot serve a taken-down
+   * bundle, because the row is gone.
+   *
+   * Scoped three ways, and the third is the one that matters. `upstreamName`
+   * and `source` keep this off natively published packages — and off mirrors
+   * from a *different* upstream, which is why `source` is a parameter rather
+   * than a literal. `claimedBy: null`
+   * keeps it off a mirror somebody has since *claimed* — claiming does not
+   * change `source`, so provenance alone would still match, and an mpak
+   * publisher who proved GitHub control of their entry would lose the package,
+   * every version, every artifact and every scan result the next time whoever
+   * holds the upstream entry marked it deleted. Those need not be the same
+   * person, and "publisher moved off upstream to mpak" is exactly when both
+   * happen at once. Ownership, not provenance, decides whether this may run.
+   *
+   * Versions and artifacts cascade.
+   *
+   * Returns how many packages were removed, for the run report.
+   */
+  async deleteMirror(
+    upstreamName: string,
+    source: string,
+    tx?: TransactionClient,
+  ): Promise<number> {
+    const client = tx ?? getPrismaClient();
+    const { count } = await client.package.deleteMany({
+      where: { upstreamName, source, claimedBy: null },
+    });
+    return count;
+  }
+
+  /**
+   * Find a package by its canonical upstream identity.
+   *
+   * The authoritative lookup for anything ingested. `name` is a derived handle
+   * and is not stable against a collision-driven fallback, so a sync must
+   * re-find its own rows by the upstream name it originally recorded.
+   */
+  async findByUpstreamName(upstreamName: string, tx?: TransactionClient): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findUnique({ where: { upstreamName } });
+  }
+
+  /**
+   * Case-insensitive variant, for resolving a name a caller typed.
+   *
+   * Upstream names are stored verbatim because case is significant there —
+   * upstream really does carry pairs differing only in case, and folding them
+   * would merge two distinct servers into one row. But an API caller asking for
+   * a server by name should not have to reproduce that casing, so lookups
+   * (unlike ingest's identity check) are lenient.
+   */
+  async findByUpstreamNameInsensitive(
+    upstreamName: string,
+    tx?: TransactionClient,
+  ): Promise<Package | null> {
+    const client = tx ?? getPrismaClient();
+    return client.package.findFirst({
+      where: { upstreamName: { equals: upstreamName, mode: 'insensitive' } },
+    });
   }
 
   /**

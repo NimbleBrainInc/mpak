@@ -334,25 +334,43 @@ class S3StorageService implements StorageService {
   }
 }
 
-const storagePlugin: FastifyPluginAsync = async (fastify) => {
-  let storageService: StorageService;
-
+/**
+ * Build the configured StorageService.
+ *
+ * Separate from the plugin so processes without a Fastify instance — the
+ * registry ingest job, one-off scripts — resolve storage through exactly the
+ * same configuration branch the API does, rather than reconstructing an S3
+ * client and re-deriving key layout on the side.
+ */
+export async function createStorageService(): Promise<{
+  storage: StorageService;
+  description: string;
+}> {
   if (config.storage.type === 'local') {
     await fs.mkdir(config.storage.path, { recursive: true });
-    storageService = new LocalStorageService(config.storage.path);
-    fastify.log.info(`Using local storage at ${config.storage.path}`);
-  } else {
-    const { bucket, region } = config.storage.s3;
-
-    if (!bucket) {
-      throw new Error('S3 storage requires a bucket to be configured');
-    }
-
-    storageService = new S3StorageService(bucket, region);
-    fastify.log.info(`Using S3 storage with bucket: ${bucket} in region: ${region}`);
+    return {
+      storage: new LocalStorageService(config.storage.path),
+      description: `local storage at ${config.storage.path}`,
+    };
   }
 
-  fastify.decorate('storage', storageService);
+  const { bucket, region } = config.storage.s3;
+
+  if (!bucket) {
+    throw new Error('S3 storage requires a bucket to be configured');
+  }
+
+  return {
+    storage: new S3StorageService(bucket, region),
+    description: `S3 storage with bucket: ${bucket} in region: ${region}`,
+  };
+}
+
+const storagePlugin: FastifyPluginAsync = async (fastify) => {
+  const { storage, description } = await createStorageService();
+
+  fastify.log.info(`Using ${description}`);
+  fastify.decorate('storage', storage);
 };
 
 export default fp(storagePlugin);

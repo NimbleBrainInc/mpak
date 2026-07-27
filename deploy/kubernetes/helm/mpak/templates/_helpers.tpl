@@ -58,6 +58,27 @@ app.kubernetes.io/component: registry
 {{- end }}
 
 {{/*
+Registry ingest labels
+
+Its own component rather than a suffix on the registry's, so log and metric
+queries can separate the nightly batch job from the serving API — they share an
+image and a ServiceAccount but nothing about their behaviour.
+*/}}
+{{- define "mpak.ingest.labels" -}}
+{{ include "mpak.labels" . }}
+{{ include "mpak.ingest.selectorLabels" . }}
+{{- end }}
+
+{{/*
+Registry ingest selector labels
+*/}}
+{{- define "mpak.ingest.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "mpak.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: registry-ingest
+{{- end }}
+
+{{/*
 Web labels
 */}}
 {{- define "mpak.web.labels" -}}

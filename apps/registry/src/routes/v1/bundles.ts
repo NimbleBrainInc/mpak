@@ -954,7 +954,11 @@ export const bundleRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           // Stream verified file to storage
+          // See the note in services/mcp-registry/ingest.ts: a lazily-opened
+          // read stream whose file is removed before the open lands raises an
+          // uncaught ENOENT, and destroy() does not prevent it.
           const uploadStream = createReadStream(tempPath);
+          uploadStream.on('error', () => {});
           const result = await fastify.storage.saveBundleFromStream(
             parsed.scope,
             parsed.packageName,

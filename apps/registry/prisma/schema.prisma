@@ -36,6 +36,21 @@ model User {
 model Package {
   id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name           String           @unique @db.VarChar(255) // Can be scoped (@scope/pkg) or unscoped (pkg)
+
+  // Provenance of the catalog entry itself.
+  //   'mpak'         — published to mpak directly (OIDC, CLI, or upload)
+  //   'mcp-registry' — ingested from registry.modelcontextprotocol.io
+  //
+  // Load-bearing, not descriptive: it is what scopes the ingest job's takedown
+  // delete, so a mirror can be removed without a natively published package
+  // ever being reachable by that code path.
+  source         String           @default("mpak") @db.VarChar(20)
+  // Canonical upstream identity, verbatim (e.g. "io.github.acme/widget-mcp").
+  // `name` is mpak's npm-style handle and is lossy: it drops the reverse-DNS
+  // namespace that makes upstream names globally unique. Keeping the original
+  // here is what lets a nightly sync re-find its own rows, and keeps mpak a
+  // faithful subregistry rather than a renaming fork.
+  upstreamName   String?          @unique @map("upstream_name") @db.VarChar(255)
   displayName    String?          @map("display_name") @db.VarChar(255)
   description    String?
   authorName     String?          @map("author_name") @db.VarChar(255)
@@ -103,7 +118,7 @@ model PackageVersion {
   serverJson       Json?     @map("server_json")
 
   // Provenance - hybrid approach: indexed columns + extensible JSON
-  publishMethod         String?   @map("publish_method") @db.VarChar(20) // 'oidc' | 'upload' | 'cli'
+  publishMethod         String?   @map("publish_method") @db.VarChar(20) // 'oidc' | 'upload' | 'cli' | 'ingest'
   provenanceRepository  String?   @map("provenance_repository") @db.VarChar(255) // Indexed: find packages from repo
   provenanceSha         String?   @map("provenance_sha") @db.VarChar(64) // Indexed: lookup by commit
   provenance            Json?     // Full provenance data with schema version
@@ -183,4 +198,49 @@ model SecurityScan {
   @@index([status], map: "idx_security_scans_status")
   @@index([certificationLevel], map: "idx_security_scans_certification_level")
   @@map("security_scans")
+}
+
+// One row per ingest run against an upstream registry.
+//
+// The watermark lives here rather than in a file or a config value so it is
+// transactional with the rows the run wrote: a run that dies halfway leaves its
+// row in 'running' or 'failed' and never advances `watermark`, so the next run
+// re-reads the same window instead of skipping servers it never actually
+// stored. `watermark` is only ever set from a completed run.
+model RegistrySync {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source          String    @db.VarChar(50) // 'mcp-registry'
+  status          String    @db.VarChar(20) // running, completed, failed
+
+  // Upstream `updated_since` bound this run read FROM (null = full backfill),
+  // and the bound the next run should read from. The next window opens at this
+  // run's watermark, so a server updated mid-run is picked up next time rather
+  // than missed.
+  since           DateTime? @db.Timestamp(6)
+  watermark       DateTime? @db.Timestamp(6)
+
+  // Run counters. `skipped` and `failed` are broken out by reason in `report`.
+  serversSeen     Int       @default(0) @map("servers_seen")
+  serversMatched  Int       @default(0) @map("servers_matched") // had >=1 mcpb package
+  packagesCreated Int       @default(0) @map("packages_created")
+  versionsCreated Int       @default(0) @map("versions_created")
+  artifactsStored Int       @default(0) @map("artifacts_stored")
+  bytesStored     BigInt    @default(0) @map("bytes_stored")
+  scansTriggered  Int       @default(0) @map("scans_triggered")
+  // Destructive, so it is recorded rather than only logged: this is the count
+  // of mirrors actually removed, which differs from the number of takedowns
+  // seen whenever one was skipped for being claimed.
+  mirrorsRemoved  Int       @default(0) @map("mirrors_removed")
+  skipped         Int       @default(0)
+  failed          Int       @default(0)
+
+  report          Json?     // Per-reason breakdown and the rejected-server list
+  error           String?   @db.Text
+
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamp(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamp(6)
+
+  @@index([source, status], map: "idx_registry_syncs_source_status")
+  @@index([source, completedAt(sort: Desc)], map: "idx_registry_syncs_source_completed")
+  @@map("registry_syncs")
 }

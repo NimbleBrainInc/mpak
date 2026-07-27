@@ -1,0 +1,108 @@
+{{- if .Values.ingest.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mpak.fullname" . }}-registry-ingest
+  namespace: {{ include "mpak.namespace" . }}
+  labels:
+    {{- include "mpak.ingest.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.ingest.schedule | quote }}
+  timeZone: {{ .Values.ingest.timeZone | quote }}
+  # A run mirrors and scans third-party bundles. Two overlapping runs would
+  # duplicate that work and race on the same rows, and the run is idempotent,
+  # so skipping a tick costs nothing but a night's delay.
+  concurrencyPolicy: Forbid
+  # The window is derived from the last completed run's watermark, not from the
+  # schedule, so a missed tick is caught up by the next run reading a wider
+  # window rather than by the controller firing a backlog.
+  startingDeadlineSeconds: {{ .Values.ingest.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.ingest.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.ingest.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.ingest.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.ingest.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "mpak.ingest.selectorLabels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          {{- include "mpak.imagePullSecrets" . | nindent 10 }}
+          # Same identity as the API: the job writes bundles to the same bucket
+          # under the same key layout, so it needs exactly that access and no
+          # more.
+          serviceAccountName: {{ .Values.registry.serviceAccountName | default "default" }}
+          securityContext:
+            {{- toYaml .Values.registry.podSecurityContext | nindent 12 }}
+          containers:
+            - name: ingest
+              image: {{ include "mpak.registry.image" . }}
+              imagePullPolicy: {{ .Values.registry.image.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.registry.securityContext | nindent 16 }}
+              command: ["node", "dist/jobs/ingest-mcp-registry.js"]
+              {{- with .Values.ingest.extraArgs }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              envFrom:
+                - configMapRef:
+                    name: {{ include "mpak.fullname" . }}
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mpak.secretName" . }}
+                      key: database-url
+                - name: S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mpak.secretName" . }}
+                      key: s3-bucket
+                      optional: true
+                # Static credentials are optional: when the key is absent the AWS
+                # SDK falls through to the pod's own identity.
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mpak.secretName" . }}
+                      key: aws-access-key-id
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "mpak.secretName" . }}
+                      key: aws-secret-access-key
+                      optional: true
+                - name: INGEST_REGISTRY_URL
+                  value: {{ .Values.ingest.registryUrl | quote }}
+                - name: INGEST_SOURCE_ID
+                  value: {{ .Values.ingest.sourceId | quote }}
+                - name: INGEST_MAX_BUNDLE_SIZE_MB
+                  value: {{ .Values.ingest.maxBundleSizeMB | quote }}
+                - name: INGEST_CONCURRENCY
+                  value: {{ .Values.ingest.concurrency | quote }}
+                - name: INGEST_MEMORY_BUDGET_MB
+                  value: {{ .Values.ingest.memoryBudgetMB | quote }}
+                - name: INGEST_OVERLAP_MINUTES
+                  value: {{ .Values.ingest.overlapMinutes | quote }}
+                - name: INGEST_MAX_HOLDBACK_HOURS
+                  value: {{ .Values.ingest.maxHoldbackHours | quote }}
+                - name: INGEST_REQUEST_TIMEOUT_MS
+                  value: {{ .Values.ingest.requestTimeoutMs | quote }}
+                - name: INGEST_DOWNLOAD_TIMEOUT_MS
+                  value: {{ .Values.ingest.downloadTimeoutMs | quote }}
+              resources:
+                {{- toYaml .Values.ingest.resources | nindent 16 }}
+              volumeMounts:
+                # Bundles stream through a temp file on the way to S3, so the
+                # job needs writable scratch even with a read-only root.
+                - name: scratch
+                  mountPath: /tmp
+          volumes:
+            - name: scratch
+              emptyDir:
+                sizeLimit: {{ .Values.ingest.scratchSizeLimit | quote }}
+{{- end }}
