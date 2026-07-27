@@ -202,7 +202,11 @@ export function inspectBundle(bundlePath: string): BundleInspection {
   let readme: string | null = null;
   if (readmeEntry && readmeEntry.header.size <= MAX_README_BYTES) {
     try {
-      readme = zip.readAsText(readmeEntry) || null;
+      // Whitespace is absence, not content. This is the preferred source, so a
+      // blank file here would otherwise outrank the repository fallback and
+      // render as an empty block — the symptom the whole change exists to fix.
+      const text = zip.readAsText(readmeEntry);
+      readme = text.trim() ? text : null;
     } catch {
       // Unreadable README, readable bundle. The bundle is still worth mirroring.
       readme = null;

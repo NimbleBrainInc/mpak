@@ -68,8 +68,12 @@ async function fetchOne(url: string): Promise<string | null> {
     const declared = Number(res.headers.get('content-length'));
     if (Number.isFinite(declared) && declared > MAX_README_BYTES) return null;
 
+    // Measured in bytes, not `text.length`: that counts UTF-16 code units, so
+    // for non-ASCII prose it would admit several times the stated cap while
+    // claiming to enforce it. The in-bundle side reads a byte count off the
+    // zip header, and this is the same bound.
     const text = await res.text();
-    if (text.length > MAX_README_BYTES) return null;
+    if (Buffer.byteLength(text) > MAX_README_BYTES) return null;
     return text.trim() ? text : null;
   } catch {
     return null;

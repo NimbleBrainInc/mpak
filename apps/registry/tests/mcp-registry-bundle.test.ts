@@ -169,6 +169,14 @@ describe('inspectBundle', () => {
     expect(inspectBundle(p).readme).toBeNull();
   });
 
+  it('treats a whitespace-only README as absent, so the fallback still runs', () => {
+    // Symmetric with the repository source. This is the *preferred* source, so
+    // a blank file here outranks the fallback and renders as an empty block —
+    // the symptom this whole change exists to fix.
+    const p = writeTemp(buildBundle({ files: { 'README.md': '   \n\n  ' } }));
+    expect(inspectBundle(p).readme).toBeNull();
+  });
+
   it('finds a root README in an archive that prefixes entries with ./', () => {
     const p = writeTemp(buildBundle({ files: { './README.md': '# Dot-slash' } }));
     expect(inspectBundle(p).readme).toBe('# Dot-slash');

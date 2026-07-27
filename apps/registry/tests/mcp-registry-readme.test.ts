@@ -106,6 +106,18 @@ describe('fetchGithubReadme', () => {
     expect(await fetchGithubReadme({ githubRepo: 'acme/widget' })).toBeNull();
   });
 
+  it('measures the cap in bytes, not UTF-16 code units', async () => {
+    // 200k multibyte characters is well under the cap by `.length` and well
+    // over it in bytes. Counting code units would admit several times the
+    // stated bound for any non-ASCII prose.
+    const multibyte = '日'.repeat(200 * 1024);
+    expect(multibyte.length).toBeLessThan(512 * 1024);
+    expect(Buffer.byteLength(multibyte)).toBeGreaterThan(512 * 1024);
+
+    mockFetch(() => ok(multibyte));
+    expect(await fetchGithubReadme({ githubRepo: 'acme/widget' })).toBeNull();
+  });
+
   it('honours a Content-Length over the cap without reading the body', async () => {
     const spy = mockFetch(
       () =>
