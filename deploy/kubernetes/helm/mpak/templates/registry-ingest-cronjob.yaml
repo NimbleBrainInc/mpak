@@ -78,6 +78,8 @@ spec:
                       optional: true
                 - name: INGEST_REGISTRY_URL
                   value: {{ .Values.ingest.registryUrl | quote }}
+                - name: INGEST_SOURCE_ID
+                  value: {{ .Values.ingest.sourceId | quote }}
                 - name: INGEST_MAX_BUNDLE_SIZE_MB
                   value: {{ .Values.ingest.maxBundleSizeMB | quote }}
                 - name: INGEST_CONCURRENCY

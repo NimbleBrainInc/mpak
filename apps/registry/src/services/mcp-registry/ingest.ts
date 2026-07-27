@@ -30,6 +30,12 @@ import type { MappedArtifact, MappedServer, RejectReason } from './mapper.js';
 import { mapServer, mcpbPackages } from './mapper.js';
 import { officialMeta, type UpstreamServerEntry } from './types.js';
 
+/**
+ * Default identity for the upstream this job mirrors.
+ *
+ * Overridable per deployment (`INGEST_SOURCE_ID`) because it partitions state
+ * rather than merely labelling it — see the note in config.ts.
+ */
 export const INGEST_SOURCE = 'mcp-registry';
 
 /**
@@ -113,6 +119,8 @@ export interface IngestOptions {
    */
   maxBundles?: number;
   scanEnabled: boolean;
+  /** Identity of the upstream being mirrored; partitions rows and the watermark. */
+  sourceId: string;
   logger: IngestLogger;
 }
 
@@ -370,7 +378,7 @@ async function ingestServer(
   // the upstream name is right there, and it is the same value mapServer would
   // have produced.
   if (officialMeta(entry).status === 'deleted') {
-    const removed = dryRun ? 0 : await repo.deleteMirror(entry.server.name);
+    const removed = dryRun ? 0 : await repo.deleteMirror(entry.server.name, options.sourceId);
     if (removed > 0) {
       logger.info('Removed mirror after upstream takedown', { server: entry.server.name });
     }
@@ -578,7 +586,7 @@ async function ingestServer(
             verified: false,
             latestVersion: server.version,
             githubRepo: server.githubRepo,
-            source: INGEST_SOURCE,
+            source: options.sourceId,
             upstreamName: server.upstreamName,
           },
           tx,

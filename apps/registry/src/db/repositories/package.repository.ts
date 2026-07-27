@@ -373,7 +373,9 @@ export class PackageRepository {
    * bundle, because the row is gone.
    *
    * Scoped three ways, and the third is the one that matters. `upstreamName`
-   * and `source` keep this off natively published packages. `claimedBy: null`
+   * and `source` keep this off natively published packages — and off mirrors
+   * from a *different* upstream, which is why `source` is a parameter rather
+   * than a literal. `claimedBy: null`
    * keeps it off a mirror somebody has since *claimed* — claiming does not
    * change `source`, so provenance alone would still match, and an mpak
    * publisher who proved GitHub control of their entry would lose the package,
@@ -386,10 +388,14 @@ export class PackageRepository {
    *
    * Returns how many packages were removed, for the run report.
    */
-  async deleteMirror(upstreamName: string, tx?: TransactionClient): Promise<number> {
+  async deleteMirror(
+    upstreamName: string,
+    source: string,
+    tx?: TransactionClient,
+  ): Promise<number> {
     const client = tx ?? getPrismaClient();
     const { count } = await client.package.deleteMany({
-      where: { upstreamName, source: 'mcp-registry', claimedBy: null },
+      where: { upstreamName, source, claimedBy: null },
     });
     return count;
   }

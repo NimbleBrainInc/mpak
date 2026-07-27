@@ -193,6 +193,7 @@ function baseOptions(client: McpRegistryClient, prisma: unknown) {
     maxBundleBytes: 10_000_000,
     concurrency: 2,
     scanEnabled: false,
+    sourceId: 'mcp-registry',
     logger: silentLogger,
   };
 }
@@ -306,7 +307,7 @@ describe('runIngest', () => {
     expect(calls.download).toBe(0);
     expect(result.skipReasons['upstream-deleted']).toBe(1);
     expect(result.mirrorsRemoved).toBe(1);
-    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget');
+    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget', 'mcp-registry');
   });
 
   it('deletes the mirror even when the taken-down entry no longer maps', async () => {
@@ -321,7 +322,25 @@ describe('runIngest', () => {
 
     expect(result.skipReasons['upstream-deleted']).toBe(1);
     expect(result.mirrorsRemoved).toBe(1);
-    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget');
+    expect(repoMocks.deleteMirror).toHaveBeenCalledWith('io.github.acme/widget', 'mcp-registry');
+  });
+
+  it('scopes the takedown delete to the upstream it is mirroring', async () => {
+    // sourceId partitions state across upstreams. Without it in the delete's
+    // scope, a takedown from one registry would remove a mirror of the same
+    // upstream name held from another.
+    repoMocks.deleteMirror.mockResolvedValue(1);
+    const options = {
+      ...baseOptions(fakeUpstream([upstreamEntry({}, 'deleted')]).client, fakePrisma(state)),
+      sourceId: 'my-private-registry',
+    };
+
+    await runIngest(options);
+
+    expect(repoMocks.deleteMirror).toHaveBeenCalledWith(
+      'io.github.acme/widget',
+      'my-private-registry',
+    );
   });
 
   it('does not delete anything on a dry run', async () => {

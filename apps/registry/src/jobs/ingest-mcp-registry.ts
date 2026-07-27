@@ -13,7 +13,7 @@ import { disconnectDatabase, getPrismaClient } from '../db/client.js';
 import { createStorageService } from '../plugins/storage.js';
 import { McpRegistryClient } from '../services/mcp-registry/client.js';
 import type { IngestLogger, IngestResult } from '../services/mcp-registry/ingest.js';
-import { INGEST_SOURCE, runIngest } from '../services/mcp-registry/ingest.js';
+import { runIngest } from '../services/mcp-registry/ingest.js';
 
 interface CliArgs {
   dryRun: boolean;
@@ -117,7 +117,7 @@ async function resolveSince(full: boolean): Promise<Date | undefined> {
   // failures, which is why runIngest floors the watermark rather than
   // discarding it.
   const last = await prisma.registrySync.findFirst({
-    where: { source: INGEST_SOURCE, watermark: { not: null } },
+    where: { source: config.ingest.sourceId, watermark: { not: null } },
     orderBy: { completedAt: 'desc' },
   });
 
@@ -159,7 +159,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   const run = args.dryRun
     ? null
     : await prisma.registrySync.create({
-        data: { source: INGEST_SOURCE, status: 'running', since },
+        data: { source: config.ingest.sourceId, status: 'running', since },
       });
 
   let result: IngestResult | undefined;
@@ -177,6 +177,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       limit: args.limit,
       maxBundles: args.maxBundles,
       scanEnabled: config.scanner.enabled,
+      sourceId: config.ingest.sourceId,
       logger,
     });
 

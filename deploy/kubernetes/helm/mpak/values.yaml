@@ -117,7 +117,16 @@ ingest:
   schedule: "0 2 * * *"
   timeZone: "Etc/UTC"
 
+  # Any implementation of the MCP Registry API works — the client uses only the
+  # documented surface, nothing specific to the official instance.
   registryUrl: "https://registry.modelcontextprotocol.io/v0"
+
+  # Identity of that upstream. Partitions state rather than just labelling it:
+  # the sync watermark is keyed on it, ingested packages record it, and the
+  # takedown delete is scoped by it. Change it whenever you point registryUrl at
+  # a different registry, or two upstreams will share one watermark and the
+  # second run will skip everything the first passed.
+  sourceId: "mcp-registry"
 
   # Higher than the publish limit (MAX_BUNDLE_SIZE_MB). Bundles here are
   # whatever upstream already accepted, and compiled multi-platform servers run

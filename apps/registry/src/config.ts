@@ -45,8 +45,20 @@ export const config = {
     maxBundleSizeMB: parseInt(process.env.MAX_BUNDLE_SIZE_MB || '50', 10),
   },
   ingest: {
-    // Upstream MCP Registry to mirror MCPB bundles from.
+    // Upstream registry to mirror MCPB bundles from. Any implementation of the
+    // MCP Registry API works — the client uses only the documented surface
+    // (cursor pagination, updated_since, version=latest), not anything specific
+    // to the official instance.
     registryUrl: process.env.INGEST_REGISTRY_URL || 'https://registry.modelcontextprotocol.io/v0',
+    // Identity of that upstream, stamped on every row it produces.
+    //
+    // Separate from the URL because it is what partitions state: the sync
+    // watermark is keyed on it, `Package.source` records it, and the takedown
+    // delete is scoped by it. Two upstreams sharing one id would share one
+    // watermark — the second run would skip everything the first had passed —
+    // and a takedown from one could delete a mirror from the other. Change it
+    // whenever you change the URL to a different registry.
+    sourceId: process.env.INGEST_SOURCE_ID || 'mcp-registry',
     // Larger than the publish limit on purpose. A publisher pushing 50MB to
     // mpak is a choice we can push back on; third-party bundles are whatever
     // upstream already accepted, and compiled multi-platform servers are

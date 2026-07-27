@@ -197,7 +197,7 @@ describe('deleteMirror', () => {
     const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
     const tx = { package: { deleteMany } } as unknown as TransactionClient;
 
-    await new PackageRepository().deleteMirror('io.github.acme/widget', tx);
+    await new PackageRepository().deleteMirror('io.github.acme/widget', 'mcp-registry', tx);
 
     expect(deleteMany).toHaveBeenCalledWith({
       where: {
