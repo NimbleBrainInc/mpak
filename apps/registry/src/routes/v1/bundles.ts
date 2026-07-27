@@ -70,7 +70,19 @@ function isValidScopedPackageName(name: string): boolean {
  *
  * - Neither os nor arch → return the any/any (universal) artifact, or null
  * - Only one of os/arch → throws BadRequestError
- * - Both os and arch → return exact match, or null
+ * - Both os and arch → exact match, else the os-universal build, else the
+ *   fully universal one, else null
+ *
+ * The widening from exact-match matters because `arch: 'any'` is a real stored
+ * value, not a query convention: an artifact named `server-linux.mcpb` declares
+ * an OS and no architecture, and is recorded as `linux/any`. Callers never ask
+ * for it by that name — the SDK's `detectPlatform` reports the concrete runtime
+ * (`linux`/`x64`) and the query schema admits no `any` — so under exact-match
+ * such a build is addressable by nobody, and a package whose every artifact has
+ * that shape 404s on every download while still appearing in the catalog.
+ *
+ * Preference order is specificity: an arch-specific build beats one that merely
+ * claims to run anywhere on that OS, which in turn beats a fully portable one.
  */
 function resolveArtifact(artifacts: Artifact[], os?: string, arch?: string): Artifact | null {
   if ((os && !arch) || (!os && arch)) {
@@ -78,7 +90,12 @@ function resolveArtifact(artifacts: Artifact[], os?: string, arch?: string): Art
   }
 
   if (os && arch) {
-    return artifacts.find((a) => a.os === os && a.arch === arch) ?? null;
+    return (
+      artifacts.find((a) => a.os === os && a.arch === arch) ??
+      artifacts.find((a) => a.os === os && a.arch === 'any') ??
+      artifacts.find((a) => a.os === 'any' && a.arch === 'any') ??
+      null
+    );
   }
 
   // No platform params: return universal artifact only

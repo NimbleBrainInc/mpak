@@ -467,6 +467,89 @@ describe('Bundle Routes', () => {
       expect(body.bundle.platform).toEqual({ os: 'any', arch: 'any' });
     });
 
+    it('falls back to the os-universal build when no arch-specific one exists', async () => {
+      // `linux/any` is what an artifact named `server-linux.mcpb` maps to. No
+      // caller can ask for it directly — the SDK reports the concrete arch and
+      // the query schema has no `any` — so without this fallback the build is
+      // addressable by nobody.
+      const osUniversal = {
+        ...mockArtifact,
+        id: 'art-linux-any',
+        os: 'linux',
+        arch: 'any',
+        storagePath: '@test/mcp-server/1.0.0/linux-any.mcpb',
+      };
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue({
+        ...mockVersion,
+        artifacts: [osUniversal],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload).bundle.platform).toEqual({ os: 'linux', arch: 'any' });
+    });
+
+    it('prefers the arch-specific build over the os-universal one', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue({
+        ...mockVersion,
+        artifacts: [
+          { ...mockArtifact, id: 'art-linux-any', os: 'linux', arch: 'any' },
+          mockArtifact, // linux/x64
+        ],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=linux&arch=x64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload).bundle.platform).toEqual({ os: 'linux', arch: 'x64' });
+    });
+
+    it('falls back to the fully universal build for an unrelated platform', async () => {
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue({
+        ...mockVersion,
+        artifacts: [{ ...mockArtifact, id: 'art-any', os: 'any', arch: 'any' }],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=win32&arch=arm64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload).bundle.platform).toEqual({ os: 'any', arch: 'any' });
+    });
+
+    it('still 404s when the requested OS has no build at all', async () => {
+      // The fallback widens reach without making every request succeed: a
+      // linux-only package must not hand a win32 caller a linux binary.
+      packageRepo.findByName.mockResolvedValue(mockPackage);
+      packageRepo.findVersionWithArtifacts.mockResolvedValue({
+        ...mockVersion,
+        artifacts: [{ ...mockArtifact, id: 'art-linux-any', os: 'linux', arch: 'any' }],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/@test/mcp-server/versions/1.0.0/download?os=win32&arch=x64',
+        headers: { accept: 'application/json' },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
     it('returns 404 when no platform params and no any/any artifact', async () => {
       packageRepo.findByName.mockResolvedValue(mockPackage);
       packageRepo.findVersionWithArtifacts.mockResolvedValue(mockVersionWithArtifacts);

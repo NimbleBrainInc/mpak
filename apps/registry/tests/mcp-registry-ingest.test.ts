@@ -61,8 +61,12 @@ function upstreamEntry(
 }
 
 /** Upstream that serves one page of the given entries, then the artifact bytes. */
-function fakeUpstream(entries: unknown[], artifact: Buffer | null = BUNDLE) {
-  const calls = { list: 0, download: 0 };
+function fakeUpstream(
+  entries: unknown[],
+  artifact: Buffer | null = BUNDLE,
+  githubReadme: string | null = null,
+) {
+  const calls = { list: 0, download: 0, readme: 0 };
 
   const listFetch = vi.fn().mockImplementation(() => {
     calls.list += 1;
@@ -74,7 +78,19 @@ function fakeUpstream(entries: unknown[], artifact: Buffer | null = BUNDLE) {
     );
   });
 
-  const downloadFetch = vi.fn().mockImplementation(() => {
+  const downloadFetch = vi.fn().mockImplementation((input: string | URL) => {
+    // The README fallback reads a different host than the artifact does, and
+    // counting the two together would make the download assertions — which are
+    // how these tests prove idempotence — mean something else.
+    if (String(input).startsWith('https://raw.githubusercontent.com/')) {
+      calls.readme += 1;
+      return Promise.resolve(
+        githubReadme && String(input).endsWith('/README.md')
+          ? new Response(githubReadme, { status: 200 })
+          : new Response('404: Not Found', { status: 404 }),
+      );
+    }
+
     calls.download += 1;
     if (!artifact) return Promise.resolve(new Response('gone', { status: 404 }));
     return Promise.resolve(
@@ -244,6 +260,67 @@ describe('runIngest', () => {
     expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
       publishMethod: 'ingest',
     });
+  });
+
+  it('records the README the archive shipped, without asking GitHub', async () => {
+    // The in-bundle README describes the exact bytes whose digest was verified,
+    // so it wins outright — and costs nothing, since the archive is already open
+    // for the manifest.
+    const withReadme = new AdmZip(BUNDLE);
+    withReadme.addFile('README.md', Buffer.from('# Widget\n\nFrom the bundle.'));
+    const buf = withReadme.toBuffer();
+    const sha = createHash('sha256').update(buf).digest('hex');
+
+    const { client, calls } = fakeUpstream(
+      [
+        upstreamEntry({
+          packages: [{ registryType: 'mcpb', identifier: BUNDLE_URL, fileSha256: sha }],
+        }),
+      ],
+      buf,
+      '# Widget\n\nFrom GitHub.',
+    );
+
+    await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
+      readme: '# Widget\n\nFrom the bundle.',
+    });
+    expect(calls.readme).toBe(0);
+  });
+
+  it('falls back to the repository README when the archive ships none', async () => {
+    // Most MCPB bundles ship no README, and a package page with an empty body
+    // reads as an empty package. The declared repository is the only
+    // description that exists for those.
+    const { client, calls } = fakeUpstream([upstreamEntry()], BUNDLE, '# Widget\n\nFrom GitHub.');
+
+    await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(repoMocks.upsertVersion.mock.calls[0]?.[1]).toMatchObject({
+      readme: '# Widget\n\nFrom GitHub.',
+    });
+    // Read at the tag the artifact was published at, not the default branch.
+    expect(calls.readme).toBeGreaterThan(0);
+  });
+
+  it('ingests a server with no README from either source', async () => {
+    // Neither source having one is normal, not a failure. The bundle is still
+    // worth mirroring — the whole point is that it is hash-verified.
+    const { client } = fakeUpstream([upstreamEntry()]);
+
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.versionsCreated).toBe(1);
+    expect(repoMocks.upsertVersion.mock.calls[0]?.[1]?.readme).toBeUndefined();
+  });
+
+  it('does not ask GitHub for a README when upstream declares no repository', async () => {
+    const { client, calls } = fakeUpstream([upstreamEntry({ repository: undefined })]);
+
+    await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(calls.readme).toBe(0);
   });
 
   it('skips a server it already holds without downloading anything', async () => {

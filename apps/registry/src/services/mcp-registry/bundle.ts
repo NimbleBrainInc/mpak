@@ -28,6 +28,8 @@ export interface BundleInspection {
   declaredTools: number;
   hasLockfile: boolean;
   sourceFileCount: number;
+  /** Root README as shipped in the archive, or null if it ships none. */
+  readme: string | null;
 }
 
 export interface DownloadedBundle {
@@ -76,6 +78,21 @@ export class BundleVerificationError extends Error {
  * it is an attempt to make us allocate.
  */
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
+
+/**
+ * A README renders into a package page, so the bound is about what a browser is
+ * asked to display as much as what the decompression allocates. Anything past
+ * this is not prose. Over the cap the README is dropped, not an error: a
+ * ridiculous README is no reason to refuse to mirror a valid bundle.
+ */
+const MAX_README_BYTES = 512 * 1024;
+
+/**
+ * Root README filenames, best first. Case is compared insensitively, so this
+ * covers `readme.md` too. Only the archive root is considered — a README under
+ * `docs/` or `node_modules/` describes something other than this server.
+ */
+const README_NAMES = ['README.md', 'README.markdown', 'README.rst', 'README.txt', 'README'];
 
 export class NotABundleError extends Error {
   constructor(message: string) {
@@ -160,12 +177,35 @@ export function inspectBundle(bundlePath: string): BundleInspection {
 
   let sourceFileCount = 0;
   let hasLockfile = false;
+  let readmeEntry: AdmZip.IZipEntry | undefined;
+  let readmeRank = README_NAMES.length;
   for (const entry of entries) {
     if (entry.isDirectory) continue;
     const base = entry.entryName.split('/').pop() ?? '';
     if (LOCKFILES.has(base)) hasLockfile = true;
     const ext = path.extname(base).toLowerCase();
     if (SOURCE_EXTENSIONS.includes(ext)) sourceFileCount += 1;
+
+    // Root only: `entryName` is the full path, so a root file has no separator.
+    if (!entry.entryName.includes('/')) {
+      const rank = README_NAMES.findIndex((n) => n.toLowerCase() === base.toLowerCase());
+      if (rank !== -1 && rank < readmeRank) {
+        readmeRank = rank;
+        readmeEntry = entry;
+      }
+    }
+  }
+
+  // Same declared-size discipline as the manifest, and for the same reason:
+  // the header size is available before anything is allocated.
+  let readme: string | null = null;
+  if (readmeEntry && readmeEntry.header.size <= MAX_README_BYTES) {
+    try {
+      readme = zip.readAsText(readmeEntry) || null;
+    } catch {
+      // Unreadable README, readable bundle. The bundle is still worth mirroring.
+      readme = null;
+    }
   }
 
   const declaredTools = Array.isArray(manifest.tools) ? manifest.tools.length : 0;
@@ -180,6 +220,7 @@ export function inspectBundle(bundlePath: string): BundleInspection {
     declaredTools,
     hasLockfile,
     sourceFileCount,
+    readme,
   };
 }
 
