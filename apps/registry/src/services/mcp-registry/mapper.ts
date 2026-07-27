@@ -5,7 +5,6 @@
  */
 
 import type { UpstreamPackage, UpstreamServerEntry } from './types.js';
-import { officialMeta } from './types.js';
 
 export const VALID_OS = ['darwin', 'linux', 'win32', 'any'] as const;
 export const VALID_ARCH = ['x64', 'arm64', 'any'] as const;
@@ -20,7 +19,6 @@ export interface MappedArtifact {
   sha256: string;
   os: ArtifactOs;
   arch: ArtifactArch;
-  filename: string;
 }
 
 export interface MappedServer {
@@ -34,10 +32,7 @@ export interface MappedServer {
   description?: string;
   title?: string;
   websiteUrl?: string;
-  repositoryUrl?: string;
   githubRepo?: string;
-  status: string;
-  upstreamUpdatedAt?: Date;
   artifacts: MappedArtifact[];
 }
 
@@ -206,15 +201,14 @@ export function mapServer(entry: UpstreamServerEntry): MapResult {
       sha256: pkg.fileSha256.toLowerCase(),
       os,
       arch,
-      filename,
     });
   }
 
-  const meta = officialMeta(entry);
-  const repositoryUrl = entry.server.repository?.url;
-  const updatedAt = meta.updatedAt ?? meta.publishedAt;
-  const parsedUpdatedAt = updatedAt ? new Date(updatedAt) : undefined;
-
+  // Status and the upstream timestamp are deliberately not carried here. Both
+  // are read straight off `_meta` by the pipeline, which needs them for entries
+  // this function *rejects* — a takedown commonly arrives with the packages
+  // array emptied, and mapping it would be the one event worth acting on that
+  // never gets acted on.
   return {
     server: {
       upstreamName: entry.server.name,
@@ -224,11 +218,7 @@ export function mapServer(entry: UpstreamServerEntry): MapResult {
       description: entry.server.description,
       title: entry.server.title,
       websiteUrl: entry.server.websiteUrl,
-      repositoryUrl,
-      githubRepo: githubSlug(repositoryUrl),
-      status: meta.status ?? 'active',
-      upstreamUpdatedAt:
-        parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt : undefined,
+      githubRepo: githubSlug(entry.server.repository?.url),
       artifacts,
     },
   };

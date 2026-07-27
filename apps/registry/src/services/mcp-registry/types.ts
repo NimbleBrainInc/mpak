@@ -20,8 +20,6 @@ export interface UpstreamPackage {
    * field.
    */
   fileSha256?: string;
-  version?: string;
-  transport?: { type?: string };
 }
 
 export interface UpstreamRepository {
@@ -37,14 +35,12 @@ export interface UpstreamServer {
   websiteUrl?: string;
   repository?: UpstreamRepository;
   packages?: UpstreamPackage[];
-  remotes?: unknown[];
 }
 
 export interface UpstreamOfficialMeta {
   status?: 'active' | 'deprecated' | 'deleted' | string;
   publishedAt?: string;
   updatedAt?: string;
-  isLatest?: boolean;
 }
 
 export interface UpstreamServerEntry {

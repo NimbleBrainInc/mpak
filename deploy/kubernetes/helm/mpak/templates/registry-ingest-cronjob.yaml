@@ -86,6 +86,12 @@ spec:
                   value: {{ .Values.ingest.memoryBudgetMB | quote }}
                 - name: INGEST_OVERLAP_MINUTES
                   value: {{ .Values.ingest.overlapMinutes | quote }}
+                - name: INGEST_MAX_HOLDBACK_HOURS
+                  value: {{ .Values.ingest.maxHoldbackHours | quote }}
+                - name: INGEST_REQUEST_TIMEOUT_MS
+                  value: {{ .Values.ingest.requestTimeoutMs | quote }}
+                - name: INGEST_DOWNLOAD_TIMEOUT_MS
+                  value: {{ .Values.ingest.downloadTimeoutMs | quote }}
               resources:
                 {{- toYaml .Values.ingest.resources | nindent 16 }}
               volumeMounts:

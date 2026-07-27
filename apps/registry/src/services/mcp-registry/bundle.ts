@@ -22,7 +22,6 @@ export type Scanability = 'full' | 'partial' | 'opaque';
 
 export interface BundleInspection {
   manifest: Record<string, unknown>;
-  manifestVersion?: string;
   serverType: string;
   /** How much of this bundle the scanner will be able to see. */
   scanability: Scanability;
@@ -176,8 +175,6 @@ export function inspectBundle(bundlePath: string): BundleInspection {
 
   return {
     manifest,
-    manifestVersion:
-      typeof manifest.manifest_version === 'string' ? manifest.manifest_version : undefined,
     serverType,
     scanability,
     declaredTools,

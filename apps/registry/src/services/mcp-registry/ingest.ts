@@ -33,14 +33,24 @@ import { officialMeta, type UpstreamServerEntry } from './types.js';
 export const INGEST_SOURCE = 'mcp-registry';
 
 /**
- * A package name was claimed by someone else between the pre-download check and
- * the write. Thrown from inside the transaction so the write rolls back rather
- * than half-applying.
+ * The row this write would land on is not this job's to write.
+ *
+ * One class with two reasons, because the recovery differs and the reason is
+ * what encodes it: `name-conflict` is another publisher holding the handle,
+ * which may free up and is therefore retried; `claimed` is this mirror having
+ * been taken over through the claim flow, which is permanent and must never
+ * drag the watermark back.
+ *
+ * Thrown from inside the transaction so the write rolls back rather than
+ * half-applying.
  */
-class NameConflictError extends Error {
-  constructor(readonly packageName: string) {
-    super(`Package ${packageName} is owned by another publisher`);
-    this.name = 'NameConflictError';
+class NotWritableError extends Error {
+  constructor(
+    readonly packageName: string,
+    readonly reason: 'name-conflict' | 'claimed',
+  ) {
+    super(`Package ${packageName} is not ingest's to write: ${reason}`);
+    this.name = 'NotWritableError';
   }
 }
 
@@ -65,6 +75,7 @@ export type SkipReason =
   | 'sha-mismatch'
   | 'download-failed'
   | 'name-conflict'
+  | 'claimed'
   | 'upstream-deleted';
 
 export interface IngestOptions {
@@ -145,7 +156,10 @@ export interface IngestResult extends IngestCounters {
 /**
  * Failures worth re-reading next run. A bundle that is not an archive, is
  * oversized, or whose digest does not match will fail identically forever —
- * holding the watermark for those would freeze it permanently.
+ * holding the watermark for those would freeze it permanently. `claimed` is
+ * likewise absent on purpose: it is not a failure at all but a permanent
+ * handover, and holding for it would drag the window back every night for as
+ * long as the claim stands.
  */
 const RETRYABLE_SKIPS: ReadonlySet<string> = new Set(['download-failed', 'name-conflict']);
 
@@ -203,9 +217,24 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   const failures: Array<{ server: string; error: string }> = [];
   let oldestRetryableFailure: Date | undefined;
 
+  // Furthest back any hold may reach. A retryable failure pulls the next window
+  // back to its own timestamp so it gets another attempt, but a permanently
+  // dead asset would otherwise pin the window there forever and every later run
+  // would re-read an ever-widening span until activeDeadlineSeconds truncated
+  // it. Clamping each hold as it is taken is the same answer as clamping the
+  // minimum afterwards, and leaves one bound rather than two.
+  const holdbackFloor = new Date(
+    runStarted.getTime() - (options.maxHoldbackMs ?? DEFAULT_MAX_HOLDBACK_MS),
+  );
+
   const holdWatermark = (at?: Date) => {
-    if (!at) return;
-    if (!oldestRetryableFailure || at < oldestRetryableFailure) oldestRetryableFailure = at;
+    // A failure carrying no upstream timestamp still has to be re-read, so it
+    // falls back to this run's own lower bound — holding there re-reads the
+    // window the failure was in. On a full backfill there is no bound to fall
+    // back to, and the floor is what keeps the hold from being unbounded.
+    const candidate = at ?? since ?? holdbackFloor;
+    const held = candidate > holdbackFloor ? candidate : holdbackFloor;
+    if (!oldestRetryableFailure || held < oldestRetryableFailure) oldestRetryableFailure = held;
   };
 
   const record = (name: string, outcome: ServerOutcome) => {
@@ -225,9 +254,9 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
       failures.push({ server: name, error: outcome.error });
       // A thrown error is always retryable: it is by definition a case the
       // pipeline did not classify, so assuming it is permanent would lose data.
-      // An entry carrying no upstream timestamp cannot be held for
-      // individually; `failed > 0` is what covers it, by stopping the job
-      // advancing the watermark at all (see the job entrypoint).
+      // `failed > 0` marks the run failed for the operator but does not stop the
+      // watermark advancing — status and watermark are recorded independently,
+      // so the hold is the only thing that gets this entry re-read.
       holdWatermark(outcome.upstreamUpdatedAt);
     }
     if (outcome.packageCreated) counters.packagesCreated += 1;
@@ -292,20 +321,13 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
 
   await Promise.all(inFlight);
 
-  // Floor the holdback. A retryable failure pulls the next window back to its
-  // own timestamp so it gets another attempt, but a permanently dead asset
-  // would otherwise pin the window there forever and every subsequent run would
-  // re-read an ever-widening span until activeDeadlineSeconds truncated it.
-  const holdbackFloor = new Date(
-    runStarted.getTime() - (options.maxHoldbackMs ?? DEFAULT_MAX_HOLDBACK_MS),
-  );
-  const heldAt =
-    oldestRetryableFailure && oldestRetryableFailure > holdbackFloor
+  // Each hold was already floored as it was taken, so the oldest one is the
+  // answer — capped at the run's start, since a hold in the future would step
+  // the window over servers nobody read.
+  const watermark =
+    oldestRetryableFailure && oldestRetryableFailure < runStarted
       ? oldestRetryableFailure
-      : oldestRetryableFailure
-        ? holdbackFloor
-        : runStarted;
-  const watermark = heldAt < runStarted ? heldAt : runStarted;
+      : runStarted;
 
   logger.info('Ingest complete', {
     ...counters,
@@ -370,10 +392,19 @@ async function ingestServer(
   }
   const server = mapped.server;
 
-  // Upstream marks a removed server 'deleted'. Incremental runs see these
-  // because upstream flips include_deleted on whenever updated_since is set,
-  // which is exactly how a takedown reaches us.
   const existing = await repo.findByUpstreamName(server.upstreamName);
+
+  // A claimed mirror stops being this job's to write, for the same reason
+  // deleteMirror refuses one: claiming writes `claimedBy` and never touches
+  // `source` or `upstreamName`, so provenance goes on matching forever and only
+  // ownership can say whether ingest may still act. Without this, the next
+  // upstream release rewrites every field a user actually sees — display name,
+  // description, author, homepage, license, icon — plus `latestVersion`, with
+  // content from whoever holds the *upstream* entry, who need not be the person
+  // who proved GitHub control here.
+  if (existing?.claimedBy) {
+    return { matched: true, skipReason: 'claimed', upstreamUpdatedAt: at };
+  }
 
   // Layer 3: a version we already hold, whose stored artifact digests match
   // every digest upstream declares, cannot have changed. Skip before the wire.
@@ -507,17 +538,18 @@ async function ingestServer(
     let written: { packageCreated: boolean; versionCreated: boolean; versionId: string };
     try {
       written = await runInTransaction(async (tx) => {
-        // resolveName ran before a download that can take minutes. If a real
-        // publisher claimed this name in the meantime, upsertPackage's update
-        // clause would overwrite their display name, description, author,
-        // homepage, license, icon, and repo with third-party content — the
-        // provenance columns are creation-only, but everything a user actually
-        // sees is not. Re-checking inside the transaction is what makes the
-        // guard at resolveName mean anything.
+        // Both ownership checks ran before a download that can take minutes, so
+        // both are re-run here. upsertPackage's update clause would otherwise
+        // overwrite the holder's display name, description, author, homepage,
+        // license, icon, and repo with third-party content — the provenance
+        // columns are creation-only, but everything a user actually sees is
+        // not. Re-checking inside the transaction is what makes the earlier
+        // guards mean anything.
         const holder = await repo.findByName(name, tx);
         if (holder && holder.upstreamName !== server.upstreamName) {
-          throw new NameConflictError(name);
+          throw new NotWritableError(name, 'name-conflict');
         }
+        if (holder?.claimedBy) throw new NotWritableError(name, 'claimed');
 
         const { package: pkg, created: packageCreated } = await repo.upsertPackage(
           {
@@ -581,11 +613,11 @@ async function ingestServer(
         return { packageCreated, versionCreated, versionId: version.id };
       });
     } catch (err) {
-      // The name was taken between the pre-download check and the write. The
-      // transaction rolled back, so nothing partial landed; report it the same
-      // way the pre-check does.
-      if (err instanceof NameConflictError) {
-        return { matched: true, skipReason: 'name-conflict', upstreamUpdatedAt: at };
+      // The row stopped being ours between the pre-download checks and the
+      // write. The transaction rolled back, so nothing partial landed; report
+      // it under the same reason the corresponding pre-check uses.
+      if (err instanceof NotWritableError) {
+        return { matched: true, skipReason: err.reason, upstreamUpdatedAt: at };
       }
       throw err;
     }

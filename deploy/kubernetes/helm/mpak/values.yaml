@@ -143,6 +143,18 @@ ingest:
   # overlap costs a few cheap "unchanged" decisions, while a gap is silent.
   overlapMinutes: 60
 
+  # Furthest back a retryable failure may drag the next window. 21 of the 388
+  # upstream MCPB URLs do not resolve, so without a bound the first backfill
+  # pins the watermark on a dead asset and every later run re-reads an
+  # ever-widening span.
+  maxHoldbackHours: 72
+
+  # Upstream is a third party on the public internet. The download bound is the
+  # larger of the two because a 400MB bundle over a slow release CDN is a normal
+  # run, not a hang.
+  requestTimeoutMs: 30000
+  downloadTimeoutMs: 120000
+
   # Extra CLI flags, e.g. ["--full"] to ignore the watermark and re-read the
   # whole upstream catalog.
   extraArgs: []
@@ -151,8 +163,9 @@ ingest:
   # for that; steady-state incremental runs finish in minutes.
   activeDeadlineSeconds: 21600
   startingDeadlineSeconds: 3600
-  # No retry. A failed run advances nothing, so the next scheduled run resumes
-  # from the same watermark — retrying immediately just repeats whatever broke.
+  # No retry. Whatever a run could not read, it holds the watermark back for, so
+  # the next scheduled run picks it up on its own window — an immediate retry
+  # just repeats whatever broke, a night earlier.
   backoffLimit: 0
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

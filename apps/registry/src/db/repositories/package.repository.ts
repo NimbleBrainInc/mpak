@@ -140,9 +140,6 @@ export class PackageRepository {
   }
 
   /**
-   * Find package by name
-   */
-  /**
    * Find a package by name.
    */
   async findByName(name: string, tx?: TransactionClient): Promise<Package | null> {

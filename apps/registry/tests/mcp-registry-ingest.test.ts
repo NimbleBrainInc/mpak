@@ -501,6 +501,80 @@ describe('runIngest', () => {
     expect(repoMocks.upsertPackage).not.toHaveBeenCalled();
   });
 
+  it('stops writing a mirror once someone has claimed it', async () => {
+    // The claim flow is the whole point of ingesting rows unowned: the real
+    // publisher proves GitHub control and takes the entry over. Claiming writes
+    // claimedBy and never touches source or upstreamName, so provenance goes on
+    // matching forever — only ownership can say ingest is done here. Without
+    // this the next upstream release rewrites the claimer's display name,
+    // description, author, homepage, license, icon and latestVersion, with
+    // content from whoever holds the upstream entry.
+    repoMocks.findByUpstreamName.mockResolvedValue({
+      id: 'pkg-1',
+      name: '@acme/widget',
+      upstreamName: 'io.github.acme/widget',
+      claimedBy: 'user_1',
+    });
+
+    const { client, calls } = fakeUpstream([upstreamEntry()]);
+    const before = new Date();
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.skipReasons.claimed).toBe(1);
+    expect(calls.download).toBe(0);
+    expect(repoMocks.upsertPackage).not.toHaveBeenCalled();
+    expect(repoMocks.updateLatestVersion).not.toHaveBeenCalled();
+    // A handover is permanent, not a failure to retry. Holding for it would drag
+    // the window back every night for as long as the claim stands.
+    expect(result.watermark.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
+  it('refuses to write a mirror claimed during the download window', async () => {
+    // Same guard, re-run inside the transaction, because the download between
+    // the two takes minutes. Distinct from the name-conflict case: there the
+    // holder is a different package, here it is this very mirror.
+    repoMocks.findByUpstreamName.mockResolvedValue(null);
+    repoMocks.findByName.mockResolvedValueOnce(null); // pre-download check: free
+    repoMocks.findByName.mockResolvedValue({
+      id: 'pkg-1',
+      name: '@acme/widget',
+      upstreamName: 'io.github.acme/widget',
+      claimedBy: 'user_1',
+    });
+
+    const { client } = fakeUpstream([upstreamEntry()]);
+    const result = await runIngest(baseOptions(client, fakePrisma(state)));
+
+    expect(result.skipReasons.claimed).toBe(1);
+    expect(result.skipReasons['name-conflict']).toBeUndefined();
+    expect(repoMocks.upsertPackage).not.toHaveBeenCalled();
+  });
+
+  it('holds the watermark for a failure that carries no upstream timestamp', async () => {
+    // An unclassified failure on an entry with no parseable _meta timestamp has
+    // nothing to hold at. Falling back to this run's own lower bound re-reads
+    // the window it was in; without that the next window opens past it and the
+    // server is never read again until someone runs --full.
+    const entry = upstreamEntry() as Record<string, unknown>;
+    delete entry._meta;
+
+    const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const { client } = fakeUpstream([entry]);
+    const storage = fakeStorage() as unknown as {
+      saveBundleFromStream: ReturnType<typeof vi.fn>;
+    };
+    storage.saveBundleFromStream.mockRejectedValue(new Error('S3 unavailable'));
+
+    const result = await runIngest({
+      ...baseOptions(client, fakePrisma(state)),
+      storage: storage as never,
+      since,
+    });
+
+    expect(result.failed).toBe(1);
+    expect(result.watermark.toISOString()).toBe(since.toISOString());
+  });
+
   it('writes nothing in dry-run mode', async () => {
     const { client, calls } = fakeUpstream([upstreamEntry()]);
     const options = { ...baseOptions(client, fakePrisma(state)), dryRun: true };

@@ -212,15 +212,4 @@ describe('mapServer', () => {
   it('refuses a server with no version', () => {
     expect(mapServer(entry({ version: undefined })).reason).toBe('no-version');
   });
-
-  it('carries upstream status through so takedowns can propagate', () => {
-    const e = entry();
-    e._meta = {
-      'io.modelcontextprotocol.registry/official': {
-        status: 'deleted',
-        updatedAt: '2026-07-02T00:00:00Z',
-      },
-    };
-    expect(mapServer(e).server?.status).toBe('deleted');
-  });
 });

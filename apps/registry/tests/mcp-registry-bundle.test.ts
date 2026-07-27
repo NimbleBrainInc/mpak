@@ -76,7 +76,6 @@ describe('inspectBundle', () => {
 
     const result = inspectBundle(p);
     expect(result.serverType).toBe('python');
-    expect(result.manifestVersion).toBe('0.3');
     expect(result.scanability).toBe('full');
   });
 
