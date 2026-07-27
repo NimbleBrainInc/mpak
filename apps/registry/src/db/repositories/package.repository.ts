@@ -699,6 +699,11 @@ export class PackageRepository {
       update: {
         manifest: data.manifest as Prisma.InputJsonValue,
         prerelease: data.prerelease ?? false,
+        // Both callers reach the update path holding a README they paid for —
+        // the publish route only fetches one when the stored value is empty,
+        // and ingest reads it out of an archive it already downloaded. Omitting
+        // it here made both of those spends unconditionally wasted.
+        ...(data.readme !== undefined ? { readme: data.readme } : {}),
         ...(data.publishMethod ? { publishMethod: data.publishMethod } : {}),
         ...(data.provenanceRepository ? { provenanceRepository: data.provenanceRepository } : {}),
         ...(data.provenanceSha ? { provenanceSha: data.provenanceSha } : {}),

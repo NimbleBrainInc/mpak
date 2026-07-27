@@ -118,6 +118,49 @@ describe('PackageRepository.upsertPackage', () => {
  * Reading both from one row means either a running scan is invisible or a
  * failed one blanks a level the bundle earned.
  */
+describe('PackageRepository.upsertVersion', () => {
+  function makeVersionTx() {
+    const upsert = vi.fn().mockResolvedValue({ id: 'ver-1', version: '1.0.0' });
+    const findUnique = vi.fn().mockResolvedValue({ id: 'ver-1', version: '1.0.0' });
+    const tx = { packageVersion: { upsert, findUnique } } as unknown as TransactionClient;
+    return { tx, upsert, findUnique };
+  }
+
+  const versionData = {
+    packageId: 'pkg-1',
+    version: '1.0.0',
+    manifest: { name: 'widget' },
+    publishMethod: 'ingest',
+  };
+
+  it('writes the README on the update path, not only on create', async () => {
+    // Same class of drift as the empty `update: {}` above. Both callers reach
+    // this path holding a README they already paid for — ingest by opening the
+    // archive, the publish route by spending one of 60 hourly GitHub calls —
+    // and an omission here discards it silently, after the cost.
+    const { tx, upsert } = makeVersionTx();
+
+    await new PackageRepository().upsertVersion(
+      'pkg-1',
+      { ...versionData, readme: '# Widget' },
+      tx,
+    );
+
+    expect(upsert.mock.calls[0]?.[0].update).toMatchObject({ readme: '# Widget' });
+  });
+
+  it('leaves a stored README alone when the caller found none', async () => {
+    // `undefined` means "I have nothing to say about this field", not "clear
+    // it". A bundle that stops shipping a README must not blank a description
+    // an earlier run already recorded.
+    const { tx, upsert } = makeVersionTx();
+
+    await new PackageRepository().upsertVersion('pkg-1', versionData, tx);
+
+    expect(upsert.mock.calls[0]?.[0].update).not.toHaveProperty('readme');
+  });
+});
+
 describe('PackageRepository.getVersionsWithArtifactsAndScans', () => {
   const version = { id: 'ver-1', packageId: 'pkg-1', version: '1.0.0' };
 

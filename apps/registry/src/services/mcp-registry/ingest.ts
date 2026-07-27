@@ -28,6 +28,7 @@ import {
 import type { McpRegistryClient } from './client.js';
 import type { MappedArtifact, MappedServer, RejectReason } from './mapper.js';
 import { mapServer, mcpbPackages } from './mapper.js';
+import { fetchGithubReadme, releaseTagFromAssetUrl } from './readme.js';
 import { officialMeta, type UpstreamServerEntry } from './types.js';
 
 /**
@@ -431,6 +432,7 @@ async function ingestServer(
     scanability: string;
     manifest: Record<string, unknown>;
     serverType: string;
+    readme: string | null;
   }> = [];
 
   // Registered the instant a temp file exists, separately from `downloads`,
@@ -498,6 +500,7 @@ async function ingestServer(
           scanability: bundle.inspection.scanability,
           manifest: bundle.inspection.manifest,
           serverType: bundle.inspection.serverType,
+          readme: bundle.inspection.readme,
         });
       } catch (err) {
         // A per-artifact failure abandons the whole server rather than
@@ -551,6 +554,21 @@ async function ingestServer(
     const primary = downloads[0];
     if (!primary) return { matched: true, skipReason: 'bad-identifier', upstreamUpdatedAt: at };
 
+    // A README the archive shipped wins: it is the description of the exact
+    // bytes whose digest was verified. Any artifact in the platform set will
+    // do — they are the same server built for different targets, and a
+    // Windows-only build is no less authoritative about what the server is.
+    //
+    // Resolved out here, before the transaction, because the fallback is a
+    // network call and nothing is worth holding a write transaction open for.
+    let readme = downloads.find((d) => d.readme)?.readme ?? null;
+    if (!readme && server.githubRepo) {
+      readme = await fetchGithubReadme({
+        githubRepo: server.githubRepo,
+        ref: releaseTagFromAssetUrl(primary.artifact.sourceUrl),
+      });
+    }
+
     let written: { packageCreated: boolean; versionCreated: boolean; versionId: string };
     try {
       written = await runInTransaction(async (tx) => {
@@ -602,6 +620,7 @@ async function ingestServer(
             publishedByEmail: null,
             publishMethod: 'ingest',
             provenanceRepository: server.githubRepo,
+            readme: readme ?? undefined,
             serverJson: entry.server,
           },
           tx,

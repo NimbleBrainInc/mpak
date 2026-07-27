@@ -138,6 +138,73 @@ describe('inspectBundle', () => {
     const p = writeTemp(zip.toBuffer());
     expect(() => inspectBundle(p)).toThrow(NotABundleError);
   });
+
+  it('extracts a root README, which is the description of the verified bytes', () => {
+    const p = writeTemp(buildBundle({ files: { 'README.md': '# Widget\n\nDoes things.' } }));
+    expect(inspectBundle(p).readme).toBe('# Widget\n\nDoes things.');
+  });
+
+  it('matches a README regardless of case', () => {
+    const p = writeTemp(buildBundle({ files: { 'readme.md': 'lowercase' } }));
+    expect(inspectBundle(p).readme).toBe('lowercase');
+  });
+
+  it('reports no README when the bundle ships none', () => {
+    const p = writeTemp(buildBundle({ files: { 'main.py': 'print(1)' } }));
+    expect(inspectBundle(p).readme).toBeNull();
+  });
+
+  it('ignores a README that is not at the archive root', () => {
+    // A README under node_modules/ or docs/ describes a dependency or a
+    // subsystem, not this server, and rendering it on the package page would
+    // be actively misleading. Most bundles vendor dozens of them.
+    const p = writeTemp(
+      buildBundle({
+        files: {
+          'node_modules/left-pad/README.md': '# left-pad',
+          'docs/README.md': '# docs',
+        },
+      }),
+    );
+    expect(inspectBundle(p).readme).toBeNull();
+  });
+
+  it('treats a whitespace-only README as absent, so the fallback still runs', () => {
+    // Symmetric with the repository source. This is the *preferred* source, so
+    // a blank file here outranks the fallback and renders as an empty block —
+    // the symptom this whole change exists to fix.
+    const p = writeTemp(buildBundle({ files: { 'README.md': '   \n\n  ' } }));
+    expect(inspectBundle(p).readme).toBeNull();
+  });
+
+  it('finds a root README in an archive that prefixes entries with ./', () => {
+    const p = writeTemp(buildBundle({ files: { './README.md': '# Dot-slash' } }));
+    expect(inspectBundle(p).readme).toBe('# Dot-slash');
+  });
+
+  it('prefers README.md over other root README spellings', () => {
+    const p = writeTemp(
+      buildBundle({ files: { 'README.txt': 'plain text', 'README.md': '# markdown' } }),
+    );
+    expect(inspectBundle(p).readme).toBe('# markdown');
+  });
+
+  it('drops an absurdly large README rather than refusing the bundle', () => {
+    // A README renders into a page, so the bound is about what a browser is
+    // asked to display. Unlike the manifest cap this is not fatal: an absurd
+    // README is no reason to refuse to mirror an otherwise valid bundle.
+    const zip = new AdmZip();
+    zip.addFile(
+      'manifest.json',
+      Buffer.from(JSON.stringify({ manifest_version: '0.3', server: { type: 'python' } })),
+    );
+    zip.addFile('README.md', Buffer.alloc(1024 * 1024, 0x61));
+    const p = writeTemp(zip.toBuffer());
+
+    const result = inspectBundle(p);
+    expect(result.readme).toBeNull();
+    expect(result.serverType).toBe('python');
+  });
 });
 
 describe('downloadAndVerify', () => {
