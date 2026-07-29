@@ -1,16 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": [
-      "vitest/globals"
-    ],
+    "types": ["vitest/globals"],
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -23,15 +17,7 @@
     "exactOptionalPropertyTypes": false,
     "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": false,
-    "rootDirs": [
-      ".",
-      "./.react-router/types"
-    ]
+    "rootDirs": [".", "./.react-router/types"]
   },
-  "include": [
-    "src",
-    ".react-router/types/**/*",
-    "react-router.config.ts",
-    "vite.config.ts"
-  ]
+  "include": ["src", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts"]
 }
