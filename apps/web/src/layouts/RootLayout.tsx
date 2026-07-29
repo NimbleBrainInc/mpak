@@ -65,10 +65,16 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <header className="sticky top-0 z-50 bg-[#0c0a0f]/85 backdrop-blur-md border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            {/* Logo */}
-            <Link to="/" className="flex items-center flex-shrink-0">
+            {/* The wordmark is the brand's mark, so it leads to the brand's home
+                rather than this app's. "Bundles" below is the way back to the
+                registry index. */}
+            <a
+              href={siteConfig.marketingUrl}
+              aria-label="mpak home"
+              className="flex items-center flex-shrink-0"
+            >
               <MpakWordmark />
-            </Link>
+            </a>
 
             {/* Desktop Nav */}
             <nav aria-label="Main navigation" className="hidden md:flex items-center space-x-4">
