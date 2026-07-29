@@ -16,8 +16,13 @@ COPY apps/web/ apps/web/
 # the app builds and serves read-only, which is the self-host default.
 ARG VITE_CLERK_PUBLISHABLE_KEY
 ARG VITE_ENABLE_DEBUG_AUTH=false
+# Analytics container id. Public, and inlined into both bundles at build time —
+# the server one emits the tag. Absent it, no tag is emitted and no request is
+# made.
+ARG VITE_GTM_ID
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_ENABLE_DEBUG_AUTH=$VITE_ENABLE_DEBUG_AUTH
+ENV VITE_GTM_ID=$VITE_GTM_ID
 
 RUN pnpm --filter @nimblebrain/mpak-web build
 

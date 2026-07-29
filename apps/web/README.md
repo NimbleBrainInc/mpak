@@ -39,6 +39,7 @@ Copy `.env.example` to `.env` and fill in the values:
 |----------|-------------|
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key for authentication |
 | `VITE_ENABLE_DEBUG_AUTH` | Show auth debug panel (`true`/`false`) |
+| `VITE_GTM_ID` | Google Tag Manager container id. Omit to load no analytics |
 
 `MPAK_API_URL` addresses the registry from the server. It is set on the running
 container rather than at build time, so it is not a `--build-arg`.
