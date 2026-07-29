@@ -60,3 +60,7 @@ apps/registry/data/
 # Misc
 *.bak
 *.tmp
+
+# React Router generated route types
+apps/web/.react-router/
+apps/web/build/

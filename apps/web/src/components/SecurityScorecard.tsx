@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { SecurityScan } from '../schemas/generated/api-responses';
 
 // Domain display order

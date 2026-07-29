@@ -1,45 +1,46 @@
 /**
- * Derive the API URL from the current hostname.
- * - localhost → http://localhost:3200
- * - preview.mpak.dev → https://registry.preview.mpak.dev
- * - mpak.dev → https://registry.mpak.dev
+ * The UI and the registry API share a host — registry.mpak.dev serves the
+ * browser routes and `/app`, `/v1`, `/v0.1` alike — so the browser talks to the
+ * API same-origin with no CORS preflight and no second hostname to provision.
+ *
+ * Server-side loaders have no origin to be relative to, so they need an
+ * absolute address. In the cluster that is the registry Service; in dev it is
+ * the local API.
  */
-function getApiUrl(): string {
-  if (typeof window === 'undefined') {
-    return import.meta.env.VITE_API_URL || 'http://localhost:3200';
-  }
-  const { hostname, protocol } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3200';
-  }
-  return `${protocol}//registry.${hostname}`;
+export const API_BASE =
+  typeof document === 'undefined'
+    ? // Read at request time, not build time: import.meta.env is baked in by
+      // Vite, so a value set on the running container would never be seen.
+      (globalThis.process?.env?.MPAK_API_URL ?? 'http://localhost:3200')
+    : '';
+
+/** Absolute on the server, same-origin relative in the browser. */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-export const API_URL = getApiUrl();
+/** @deprecated use apiUrl() — kept until the axios client is migrated. */
+export const API_URL = API_BASE || '';
 
 /**
- * Operator identity config. Self-hosted instances can override these
- * via VITE_ environment variables to brand the site for their org.
+ * Canonical origin for this application. Marketing and docs are a different
+ * site (mpak.dev); this is where package pages live and canonicalize to.
  */
-/**
- * Derive the site URL from the current hostname.
- * Self-hosted instances can override via VITE_SITE_URL.
- */
-function getSiteUrl(): string {
-  if (import.meta.env.VITE_SITE_URL) {
-    return import.meta.env.VITE_SITE_URL.replace(/\/$/, '');
-  }
-  if (typeof window === 'undefined') {
-    return 'https://www.mpak.dev';
-  }
-  return window.location.origin;
-}
+export const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://registry.mpak.dev').replace(
+  /\/$/,
+  '',
+);
 
-export const SITE_URL = getSiteUrl();
+/** Where the marketing site and documentation live. */
+export const MARKETING_URL = (import.meta.env.VITE_MARKETING_URL ?? 'https://mpak.dev').replace(
+  /\/$/,
+  '',
+);
 
 export const siteConfig = {
   siteUrl: SITE_URL,
-  docsUrl: import.meta.env.VITE_DOCS_URL || 'https://docs.mpak.dev',
+  marketingUrl: MARKETING_URL,
+  docsUrl: `${MARKETING_URL}/docs`,
   operator: {
     name: import.meta.env.VITE_OPERATOR_NAME || 'NimbleBrain Inc.',
     shortName: import.meta.env.VITE_OPERATOR_SHORT_NAME || 'NimbleBrain',

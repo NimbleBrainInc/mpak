@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router';
 import BadgeSection from '../components/BadgeSection';
 import Breadcrumbs from '../components/Breadcrumbs';
 import ClaimPackageModal from '../components/ClaimPackageModal';
@@ -9,9 +9,7 @@ import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import RuntimeIcon from '../components/RuntimeIcon';
 import ScanTriggerButton from '../components/ScanTriggerButton';
 import SecurityScorecard from '../components/SecurityScorecard';
-import { useSEO } from '../hooks/useSEO';
-import { api, type Package, packageToDetailPlaceholder } from '../lib/api';
-import { generateBreadcrumbSchema, generatePackageSchema } from '../lib/schema';
+import { api, type Package, type PackageDetail, packageToDetailPlaceholder } from '../lib/api';
 
 // Platform detection
 function detectPlatform(): { os: string; arch: string } {
@@ -84,7 +82,12 @@ const OSIcon = ({ os, className = 'w-4 h-4' }: { os: string; className?: string 
 // Tabs
 type TabId = 'overview' | 'tools' | 'install' | 'security' | 'versions';
 
-export default function PackageDetailPage() {
+interface PackageDetailPageProps {
+  /** Seeded by the route loader so the first paint is server-rendered. */
+  initialPackage?: PackageDetail;
+}
+
+export default function PackageDetailPage({ initialPackage }: PackageDetailPageProps = {}) {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -117,41 +120,17 @@ export default function PackageDetailPage() {
     isLoading,
     error,
     refetch,
-  } = useQuery({
+  } = useQuery<PackageDetail>({
     queryKey: ['package-detail', fullName],
     queryFn: () => api.getPackage(fullName),
     enabled: !!fullName,
     staleTime: 30000,
+    initialData: initialPackage,
     placeholderData: cachedPackage ? packageToDetailPlaceholder(cachedPackage) : undefined,
   });
 
-  // Dynamic SEO
-  const seoTitle = pkg ? `${pkg.display_name || pkg.name} - MCP Server` : 'Loading Package';
-  const seoDescription = pkg
-    ? `${pkg.description || `${pkg.name} MCP server bundle`}. Install with mpak install ${pkg.name}. ${pkg.downloads.toLocaleString()} downloads, version ${pkg.latest_version}.`
-    : 'Loading MCP server package details...';
-
-  useSEO({
-    title: seoTitle,
-    description: seoDescription,
-    canonical: `https://www.mpak.dev/packages/${fullName}`,
-    keywords: pkg
-      ? [pkg.name, 'mcp server', pkg.server_type, 'claude integration', 'model context protocol']
-      : [],
-    schema: pkg
-      ? [
-          generatePackageSchema(pkg),
-          generateBreadcrumbSchema([
-            { name: 'Home', url: 'https://www.mpak.dev/' },
-            { name: 'Bundles', url: 'https://www.mpak.dev/bundles' },
-            {
-              name: pkg.display_name || pkg.name,
-              url: `https://www.mpak.dev/packages/${pkg.name}`,
-            },
-          ]),
-        ]
-      : undefined,
-  });
+  // Title, description, canonical, and JSON-LD are emitted by the route's
+  // meta export so they are in the server response, not applied after hydration.
 
   // Resolve which version to display (selected or latest)
   const activeVersion = selectedVersion ?? pkg?.latest_version ?? null;
