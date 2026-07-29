@@ -45,8 +45,7 @@ mpak/
 ├── apps/
 │   ├── registry/   # Registry API server
 │   ├── web/        # Web UI
-│   ├── scanner/    # MTF security scanner (Python)
-│   └── docs/       # Documentation site (Astro)
+│   └── scanner/    # MTF security scanner (Python)
 ├── deploy/         # Docker Compose, Helm, Terraform
 └── scripts/        # Development scripts
 ```
@@ -58,7 +57,6 @@ schemas -> sdk -> cli
 schemas -> sdk -> registry
 schemas -> sdk -> web
 scanner (independent Python)
-docs (independent Astro)
 ```
 
 ## Development Workflow
