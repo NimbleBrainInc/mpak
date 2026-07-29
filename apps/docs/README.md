@@ -1,3 +1,11 @@
+> [!IMPORTANT]
+> **These docs have moved.** Content is now maintained in
+> [NimbleBrainInc/mpak-web](https://github.com/NimbleBrainInc/mpak-web) under
+> `src/content/docs/docs/`, which serves it at `mpak.dev/docs`.
+>
+> Edit there, not here. This copy still builds `docs.mpak.dev` until that host
+> is redirected, at which point this directory is deleted.
+
 # mpak Documentation
 
 Documentation site for [mpak](https://mpak.dev), the package registry for agent capabilities.
