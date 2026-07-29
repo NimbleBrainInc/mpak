@@ -95,9 +95,11 @@ services:
       context: ../../
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL}
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
         VITE_ENABLE_DEBUG_AUTH: "false"
+    environment:
+      # Read at request time by the server-side loaders.
+      MPAK_API_URL: ${MPAK_API_URL:-http://registry:3200}
     restart: unless-stopped
     ports: ["8080:8080"]
     depends_on: [registry]

@@ -38,15 +38,16 @@ Copy `.env.example` to `.env` and fill in the values:
 | Variable | Description |
 |----------|-------------|
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key for authentication |
-| `VITE_API_URL` | Backend API URL (defaults to `http://localhost:3000`) |
 | `VITE_ENABLE_DEBUG_AUTH` | Show auth debug panel (`true`/`false`) |
+
+`MPAK_API_URL` addresses the registry from the server. It is set on the running
+container rather than at build time, so it is not a `--build-arg`.
 
 ## Docker
 
 ```bash
 docker build \
   --build-arg VITE_CLERK_PUBLISHABLE_KEY=pk_xxx \
-  --build-arg VITE_API_URL=https://registry.mpak.dev \
   -f apps/web/Dockerfile \
   -t mpak-web .
 

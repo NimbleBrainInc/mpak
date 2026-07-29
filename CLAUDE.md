@@ -35,7 +35,7 @@ pnpm --filter @nimblebrain/mpak-registry test
 
 ## Key Conventions
 
-- **API URL**: The web app derives the API URL from `window.location.hostname` at runtime (see `apps/web/src/lib/siteConfig.ts`). No build-time `VITE_API_URL` needed.
+- **API URL**: In the browser the web app calls the API same-origin, so the address is empty. Server-side loaders have no origin to be relative to and read `MPAK_API_URL` at request time (see `apps/web/src/lib/siteConfig.ts`). It is deliberately not a `VITE_` variable: those are inlined at build time, so a value set on a running container would never be seen.
 - **Scoped packages**: All package names are scoped (`@scope/name`)
 - **Prisma**: Registry uses Prisma ORM. Run `npm run db:generate` in `apps/registry/` after schema changes.
 - **Prerender**: Web build includes a prerender step for SEO. Check that all pages succeed.
