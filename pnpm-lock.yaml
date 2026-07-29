@@ -138,12 +138,6 @@ importers:
       '@clerk/clerk-react':
         specifier: ^5.59.2
         version: 5.60.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@nimblebrain/mpak-schemas':
-        specifier: workspace:*
-        version: link:../../packages/schemas
-      '@nimblebrain/mpak-sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk-typescript
       '@react-router/node':
         specifier: ^8.3.0
         version: 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@5.9.3)
