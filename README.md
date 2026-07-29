@@ -223,12 +223,6 @@ Produces a trust score from L1 (Basic) to L4 (Attested) based on which controls 
 
 **How scanning works:** When a bundle is published, the registry creates a Kubernetes Job that runs the scanner image. The scanner evaluates the bundle, writes results to S3, and POSTs the score back to the registry via a callback URL. In Docker Compose, the scanner runs as a standalone container instead of a K8s Job.
 
-### `apps/docs`
-
-Documentation site. Covers CLI usage, bundle format, integrations (VS Code, Claude Desktop, Cursor, Claude Code), and security controls.
-
-Content is maintained in [mpak-web](https://github.com/NimbleBrainInc/mpak-web) and serves at [mpak.dev/docs](https://mpak.dev/docs). Edit it there. This copy builds `docs.mpak.dev` until that host is redirected (#163).
-
 ## Development setup
 
 ### Prerequisites
