@@ -1,6 +1,6 @@
 import { UserButton } from '@clerk/clerk-react';
 import { useState } from 'react';
-import { Link, Outlet, ScrollRestoration } from 'react-router-dom';
+import { Link, Outlet, ScrollRestoration } from 'react-router';
 import { AuthGuard, authEnabled, GuestGuard } from '../auth/AuthProvider';
 import { DebugAuth } from '../components/DebugAuth';
 import { MpakWordmark } from '../components/MpakLogo';
@@ -16,19 +16,18 @@ export default function RootLayout({ children }: RootLayoutProps) {
   const navLinks = (
     <>
       <Link
-        to="/bundles"
+        to="/"
         className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
         onClick={() => setMobileMenuOpen(false)}
       >
         Bundles
       </Link>
-      <Link
-        to="/publish"
-        className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
-        onClick={() => setMobileMenuOpen(false)}
-      >
-        Publish
-      </Link>
+      <a
+                href={`${siteConfig.marketingUrl}/publish/`}
+                className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
+              >
+                Publish
+              </a>
       <a
         href={siteConfig.docsUrl}
         target="_blank"
@@ -242,36 +241,36 @@ export default function RootLayout({ children }: RootLayoutProps) {
               project.
             </p>
             <nav aria-label="Footer navigation" className="flex items-center gap-6 text-sm">
-              <Link
-                to="/privacy"
+              <a
+                href={`${siteConfig.marketingUrl}/privacy/`}
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
               >
                 Privacy
-              </Link>
-              <Link
-                to="/terms"
+              </a>
+              <a
+                href={`${siteConfig.marketingUrl}/terms/`}
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
               >
                 Terms
-              </Link>
-              <Link
-                to="/security"
+              </a>
+              <a
+                href={`${siteConfig.marketingUrl}/security/`}
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
               >
                 Security
-              </Link>
-              <Link
-                to="/about"
+              </a>
+              <a
+                href={`${siteConfig.marketingUrl}/about/`}
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
               >
                 About
-              </Link>
-              <Link
-                to="/contact"
+              </a>
+              <a
+                href={`${siteConfig.marketingUrl}/contact/`}
                 className="text-mpak-gray-500 hover:text-mpak-gray-700 transition-colors"
               >
                 Contact
-              </Link>
+              </a>
               <a
                 href={siteConfig.github.repo}
                 target="_blank"

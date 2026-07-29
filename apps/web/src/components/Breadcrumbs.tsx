@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { generateBreadcrumbSchema } from '../lib/schema';
 import { SITE_URL } from '../lib/siteConfig';
 

@@ -1,11 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import Breadcrumbs from '../components/Breadcrumbs';
 import RuntimeIcon from '../components/RuntimeIcon';
-import { useSEO } from '../hooks/useSEO';
 import { api, type Package } from '../lib/api';
-import { generateBreadcrumbSchema, generateItemListSchema } from '../lib/schema';
 
 const CERT_LEVELS: Record<number, { grade: string; name: string; bg: string }> = {
   1: { grade: 'L1', name: 'Basic', bg: 'bg-surface text-mpak-gray-600' },
@@ -14,46 +12,21 @@ const CERT_LEVELS: Record<number, { grade: string; name: string; bg: string }> =
   4: { grade: 'L4', name: 'Attested', bg: 'bg-accent-gold-400/15 text-accent-gold-400' },
 };
 
-export default function BrowsePackagesPage() {
+interface BrowsePackagesPageProps {
+  /** Seeded by the route loader so the listing is server-rendered. */
+  initialPackages?: Package[];
+}
+
+export default function BrowsePackagesPage({ initialPackages }: BrowsePackagesPageProps = {}) {
   const queryClient = useQueryClient();
-  const [packages, setPackages] = useState<Package[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState<Package[]>(initialPackages ?? []);
+  const [loading, setLoading] = useState(!initialPackages);
   const [error, setError] = useState<string | null>(null);
   const [serverType, setServerType] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // Dynamic description based on package count
-  const packageCount = packages.length;
-  const description =
-    packageCount > 0
-      ? `Browse ${packageCount}+ bundles that extend your AI. Filter by type, search by name. Install with mpak bundle pull.`
-      : 'Explore bundles for database access, APIs, file systems, and more. Install any bundle instantly with mpak.';
-
-  const schemas = [
-    generateBreadcrumbSchema([
-      { name: 'Home', url: 'https://www.mpak.dev/' },
-      { name: 'Bundles', url: 'https://www.mpak.dev/bundles' },
-    ]),
-    ...(packages.length > 0
-      ? [
-          generateItemListSchema(
-            packages.map((pkg) => ({
-              name: pkg.display_name || pkg.name,
-              url: `https://www.mpak.dev/packages/${pkg.name}`,
-            })),
-            'MCP Server Bundles',
-          ),
-        ]
-      : []),
-  ];
-
-  useSEO({
-    title: 'Browse Bundles',
-    description,
-    canonical: 'https://www.mpak.dev/bundles',
-    keywords: ['mcp bundles', 'ai packages', 'model context protocol', 'mcp servers', 'ai tools'],
-    schema: schemas,
-  });
+  const [searchParams] = useSearchParams();
+  // The marketing site's hero search is a plain GET form to this route, so a
+  // term in ?search= has to survive the first render.
+  const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
 
   const loadPackages = useCallback(async () => {
     try {
@@ -73,8 +46,8 @@ export default function BrowsePackagesPage() {
   }, []);
 
   useEffect(() => {
-    loadPackages();
-  }, [loadPackages]);
+    if (!initialPackages) loadPackages();
+  }, [initialPackages, loadPackages]);
 
   // Cache packages in React Query for instant navigation to detail pages
   useEffect(() => {
