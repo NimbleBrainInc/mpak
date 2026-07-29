@@ -23,11 +23,11 @@ export default function RootLayout({ children }: RootLayoutProps) {
         Bundles
       </Link>
       <a
-                href={`${siteConfig.marketingUrl}/publish/`}
-                className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
-              >
-                Publish
-              </a>
+        href={`${siteConfig.marketingUrl}/publish/`}
+        className="text-sm font-medium text-mpak-gray-600 hover:text-accent-gold-400 transition-colors"
+      >
+        Publish
+      </a>
       <a
         href={siteConfig.docsUrl}
         target="_blank"

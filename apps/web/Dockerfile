@@ -16,10 +16,8 @@ COPY apps/web/ apps/web/
 # the app builds and serves read-only, which is the self-host default.
 ARG VITE_CLERK_PUBLISHABLE_KEY
 ARG VITE_ENABLE_DEBUG_AUTH=false
-ARG VITE_GTM_ID
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_ENABLE_DEBUG_AUTH=$VITE_ENABLE_DEBUG_AUTH
-ENV VITE_GTM_ID=$VITE_GTM_ID
 
 RUN pnpm --filter @nimblebrain/mpak-web build
 
@@ -44,4 +42,4 @@ EXPOSE 8080
 
 USER node
 
-CMD ["npx", "react-router-serve", "./build/server/index.js"]
+CMD ["./node_modules/.bin/react-router-serve", "./build/server/index.js"]

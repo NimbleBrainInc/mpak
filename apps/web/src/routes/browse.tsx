@@ -1,6 +1,8 @@
 import type { Package } from '../lib/api';
+import { SECURITY_HEADERS, socialImageMeta } from '../lib/meta';
+import { fetchRegistry } from '../lib/registry';
 import { generateItemListSchema } from '../lib/schema';
-import { apiUrl, SITE_URL } from '../lib/siteConfig';
+import { SITE_URL } from '../lib/siteConfig';
 import BrowsePackagesPage from '../pages/BrowsePackagesPage';
 import type { Route } from './+types/browse';
 
@@ -10,22 +12,19 @@ import type { Route } from './+types/browse';
  * this page came to serve a skeleton to anything that could not execute JS.
  */
 export async function loader() {
-  const res = await fetch(apiUrl('/app/packages?limit=100&sort=downloads'), {
-    headers: { accept: 'application/json' },
-  });
+  const result = await fetchRegistry<{ packages?: Package[] }>(
+    '/app/packages?limit=100&sort=downloads',
+  );
 
-  if (!res.ok) {
-    // Render the shell and let the browser retry rather than failing the whole
-    // document over a listing.
-    return { packages: [] as Package[] };
-  }
-
-  const { packages = [] } = (await res.json()) as { packages?: Package[] };
-  return { packages };
+  // Undefined rather than [], so the client knows the listing was never
+  // obtained and fetches it itself. An empty array reads as "the registry has
+  // no packages" and would strand the page on a permanently empty list.
+  return { packages: result?.packages };
 }
 
 export function headers() {
   return {
+    ...SECURITY_HEADERS,
     'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400',
   };
 }
@@ -46,6 +45,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
     { property: 'og:url', content: `${SITE_URL}/` },
     { property: 'og:title', content: title },
     { property: 'og:description', content: DESCRIPTION },
+    ...socialImageMeta(),
     ...(packages.length
       ? [
           {

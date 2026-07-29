@@ -11,6 +11,7 @@ export default defineConfig({
     proxy: {
       '/app': { target: 'http://localhost:3200', changeOrigin: true },
       '/v1': { target: 'http://localhost:3200', changeOrigin: true },
+      '/v0.1': { target: 'http://localhost:3200', changeOrigin: true },
     },
     allowedHosts: ['.ngrok.app'],
   },

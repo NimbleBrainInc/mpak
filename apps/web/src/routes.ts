@@ -1,4 +1,4 @@
-import { type RouteConfig, index, route } from '@react-router/dev/routes';
+import { index, type RouteConfig, route } from '@react-router/dev/routes';
 
 // The registry application. Marketing and docs live in NimbleBrainInc/mpak-web
 // and serve from mpak.dev; nothing here should render brand copy.
@@ -14,4 +14,8 @@ export default [
   // Generated from the registry rather than a build-time snapshot, so it can
   // never advertise packages that no longer exist or miss ones that do.
   route('sitemap-packages.xml', 'routes/sitemap-packages.ts'),
+
+  // The chart's liveness and readiness probes and the ALB health check all
+  // target this; nginx answered it before the app rendered on the server.
+  route('health', 'routes/health.ts'),
 ] satisfies RouteConfig;

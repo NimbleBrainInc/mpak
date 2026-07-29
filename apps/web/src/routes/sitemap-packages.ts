@@ -1,4 +1,6 @@
-import { apiUrl, SITE_URL } from '../lib/siteConfig';
+import { SECURITY_HEADERS } from '../lib/meta';
+import { fetchRegistry } from '../lib/registry';
+import { SITE_URL } from '../lib/siteConfig';
 
 interface SitemapPackage {
   name: string;
@@ -17,17 +19,15 @@ interface SitemapPackage {
  * The marketing and docs URLs live in mpak-web's own sitemap.
  */
 export async function loader() {
-  const res = await fetch(apiUrl('/app/packages?limit=1000'), {
-    headers: { accept: 'application/json' },
-  });
+  const result = await fetchRegistry<{ packages?: SitemapPackage[] }>('/app/packages?limit=1000');
 
-  if (!res.ok) {
+  if (!result) {
     // A sitemap that 200s with no URLs tells a crawler the registry is empty
     // and is worse than admitting the lookup failed.
     return new Response('Could not reach the registry', { status: 503 });
   }
 
-  const { packages = [] } = (await res.json()) as { packages?: SitemapPackage[] };
+  const packages = result.packages ?? [];
   const today = new Date().toISOString().slice(0, 10);
 
   const urls = packages
@@ -50,6 +50,7 @@ ${urls}
 `,
     {
       headers: {
+        ...SECURITY_HEADERS,
         'Content-Type': 'application/xml; charset=utf-8',
         'Cache-Control': 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400',
       },

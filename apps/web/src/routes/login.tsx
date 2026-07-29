@@ -1,3 +1,4 @@
+import { SECURITY_HEADERS } from '../lib/meta';
 import LoginPage from '../pages/LoginPage';
 
 export function meta() {
@@ -6,4 +7,8 @@ export function meta() {
 
 export default function LoginRoute() {
   return <LoginPage />;
+}
+
+export function headers() {
+  return { ...SECURITY_HEADERS };
 }

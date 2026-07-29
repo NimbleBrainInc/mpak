@@ -32,9 +32,10 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL ?? 'https://registry.mpak
 );
 
 /** Where the marketing site and documentation live. */
-export const MARKETING_URL = (
-  import.meta.env.VITE_MARKETING_URL ?? 'https://mpak.dev'
-).replace(/\/$/, '');
+export const MARKETING_URL = (import.meta.env.VITE_MARKETING_URL ?? 'https://mpak.dev').replace(
+  /\/$/,
+  '',
+);
 
 export const siteConfig = {
   siteUrl: SITE_URL,
