@@ -227,6 +227,8 @@ Produces a trust score from L1 (Basic) to L4 (Attested) based on which controls 
 
 Documentation site. Covers CLI usage, bundle format, integrations (VS Code, Claude Desktop, Cursor, Claude Code), and security controls.
 
+Content is maintained in [mpak-web](https://github.com/NimbleBrainInc/mpak-web) and serves at [mpak.dev/docs](https://mpak.dev/docs). Edit it there. This copy builds `docs.mpak.dev` until that host is redirected (#163).
+
 ## Development setup
 
 ### Prerequisites

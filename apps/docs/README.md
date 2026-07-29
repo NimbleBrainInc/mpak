@@ -4,7 +4,7 @@
 > `src/content/docs/docs/`, which serves it at `mpak.dev/docs`.
 >
 > Edit there, not here. This copy still builds `docs.mpak.dev` until that host
-> is redirected, at which point this directory is deleted.
+> is redirected, at which point this directory is deleted (#163).
 
 # mpak Documentation
 
