@@ -21,7 +21,7 @@ ENV VITE_ENABLE_DEBUG_AUTH=$VITE_ENABLE_DEBUG_AUTH
 
 RUN pnpm --filter @nimblebrain/mpak-web build
 
-RUN pnpm --filter @nimblebrain/mpak-web deploy --prod --legacy /prod
+RUN pnpm --filter @nimblebrain/mpak-web deploy --prod /prod
 
 # Runtime — a Node server rather than nginx, because package and browse routes
 # render per request so crawlers get real HTML instead of an empty shell.
