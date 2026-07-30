@@ -93,7 +93,7 @@ pnpm typecheck
 | `HOST` | No | Server host (default: 0.0.0.0) |
 | `NODE_ENV` | No | Environment (development/production) |
 | `CORS_ORIGINS` | No | Comma-separated allowed origins |
-| `MPAK_PUBLIC_URL` | No | Origin where package pages are served, for links in Discord announcements (default: `https://registry.mpak.dev`). The bundled Helm chart derives it from the ingress host |
+| `MPAK_PUBLIC_URL` | No | Origin where package pages are served, for links in Discord announcements (default: `https://registry.mpak.dev`). Under the bundled Helm chart, set it through `registry.env` |
 | `STORAGE_TYPE` | No | Storage backend: local or s3 (default: local) |
 | `STORAGE_PATH` | No | Local storage path (default: ./packages) |
 | `S3_BUCKET` | No | S3 bucket name |

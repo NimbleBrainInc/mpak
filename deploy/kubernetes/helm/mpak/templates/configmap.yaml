@@ -8,11 +8,6 @@ metadata:
 data:
   CORS_ORIGINS: {{ .Values.config.corsOrigins | quote }}
   S3_REGION: {{ .Values.config.s3Region | quote }}
-  {{- if and .Values.ingress.enabled (not (hasKey .Values.registry.env "MPAK_PUBLIC_URL")) }}
-  {{- /* Derived, not a second knob: the ingress host is already the one value a
-         self-hoster must change, and announcement links have to match it. */}}
-  MPAK_PUBLIC_URL: {{ printf "https://%s" .Values.ingress.registry.host | quote }}
-  {{- end }}
   {{- range $key, $value := .Values.registry.env }}
   {{ $key }}: {{ $value | quote }}
   {{- end }}
