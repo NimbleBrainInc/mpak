@@ -3,6 +3,8 @@
  * Non-blocking notifications for package announcements
  */
 
+import { config } from '../config.js';
+
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
 
 interface AnnounceNotification {
@@ -16,13 +18,14 @@ interface AnnounceNotification {
  * Errors are silently logged, never thrown.
  */
 export function notifyDiscordAnnounce(data: AnnounceNotification): void {
-  const registryUrl = `https://mpak.dev/packages/${encodeURIComponent(data.name)}`;
+  // Package pages are served by the registry, not by the marketing site.
+  const registryUrl = `${config.server.publicUrl}/packages/${encodeURIComponent(data.name)}`;
 
   const content = [
     `**New Bundle Published**`,
     `**${data.name}** v${data.version}`,
     data.repo ? `[GitHub](https://github.com/${data.repo})` : null,
-    `[View on mpak.dev](${registryUrl})`,
+    `[View package](${registryUrl})`,
   ]
     .filter(Boolean)
     .join('\n');

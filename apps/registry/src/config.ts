@@ -12,6 +12,14 @@ export const config = {
       process.env.CORS_ORIGINS?.split(',')
         .map((s) => s.trim())
         .filter(Boolean) || [],
+    // Origin where package pages are served, for links that leave the cluster
+    // and are read by a person — a Discord announcement, say. Such a link can
+    // be neither relative nor an internal Service name.
+    //
+    // Not necessarily this process's own address: here the ingress splits one
+    // host between the API and the pages, but a Compose stack serves them on
+    // separate ports. The bundled chart derives this from its ingress host.
+    publicUrl: (process.env.MPAK_PUBLIC_URL || 'https://registry.mpak.dev').replace(/\/$/, ''),
   },
   metrics: {
     // Prometheus /metrics is served on its own internal port so it is NOT
