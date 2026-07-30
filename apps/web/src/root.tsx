@@ -38,6 +38,19 @@ function makeQueryClient() {
   });
 }
 
+/**
+ * Google Tag Manager, inlined in the document head so the container loads
+ * before render rather than after hydration.
+ *
+ * The id is checked against the container-id shape because it is interpolated
+ * into a script body: a malformed value would otherwise emit script that either
+ * breaks the page or runs something unintended. Absent or unrecognised, no tag
+ * is emitted and no request is made — which is the self-host default.
+ */
+const GTM_ID = /^GTM-[A-Z0-9]+$/.test(import.meta.env.VITE_GTM_ID ?? '')
+  ? import.meta.env.VITE_GTM_ID
+  : undefined;
+
 let browserQueryClient: QueryClient | undefined;
 
 function getQueryClient() {
@@ -55,8 +68,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" content="#0c0a0f" />
         <Meta />
         <Links />
+        {GTM_ID && (
+          <script
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: GTM ships as an inline loader
+            dangerouslySetInnerHTML={{
+              __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${GTM_ID}');`,
+            }}
+          />
+        )}
       </head>
       <body>
+        {GTM_ID && (
+          <noscript>
+            <iframe
+              src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
+              height="0"
+              width="0"
+              style={{ display: 'none', visibility: 'hidden' }}
+              title="Google Tag Manager"
+            />
+          </noscript>
+        )}
         {children}
         <ScrollRestoration />
         <Scripts />
