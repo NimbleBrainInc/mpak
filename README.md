@@ -380,7 +380,7 @@ See [`apps/web/.env.example`](apps/web/.env.example) for the full list.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_API_URL` | `http://localhost:3200` | Registry API endpoint |
+| `MPAK_API_URL` | `http://localhost:3200` | Registry API endpoint. Read by the server at request time, not baked into the bundle |
 | `VITE_CLERK_PUBLISHABLE_KEY` | (empty) | Clerk public key. Optional for local dev |
 | `VITE_ENABLE_DEBUG_AUTH` | `true` | Show auth debug panel in UI |
 

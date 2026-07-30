@@ -34,8 +34,14 @@ COPY --from=builder /prod/node_modules ./node_modules
 COPY --from=builder /app/apps/web/build ./build
 COPY --from=builder /app/apps/web/package.json ./package.json
 
-# Address the registry Service directly. The public hostname resolves to the
-# ingress, which would route the request back out of the cluster and in again.
+# Server-side loaders have no origin to be relative to, so they need an absolute
+# address, and it must be the registry directly: a public hostname resolves to
+# the proxy in front of this server, sending the request back out and in again.
+#
+# The default is the Service the bundled Helm chart creates, which is the one
+# deployment path that reads it — that chart sets no env on the web pod, so this
+# is where its address comes from. Compose and the deployment repo set their own,
+# naming the Service as each of them does.
 ENV MPAK_API_URL=http://mpak-registry:3200
 ENV PORT=8080
 EXPOSE 8080
