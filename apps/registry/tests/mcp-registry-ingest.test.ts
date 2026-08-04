@@ -510,6 +510,53 @@ describe('runIngest', () => {
     expect(result.serversMatched).toBe(2);
   });
 
+  it('returns no watermark when a bundle budget cut the window short', async () => {
+    // The bug this guards: a bounded run advanced the watermark to its own
+    // start instant, so every server it never reached fell outside every later
+    // window. Observed on staging — a --max-bundles 10 trial read 617 of 1,803
+    // servers in its window and stepped the next nightly run over the other 45
+    // bundles permanently. Upstream orders by neither name nor timestamp, so
+    // there is no partial instant to resume from; null is the only sound answer.
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      ...upstreamEntry(),
+      server: { ...upstreamEntry().server, name: `io.github.acme/widget-${i}` },
+    }));
+
+    const { client } = fakeUpstream(entries);
+    const result = await runIngest({ ...baseOptions(client, fakePrisma(state)), maxBundles: 2 });
+
+    // The work it did do is still real and still reported.
+    expect(result.packagesCreated).toBe(2);
+    expect(result.watermark).toBeNull();
+  });
+
+  it('returns no watermark when a server limit cut the window short', async () => {
+    // The other bound, same reasoning. Both were `break` statements landing on
+    // a watermark assigned after the loop, which a break reaches too.
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      ...upstreamEntry(),
+      server: { ...upstreamEntry().server, name: `io.github.acme/widget-${i}` },
+    }));
+
+    const { client } = fakeUpstream(entries);
+    const result = await runIngest({ ...baseOptions(client, fakePrisma(state)), limit: 2 });
+
+    expect(result.watermark).toBeNull();
+  });
+
+  it('advances the watermark when a bound was set but never reached', async () => {
+    // A bound alone must not suppress the watermark — only actually stopping
+    // early does. A nightly run configured with a generous cap it never hits
+    // has read its whole window and has to be able to say so.
+    const { client } = fakeUpstream([upstreamEntry()]);
+
+    const before = new Date();
+    const result = await runIngest({ ...baseOptions(client, fakePrisma(state)), maxBundles: 50 });
+
+    expect(result.packagesCreated).toBe(1);
+    expect(result.watermark?.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
   it('does not let a bundle budget stop a catalog with no bundles in it', async () => {
     // Servers without an MCPB package never touch the budget, so a trial run
     // walks past them rather than terminating on the first page of npm servers.

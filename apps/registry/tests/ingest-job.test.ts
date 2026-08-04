@@ -61,6 +61,25 @@ describe('summarizeRun', () => {
   it('still surfaces the failure to the operator', () => {
     expect(summarizeRun({ failed: 1, watermark }).status).toBe('failed');
   });
+
+  it('writes a null watermark through rather than substituting one', () => {
+    // A truncated run stores no watermark, so resolveSince — which selects the
+    // newest row that has one — falls back to the last complete pass and
+    // re-reads the window nobody finished. Substituting a value here, or
+    // dropping the key so the column kept its old value on the *new* row, would
+    // both hand the next run a bound that no pass actually earned.
+    expect(summarizeRun({ failed: 0, watermark: null })).toEqual({
+      status: 'completed',
+      watermark: null,
+    });
+  });
+
+  it('does not call a bounded run a failure', () => {
+    // Status and watermark answer different questions. A --max-bundles trial
+    // did exactly what was asked; it just may not move the window. Marking it
+    // failed would page someone for a healthy run.
+    expect(summarizeRun({ failed: 0, watermark: null }).status).toBe('completed');
+  });
 });
 
 describe('validateIngestMemory', () => {

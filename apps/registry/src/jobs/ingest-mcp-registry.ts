@@ -82,10 +82,15 @@ export function parseArgs(argv: string[]): CliArgs {
  */
 export function summarizeRun(result: Pick<IngestResult, 'failed' | 'watermark'>): {
   status: 'completed' | 'failed';
-  watermark: Date;
+  watermark: Date | null;
 } {
   return {
     status: result.failed > 0 ? 'failed' : 'completed',
+    // Written through as-is, `null` included. A run that stopped short of the
+    // end of its window has no instant it is safe to resume from, and stores
+    // none; `resolveSince` selects the newest row that has one, so the next run
+    // re-reads from wherever the last *complete* pass reached. Status stays
+    // independent of this — a bounded run did its work and is not a failure.
     watermark: result.watermark,
   };
 }
