@@ -150,16 +150,27 @@ export interface IngestResult extends IngestCounters {
   scanability: Record<string, number>;
   failures: Array<{ server: string; error: string }>;
   /**
-   * Lower bound for the next run's window.
+   * Lower bound for the next run's window, or `null` when this run must not
+   * move it at all.
    *
-   * The run's start instant, except that a server which failed for a
-   * *retryable* reason pulls it back to that server's own upstream timestamp.
-   * Without that, the next window opens after the failure and the server falls
-   * outside every subsequent window — one transient 503 would drop a bundle
-   * until someone ran --full. `backoffLimit: 0` on the CronJob means there is
-   * no job-level retry to cover it either.
+   * When the window was read to the end: the run's start instant, except that a
+   * server which failed for a *retryable* reason pulls it back to that server's
+   * own upstream timestamp. Without that, the next window opens after the
+   * failure and the server falls outside every subsequent window — one
+   * transient 503 would drop a bundle until someone ran --full. `backoffLimit:
+   * 0` on the CronJob means there is no job-level retry to cover it either.
+   *
+   * When the window was *not* read to the end, there is no such instant, and
+   * `null` is the only sound answer. Upstream orders by neither name nor
+   * timestamp — `updated_since` is a filter, not a sort — so a stream position
+   * carries no information about which timestamps remain unread. The next
+   * unread entry may be the oldest in the window. That also means the
+   * retryable-failure floor above is itself only valid on a complete pass: it
+   * is a lower bound on unfinished work only because everything below it was
+   * read and succeeded. Truncation invalidates the whole computation, not part
+   * of it.
    */
-  watermark: Date;
+  watermark: Date | null;
 }
 
 /**
@@ -204,6 +215,13 @@ interface ServerOutcome {
  * could sort behind the cursor and never be seen; opening the next window at
  * the start time re-reads that overlap. Re-reading is free because ingest is
  * idempotent, whereas a gap is silent and permanent.
+ *
+ * That holds only for a pass that read its window to the end, so a run which
+ * stopped early returns no watermark at all. Truncation has three causes and
+ * they are defended in three places: upstream misbehaving (the client throws),
+ * a dry run (the job writes no row), and an operator's `--limit` /
+ * `--max-bundles` bound (`watermark: null`, here). All three mean the same
+ * thing — do not advance past what nobody read.
  */
 export async function runIngest(options: IngestOptions): Promise<IngestResult> {
   const { client, since, limit, maxBundles, logger } = options;
@@ -312,29 +330,54 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
 
   let bundlesTaken = 0;
 
-  for await (const entry of client.listServers({ updatedSince: since, version: 'latest' })) {
-    if (limit !== undefined && processed >= limit) break;
-    processed += 1;
+  /**
+   * Read the window, reporting whether it was read to the end.
+   *
+   * A function rather than a flag because "did the stream end on its own?" has
+   * to be a *return value*. `break` continues at the statement after the loop,
+   * so a flag assigned there is assigned on both paths and claims a
+   * completeness that was never reached. Here the only path to `true` is the
+   * iterator running out; every early exit returns `false`, and the return type
+   * will not let a future one forget to say so.
+   */
+  const readWindow = async (): Promise<boolean> => {
+    for await (const entry of client.listServers({ updatedSince: since, version: 'latest' })) {
+      if (limit !== undefined && processed >= limit) return false;
+      processed += 1;
 
-    // Whether a server carries an MCPB bundle is a pure check over metadata
-    // already in hand, so the bundle budget can be spent before any work is
-    // launched — no download is started that the budget would not have allowed.
-    if (maxBundles !== undefined && mcpbPackages(entry).length > 0) {
-      if (bundlesTaken >= maxBundles) break;
-      bundlesTaken += 1;
+      // Whether a server carries an MCPB bundle is a pure check over metadata
+      // already in hand, so the bundle budget can be spent before any work is
+      // launched — no download is started that the budget would not have allowed.
+      if (maxBundles !== undefined && mcpbPackages(entry).length > 0) {
+        if (bundlesTaken >= maxBundles) return false;
+        bundlesTaken += 1;
+      }
+
+      launch(entry);
+      if (inFlight.size >= options.concurrency) await Promise.race(inFlight);
     }
+    return true;
+  };
 
-    launch(entry);
-    if (inFlight.size >= options.concurrency) await Promise.race(inFlight);
-  }
+  const windowDrained = await readWindow();
 
+  // Awaited on both paths: work already launched must still finish and be
+  // counted, so a bounded run reports everything it actually stored.
   await Promise.all(inFlight);
 
   // Each hold was already floored as it was taken, so the oldest one is the
   // answer — capped at the run's start, since a hold in the future would step
   // the window over servers nobody read.
-  const watermark =
-    oldestRetryableFailure && oldestRetryableFailure < runStarted
+  //
+  // None of that applies to a run that stopped early. The floor is a lower
+  // bound on unfinished work only because a complete pass read everything below
+  // it; with servers left unread at arbitrary timestamps, no instant in this
+  // run is safe to resume from, so the run declines to move the watermark at
+  // all. `null` is that refusal, and it is what keeps a trial bound from
+  // stepping the next nightly run over the rest of its window.
+  const watermark = !windowDrained
+    ? null
+    : oldestRetryableFailure && oldestRetryableFailure < runStarted
       ? oldestRetryableFailure
       : runStarted;
 
@@ -342,8 +385,12 @@ export async function runIngest(options: IngestOptions): Promise<IngestResult> {
     ...counters,
     skipReasons,
     scanability,
-    watermark: watermark.toISOString(),
-    watermarkHeldBack: watermark < runStarted,
+    // Load-bearing for an operator reading a bounded run: the counters look
+    // like a successful pass either way, and this is the only thing that says
+    // the window was left unfinished.
+    windowDrained,
+    watermark: watermark?.toISOString() ?? null,
+    watermarkHeldBack: watermark !== null && watermark < runStarted,
   });
 
   return { ...counters, skipReasons, scanability, failures, watermark };
