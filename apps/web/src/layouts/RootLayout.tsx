@@ -1,4 +1,4 @@
-import { UserButton } from '@clerk/clerk-react';
+import { UserButton } from '@clerk/react';
 import { useState } from 'react';
 import { Link, Outlet, ScrollRestoration } from 'react-router';
 import { AuthGuard, authEnabled, GuestGuard } from '../auth/AuthProvider';
@@ -83,7 +83,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <AuthGuard>
                 {authEnabled && (
                   <UserButton
-                    afterSignOutUrl="/"
                     appearance={{
                       elements: {
                         avatarBox: 'w-9 h-9',
@@ -136,7 +135,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <AuthGuard>
                 {authEnabled && (
                   <UserButton
-                    afterSignOutUrl="/"
                     appearance={{
                       elements: {
                         avatarBox: 'w-8 h-8',
