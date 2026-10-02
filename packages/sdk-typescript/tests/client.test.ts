@@ -234,8 +234,34 @@ describe('MpakClient', () => {
       const calledUrl = fetchMock.mock.calls[0]?.[0] as string;
       expect(calledUrl).toContain('os=linux');
       expect(calledUrl).toContain('arch=x64');
-    });
-  });
+      });
+
+      it('auto-detects platform when none is provided', async () => {
+        const client = new MpakClient();
+
+        fetchMock.mockResolvedValueOnce(
+          mockResponse({
+            url: 'https://example.com',
+            bundle: {
+              name: '@test/bundle',
+              version: '1.0.0',
+              platform: {},
+              sha256: '',
+              size: 0,
+            },
+            expires_at: '2024-01-02T00:00:00Z',
+          }),
+        );
+
+        await client.getBundleDownload('@test/bundle', '1.0.0');
+
+        const calledUrl = fetchMock.mock.calls[0]?.[0] as string;
+
+        expect(calledUrl).toContain('os=');
+        expect(calledUrl).toContain('arch=');
+      });
+
+      });
 
   describe('downloadContent', () => {
     it('downloads and verifies SHA-256', async () => {

@@ -122,39 +122,42 @@ export class MpakClient {
     return response.json() as Promise<VersionDetail>;
   }
 
-  /**
-   * Get download info for a bundle
-   */
-  async getBundleDownload(
-    name: string,
-    version: string,
-    platform?: PlatformInfo,
-  ): Promise<DownloadInfo> {
-    this.validateScopedName(name);
+/**
+ * Get download info for a bundle
+ */
+async getBundleDownload(
+  name: string,
+  version: string,
+  platform?: PlatformInfo,
+): Promise<DownloadInfo> {
+  this.validateScopedName(name);
 
-    const params = new URLSearchParams();
-    if (platform) {
-      params.set('os', platform.os);
-      params.set('arch', platform.arch);
-    }
+  // NEW: Use the provided platform or detect the current one
+  const resolvedPlatform = platform ?? MpakClient.detectPlatform();
 
-    const queryString = params.toString();
-    const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ''}`;
+  const params = new URLSearchParams();
 
-    const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: 'application/json' },
-    });
+  // CHANGED: Always use the resolved platform
+  params.set('os', resolvedPlatform.os);
+  params.set('arch', resolvedPlatform.arch);
 
-    if (response.status === 404) {
-      throw new MpakNotFoundError(`${name}@${version}`);
-    }
+  const queryString = params.toString();
+  const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ''}`;
 
-    if (!response.ok) {
-      throw new MpakNetworkError(`Failed to get bundle download: HTTP ${response.status}`);
-    }
+  const response = await this.fetchWithTimeout(url, {
+    headers: { Accept: 'application/json' },
+  });
 
-    return response.json() as Promise<DownloadInfo>;
+  if (response.status === 404) {
+    throw new MpakNotFoundError(`${name}@${version}`);
   }
+
+  if (!response.ok) {
+    throw new MpakNetworkError(`Failed to get bundle download: HTTP ${response.status}`);
+  }
+
+  return response.json() as Promise<DownloadInfo>;
+}
 
   // ===========================================================================
   // MCP Registry (ServerDetail) API
