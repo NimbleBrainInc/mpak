@@ -1,8 +1,4 @@
-import {
-  ClerkProvider,
-  useAuth as useClerkAuth,
-  useUser as useClerkUser,
-} from '@clerk/clerk-react';
+import { ClerkProvider, useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/react';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { type User, useMe } from '../hooks/useAuthQueries';
@@ -78,7 +74,7 @@ function ClerkAuthInner({ children }: { children: ReactNode }) {
 
 function ClerkAuthProvider({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY!}>
+    <ClerkProvider publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY!} afterSignOutUrl="/">
       <ClerkAuthInner>{children}</ClerkAuthInner>
     </ClerkProvider>
   );
