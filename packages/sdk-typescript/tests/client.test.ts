@@ -235,6 +235,30 @@ describe('MpakClient', () => {
       expect(calledUrl).toContain('os=linux');
       expect(calledUrl).toContain('arch=x64');
     });
+
+    it('falls back to detected platform when no universal artifact exists', async () => {
+      const client = new MpakClient();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse('', { status: 404 }))
+        .mockResolvedValueOnce(
+          mockResponse({
+            url: 'https://example.com',
+            bundle: {
+              name: '@test/bundle',
+              version: '1.0.0',
+              platform: { os: 'darwin', arch: 'arm64' },
+              sha256: '',
+              size: 0,
+            },
+          }),
+        );
+
+      await client.getBundleDownload('@test/bundle', '1.0.0');
+
+      const fallbackUrl = fetchMock.mock.calls[1]?.[0] as string;
+      expect(fallbackUrl).toContain('os=');
+      expect(fallbackUrl).toContain('arch=');
+    });
   });
 
   describe('downloadContent', () => {
