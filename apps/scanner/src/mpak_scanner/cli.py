@@ -32,8 +32,12 @@ def scan(bundle: Path, output_json: bool, level: int | None, output: Path | None
     """Scan an MCP bundle for security issues.
 
     BUNDLE is the path to the .mcpb bundle file to scan.
+
+    Stdout carries only the report: JSON with --json, the readable summary
+    otherwise. Progress and status lines go to stderr, so `--json > out.json`
+    is always valid JSON.
     """
-    click.echo(f"Scanning {bundle}...")
+    click.echo(f"Scanning {bundle}...", err=True)
 
     report = scan_bundle(bundle)
 
@@ -41,7 +45,7 @@ def scan(bundle: Path, output_json: bool, level: int | None, output: Path | None
         report_dict = report.to_dict()
         if output:
             output.write_text(json.dumps(report_dict, indent=2))
-            click.echo(f"Report saved to {output}")
+            click.echo(f"Report saved to {output}", err=True)
         else:
             click.echo(json.dumps(report_dict, indent=2))
     else:
@@ -91,7 +95,7 @@ def scan(bundle: Path, output_json: bool, level: int | None, output: Path | None
         if not output:
             json_path = bundle.with_suffix(".security-report.json")
             json_path.write_text(json.dumps(report.to_dict(), indent=2))
-            click.echo(f"Full report saved to: {json_path}")
+            click.echo(f"Full report saved to: {json_path}", err=True)
 
     # Exit with appropriate code
     if level is not None and report.compliance_level.value < level:
@@ -99,7 +103,8 @@ def scan(bundle: Path, output_json: bool, level: int | None, output: Path | None
             click.style(
                 f"FAIL: Bundle does not meet minimum compliance level {level}",
                 fg="red",
-            )
+            ),
+            err=True,
         )
         sys.exit(1)
 
