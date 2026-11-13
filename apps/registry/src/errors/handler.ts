@@ -14,6 +14,7 @@ import {
   DatabaseError,
   InternalServerError,
   NotFoundError,
+  RateLimitError,
   TransactionTimeoutError,
   ValidationError,
 } from './types.js';
@@ -73,6 +74,19 @@ function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): AppErro
 }
 
 /**
+ * Error codes for client statuses a Fastify plugin can raise
+ */
+const CLIENT_ERROR_CODES: Record<number, string> = {
+  400: 'BAD_REQUEST',
+  401: 'UNAUTHORIZED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  413: 'PAYLOAD_TOO_LARGE',
+  415: 'UNSUPPORTED_MEDIA_TYPE',
+};
+
+/**
  * Converts any error to an AppError
  */
 export function normalizeError(error: unknown): AppError {
@@ -96,6 +110,27 @@ export function normalizeError(error: unknown): AppError {
     return new ValidationError('Request validation failed', {
       validation: (error as FastifyError).validation,
     });
+  }
+
+  // An error a Fastify plugin raises with a client status (the rate limiter's
+  // 429, a body that is too large, an unsupported content type) describes the
+  // request, not a server fault, so its status reaches the client. Its message
+  // is the plugin's own, written for the client.
+  const statusCode = (error as FastifyError)?.statusCode;
+  if (
+    error instanceof Error &&
+    typeof statusCode === 'number' &&
+    statusCode >= 400 &&
+    statusCode < 500
+  ) {
+    if (statusCode === 429) {
+      return new RateLimitError(error.message);
+    }
+    return new AppError(
+      error.message,
+      statusCode,
+      CLIENT_ERROR_CODES[statusCode] ?? 'CLIENT_ERROR',
+    );
   }
 
   if (error instanceof Error) {

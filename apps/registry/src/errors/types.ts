@@ -69,6 +69,12 @@ export class ValidationError extends AppError {
   }
 }
 
+export class RateLimitError extends AppError {
+  constructor(message: string = 'Too many requests', details?: Record<string, unknown>) {
+    super(message, 429, 'RATE_LIMITED', true, details);
+  }
+}
+
 export class InternalServerError extends AppError {
   constructor(
     message: string = 'An internal error occurred. Please try again later.',
