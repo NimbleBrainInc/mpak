@@ -123,7 +123,8 @@ export class MpakClient {
   }
 
   /**
-   * Get download info for a bundle
+   * Get download info for a bundle.
+   * Falls back to the current platform when a universal artifact is not available.
    */
   async getBundleDownload(
     name: string,
@@ -132,18 +133,25 @@ export class MpakClient {
   ): Promise<DownloadInfo> {
     this.validateScopedName(name);
 
-    const params = new URLSearchParams();
-    if (platform) {
-      params.set('os', platform.os);
-      params.set('arch', platform.arch);
+    const fetchDownload = (selectedPlatform?: PlatformInfo) => {
+      const params = new URLSearchParams();
+      if (selectedPlatform) {
+        params.set('os', selectedPlatform.os);
+        params.set('arch', selectedPlatform.arch);
+      }
+
+      const queryString = params.toString();
+      const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ''}`;
+
+      return this.fetchWithTimeout(url, {
+        headers: { Accept: 'application/json' },
+      });
+    };
+
+    let response = await fetchDownload(platform);
+    if (response.status === 404 && !platform) {
+      response = await fetchDownload(MpakClient.detectPlatform());
     }
-
-    const queryString = params.toString();
-    const url = `${this.registryUrl}/v1/bundles/${name}/versions/${version}/download${queryString ? `?${queryString}` : ''}`;
-
-    const response = await this.fetchWithTimeout(url, {
-      headers: { Accept: 'application/json' },
-    });
 
     if (response.status === 404) {
       throw new MpakNotFoundError(`${name}@${version}`);
