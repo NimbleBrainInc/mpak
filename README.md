@@ -1,5 +1,8 @@
 # mpak
 
+> [!WARNING]
+> **mpak is retired and no longer maintained.** registry.mpak.dev will be shut down and this repository archived. `.mcpb` bundles install from their GitHub releases; NimbleBrain's MCP servers are listed at [catalog.nimblebrain.ai](https://catalog.nimblebrain.ai), and its runtime lives at [NimbleBrainInc/nimblebrain](https://github.com/NimbleBrainInc/nimblebrain).
+
 [![mpak.dev](https://mpak.dev/badge.svg)](https://mpak.dev) [![CI](https://github.com/NimbleBrainInc/mpak/actions/workflows/ci.yml/badge.svg)](https://github.com/NimbleBrainInc/mpak/actions/workflows/ci.yml)
 
 The open source package registry for [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) servers. Every bundle scanned, every install scored.
